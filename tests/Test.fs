@@ -8,23 +8,21 @@ open Logary.Targets
 // open Hacn
 
 type 'a GeneratorNext =
-  | Node of 'a * (unit -> GeneratorNext<'a> option)
+  | Node of 'a * (unit -> GeneratorNext<'a>)
   | Done
 
-type 'a Generator(delayedFunc: unit -> GeneratorNext<'a>) =
-  let mutable nextFunc: GeneratorNext<'a> option = Some(delayedFunc())
+type 'a Generator(delayedFunc) =
+  let mutable nextFunc = delayedFunc()
   member this.Next() = 
     match nextFunc with 
-      | Some(Node(result, asdf)) -> 
+      | Node(result, asdf) -> 
         nextFunc <- asdf()
         result
-      | Some(Done) ->
-        failwith "Generator ended!"
-      | None ->
-        failwith "Generator ended!"
+      | Done ->
+        failwith "Error"
   member this.Complete() =
     match nextFunc with
-      | None -> true
+      | Done -> true
       | _ -> false
         
 
@@ -34,9 +32,9 @@ type GeneratorBuilder() =
   member this.Yield(x) =
     x
   member this.Combine(a, b) =
-    Some(Node(a, b))
-  // member this.Zero(a) =
-  //   Node(a, fun () -> None)
+    Node(a, b)
+  // member this.Zero() =
+  //   Done
   member this.Delay(f) =
     f
   member this.Run(f) =
