@@ -2,30 +2,30 @@ module Hacn
 open Fable.React.HookBindings
 open Fable.React
 
-type HacnOperations = 
-    | Render of string
-    | Props
+// type HacnOperations = 
+//     | Render of string
+//     | Props
 
-type HacnControl =
-    | Continue of HacnOperations
-    | Suspend of HacnOperations
-    | Error
+// type HacnControl =
+//     | Continue of HacnOperations
+//     | Suspend of HacnOperations
+//     | Error
 
-let getProps = Suspend Props
+// let getProps = Suspend Props
 
-type HacnBuilder(useRef) =
-    let mutable prevprops = 1
-    member this.Bind(x, f) =
-        printfn "this.Bind: %A" x
-        match x with
-        | Suspend -> f(())
-        | Continue c -> f(())
-        | Error -> f(())
-    member this.Delay(f) = f()
-    member this.Return(x) = failwith "Unimplemented"
-    member this.Zero(x) = failwith "Unimplemented"
+// type HacnBuilder(useRef) =
+//     let mutable prevprops = 1
+//     member this.Bind(x, f) =
+//         printfn "this.Bind: %A" x
+//         match x with
+//         | Suspend -> f(())
+//         | Continue c -> f(())
+//         | Error -> f(())
+//     member this.Delay(f) = f()
+//     member this.Return(x) = failwith "Unimplemented"
+//     member this.Zero(x) = failwith "Unimplemented"
 
-let hacn = HacnBuilder(Hooks.useRef)
+// let hacn = HacnBuilder(Hooks.useRef)
 
 // let HacnFunction builder props = 
 //     let refState = Hooks.useRef None
