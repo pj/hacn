@@ -77,21 +77,29 @@ let tests =
     Expect.equal three 3 "Should equals 3"
   }
 
-// type HacnOperations = 
-//     | Render of ReactElement
-//     | Props
-//     | State
 
+// Separated types for matching overloads in Bind
 type Render =
   | Render of ReactElement
+type RenderContinue =
+  | RenderContinue of ReactElement
 type Props =
   | Props
 type State =
   | State
 
+// Combined operations for storage in HacnControl
+type HacnOperations = 
+  | PropsOperation
+
 type HacnControl =
     | Continue
-    | Suspend
+    | Suspend of HacnOperations * (string -> HacnControl)
+    | End
+
+let Continue underlying = 
+  match underlying with 
+    | Render(element) -> RenderContinue(element)
 
 // type 'a GeneratorNext =
 //   | Node of 'a * (unit -> GeneratorNext<'a>)
@@ -115,33 +123,50 @@ type HacnGenerator<'props>(initialFunc) =
     failwith "asdf"
 
 let useFakeRef initialValue =
-    { new IRefValue<_> with
-        member __.current with get() = initialValue and set _ = () }
+  let mutable refValue = initialValue
+  { new IRefValue<_> with
+      member this.current with get() = refValue and set value = refValue <- value }
 
 type RefState =
-  {X: int}
+  {NextControl: HacnControl option}
 
 type HacnBuilder<'props>(useRef: RefState -> IRefValue<RefState>) = 
   member this.Bind(x: Props, f: string -> HacnControl) =
     f("heelo")
-  member this.Bind(x: Render, f: string -> HacnControl) =
-    f("sadf")
   member this.Bind(x: State, f: string -> HacnControl) =
     f("asdfasdf")
+  member this.Bind(x: Render, f: string -> HacnControl) =
+    f("sadf")
+  member this.Bind(x: RenderContinue, f: string -> HacnControl) =
+    f("sadf")
   member this.Bind(x: Render, f: unit -> HacnControl) =
     f()
   member this.Zero() =
-    failwith "asdf"
-  member this.Yield(x) =
-    failwith "llll"
-  member this.Combine(a, b) =
-    failwith "dddd"
-  member this.Delay(f) =
+    // handle case of ending here
+    End
+  // member this.Combine(a: HacnControl, b: unit -> HacnControl) =
+  //   // if a is suspend then return operation
+  //   failwith "dddd"
+  member this.Delay(f: unit -> HacnControl) =
     f
-  member this.Run(f) =
+  member this.Run(delayedFunc: unit -> HacnControl) =
     let render (props: 'props) =
-      let refState = useRef({X = 1})
+      let refState = useRef({NextControl = None})
+      let nextControl = 
+        match refState.current with 
+          | {NextControl = None} -> 
+            let nextControl = delayedFunc()
+            refState.current <- {NextControl = Some(delayedFunc())}
+            nextControl
+          | {NextControl = Some(nextControl)} -> nextControl
+      // Check if props has changed
+      // Check if state variable has changed
+      // Check if callback called
+      
+      // If next control is End then render the last element
+
       div [||] [| str "Hello world!" |]
+    
     let ofHacn (props: 'props) children = 
       ofFunction 
         render
