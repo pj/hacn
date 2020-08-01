@@ -92,54 +92,38 @@ type State =
 type HacnOperations = 
   | PropsOperation
 
-type HacnControl =
+type HacnControl<'props> =
     | Continue
-    | Suspend of HacnOperations * (string -> HacnControl)
+    | Suspend of HacnOperations * (string -> HacnControl<'props>)
     | End
+    | PropsControl of ('props -> HacnControl<'props>)
 
 let Continue underlying = 
   match underlying with 
     | Render(element) -> RenderContinue(element)
-
-// type 'a GeneratorNext =
-//   | Node of 'a * (unit -> GeneratorNext<'a>)
-//   | Done
-
-type HacnGenerator<'props>(initialFunc) =
-  let mutable nextFunc  = None
-  let mutable prevProps: 'props option = None
-  // member this.Next() = 
-  //   match nextFunc with 
-  //     | Node(result, asdf) -> 
-  //       nextFunc <- asdf()
-  //       result
-  //     | Done ->
-  //       failwith "Error"
-  // member this.Complete() =
-  //   match nextFunc with
-  //     | Done -> true
-  //     | _ -> false
-  member this.Render(props: 'props) =
-    failwith "asdf"
 
 let useFakeRef initialValue =
   let mutable refValue = initialValue
   { new IRefValue<_> with
       member this.current with get() = refValue and set value = refValue <- value }
 
-type RefState =
-  {NextControl: HacnControl option}
+type RefState<'props> =
+  {
+    NextControl: HacnControl<'props> option; 
+    PrevProps: 'props option;
+    PropsControl: HacnControl<'props> option;
+  }
 
-type HacnBuilder<'props>(useRef: RefState -> IRefValue<RefState>) = 
-  member this.Bind(x: Props, f: string -> HacnControl) =
-    f("heelo")
-  member this.Bind(x: State, f: string -> HacnControl) =
+type HacnBuilder<'props>(useRef: RefState<'props> -> IRefValue<RefState<'props>>) = 
+  member this.Bind(x: Props, f: 'props -> HacnControl<'props>) =
+    PropsControl(fun (props: 'props) -> f(props))
+  member this.Bind(x: State, f: string -> HacnControl<'props>) =
     f("asdfasdf")
-  member this.Bind(x: Render, f: string -> HacnControl) =
+  member this.Bind(x: Render, f: string -> HacnControl<'props>) =
     f("sadf")
-  member this.Bind(x: RenderContinue, f: string -> HacnControl) =
+  member this.Bind(x: RenderContinue, f: string -> HacnControl<'props>) =
     f("sadf")
-  member this.Bind(x: Render, f: unit -> HacnControl) =
+  member this.Bind(x: Render, f: unit -> HacnControl<'props>) =
     f()
   member this.Zero() =
     // handle case of ending here
@@ -147,19 +131,32 @@ type HacnBuilder<'props>(useRef: RefState -> IRefValue<RefState>) =
   // member this.Combine(a: HacnControl, b: unit -> HacnControl) =
   //   // if a is suspend then return operation
   //   failwith "dddd"
-  member this.Delay(f: unit -> HacnControl) =
+  member this.Delay(f: unit -> HacnControl<'props>) =
     f
-  member this.Run(delayedFunc: unit -> HacnControl) =
+  member this.Run(delayedFunc: unit -> HacnControl<'props>) =
     let render (props: 'props) =
-      let refState = useRef({NextControl = None})
+      let refState = useRef({
+        NextControl = None; 
+        PrevProps = None;
+        PropsControl = None;
+      })
       let nextControl = 
         match refState.current with 
           | {NextControl = None} -> 
             let nextControl = delayedFunc()
-            refState.current <- {NextControl = Some(delayedFunc())}
+            refState.current <- {
+              refState.current with NextControl = Some(delayedFunc()); 
+              }
             nextControl
           | {NextControl = Some(nextControl)} -> nextControl
+      
       // Check if props has changed
+      match refState.current with 
+        | {PrevProps = Some(_); PropsControl = None} ->
+          // Not really sure what to do but log a warning here?
+          failwith "Can't do anything"
+
+
       // Check if state variable has changed
       // Check if callback called
       
