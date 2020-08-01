@@ -87,20 +87,21 @@ type Props =
   | Props
 type State =
   | State
+type Context =
+  | Context
 
 // Combined operations for storage in HacnControl
-type HacnOperations = 
-  | PropsOperation
+// type HacnOperations = 
+//   | PropsOperation
 
 type HacnControl<'props> =
-    | Continue
-    | Suspend of HacnOperations * (string -> HacnControl<'props>)
-    | End
     | PropsControl of ('props -> HacnControl<'props>)
+    | ContextControl of ('props -> HacnControl<'props>)
+    | End
 
-let Continue underlying = 
-  match underlying with 
-    | Render(element) -> RenderContinue(element)
+// let Continue underlying = 
+//   match underlying with 
+//     | Render(element) -> RenderContinue(element)
 
 let useFakeRef initialValue =
   let mutable refValue = initialValue
@@ -117,6 +118,8 @@ type RefState<'props> =
 type HacnBuilder<'props>(useRef: RefState<'props> -> IRefValue<RefState<'props>>) = 
   member this.Bind(x: Props, f: 'props -> HacnControl<'props>) =
     PropsControl(fun (props: 'props) -> f(props))
+  member this.Bind(x: Context, f: 'props -> HacnControl<'props>) =
+    ContextControl(fun (props: 'props) -> f(props))
   member this.Bind(x: State, f: string -> HacnControl<'props>) =
     f("asdfasdf")
   member this.Bind(x: Render, f: string -> HacnControl<'props>) =
