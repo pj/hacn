@@ -1,6 +1,5 @@
 module Hacn
 open Fable.React
-open Fable.React.Props
 
 type RefState<'props> =
   {
@@ -45,20 +44,8 @@ let Render(element) =
     Changed = fun (_) -> false
   }
 
-let runOperation refState operation =
-  operation.Invoke refState
-
-type TestProps =
-  { Hello: string}
-
-type RenderResponse =
-  { World: string}
-
-type ContextResponse =
-  { Everyone: string}
-
 type HacnBuilder(useRef) = 
-  member this.Bind(operation, f) = //: Hacn<'props, 'returnType>, f: 'returnType -> Hacn<'props, unit>) =
+  member this.Bind(operation, f) =
     { 
       Invoke = 
         fun (refState) ->
@@ -108,41 +95,21 @@ type HacnBuilder(useRef) =
                   }
                 (firstOp, true)
       
-      let (currentResult, _) = currentOperation.Invoke(refState.current)
+      let (invokeResult, _) = currentOperation.Invoke(refState.current)
 
       let withOp = 
-        match currentResult.NextOperation with
+        match invokeResult.NextOperation with
           | Some(op) when appendNext -> 
-            {currentResult.NextState with AllOperations = List.append currentResult.NextState.AllOperations [op]}
-          | _ -> currentResult.NextState
+            {invokeResult.NextState with AllOperations = List.append invokeResult.NextState.AllOperations [op]}
+          | _ -> invokeResult.NextState
       refState.current <- withOp
 
       match refState.current.Element with
         | Some(element) -> element
         | None -> null
     
-    let ofHacn (props) children = 
+    fun props children -> 
       ofFunction 
         render
         props 
         children
-    ofHacn
-
-let useFakeRef initialValue =
-  let mutable refValue = initialValue
-  { new IRefValue<_> with
-      member this.current with get() = refValue and set value = refValue <- value }
-
-let hacn = HacnBuilder(useFakeRef)
-
-let context = createContext({Everyone = "Everyone"})
-
-let element = hacn {
-  let! props = Props()
-
-  let! clicked = Render (button [ OnClick (fun (event) -> failwith "TODO: Logic to capture events here") ] [])
-
-  do! Render (div [] [ str "Test Element"; str props.Hello; str "World" ])
-}
-
-let x = element {Hello = "Hello"} [] 
