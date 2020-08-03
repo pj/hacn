@@ -1,4 +1,4 @@
-module Hacn
+module AnotherTry
 open Fable.React
 open Browser.Types
 open Browser
@@ -21,11 +21,25 @@ type RefState<'props> =
   }
 
 type Hacn<'props, 'returnType> =
-  { Invoke: RefState<'props> -> 'returnType}
+  { 
+    Invoke: RefState<'props> -> (ReactElement option * 'returnType);
+    Change: RefState<'props> -> bool;
+    Next: 'returnType -> Hacn<'props, _>
+  }
 
-let getProps() =
-  { Invoke = fun (refState) -> 
-    refState.CurrentProps
+let Props() =
+  { Invoke = fun (refState) -> (None, refState.CurrentProps);
+    Change = fun (refState) -> 
+      match refState.PrevProps with
+        | Some(prevProps) -> prevProps <> refState.CurrentProps
+        | None -> true;
+    Next = fun (nextValue, refState)
+    ;
+  }
+
+let Render(element) =
+  { Invoke = fun (_) -> (element, ());
+    Change = fun (refState) -> false
   }
 
 let runOperation refState operation =
@@ -41,15 +55,20 @@ type ContextResponse =
   { Everyone: string}
 
 type HacnBuilder() = 
-  member this.Bind(x, f) =
-    { Invoke = 
-      fun (refState) -> 
-        runOperation refState x 
+  member this.Bind(operation, f) =
+    { 
+      Invoke = 
+        fun (refState) -> 
+          let (element, nextValue) = operation.Invoke(refState)
+          f(nextValue)
+      Change =
+        fun (refState) ->
+          operation.Change(refState)
     }
   member this.Zero() =
-    { Invoke = 
-      fun (refState) ->
-        null
+    { 
+      Invoke = fun (refState) -> (None, ())
+      Change = fun (refState) -> false
     }
   member this.Delay(f) =
     f
@@ -70,19 +89,10 @@ let hacn = HacnBuilder()
 let context = createContext({Everyone = "Everyone"})
 
 let element = hacn {
-  // Props corresponds to props in react and would act kind of like a stream. 
-  // When the component rerenders props might have changed and so the 
-  // computation would restart from here.
-  let! props = getProps()
+  let! props = Props()
 
-  // Context would work similarly to props.
-  let! contextResponse = Context(context)
-
-  // Renders can capture events that happen at a lower level and return them 
-  // into the computation.
   let! clicked = Render (button [| OnClick (fun (event) -> failwith "TODO: Logic to capture events here") |] [||])
 
-  // Render everything, not capturing events.
   do! Render (div [||] [| str "Test Element"; str props.Hello; str "World"; str contextResponse.Everyone |])
 }
 

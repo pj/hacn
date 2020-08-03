@@ -1,142 +1,47 @@
 module Test
 
 open Expecto
-// open Expecto.Logging
-// open Expecto.Logging.Message
 open Hopac
-open Logary.Configuration
-open Logary.Adapters.Facade
-open Logary.Targets
-open Logary
 open Fable.React
-// open Logary.Message
-// open Hacn
-open System
-open System.IO
+open Microsoft.FSharp.Control.CommonExtensions   
+open Microsoft.FSharp.Control.WebExtensions
 
-type 'a GeneratorNext =
-  | Node of 'a * (unit -> GeneratorNext<'a>)
-  | Done
-
-type 'a Generator(delayedFunc) =
-  let mutable nextFunc = delayedFunc()
-  member this.Next() = 
-    match nextFunc with 
-      | Node(result, asdf) -> 
-        nextFunc <- asdf()
-        result
-      | Done ->
-        failwith "Error"
-  member this.Complete() =
-    match nextFunc with
-      | Done -> true
-      | _ -> false
-
-type 'a GeneratorBuilder() = 
-  // member this.Bind(x, f) =
-  //   f(x)
-  // member this.Zero() =
-  //   Done
-  member this.Yield(x) =
-    Node(x, fun () -> Done)
-  member this.Combine(a: 'a GeneratorNext, b) =
-    match a with
-      | Node(value, _) ->
-        Node(value, b)
-      | Done -> failwith "shouldn't happen"
-  member this.Delay(f) =
-    f
-  member this.Run(f) =
-    fun () -> Generator(f)
-
-let generator: int GeneratorBuilder = GeneratorBuilder()
-
-[<Tests>]
-let tests =
-  test "A simple test" {
-    // let logger = Log.create "asdf.qwer"
-    // let logger = Log.create "asdf"
-    let interator = generator {
-        yield 1
-        yield 2
-        yield 3
-      }
-    
-    let x = interator()
-
-    let one = x.Next()
-    // logger.logSimple (Message.eventFormat (Debug, "{number}", one))
-    // ignore (logger.logWithAck Debug (eventX "asdf"))
-    // logger.logSimple ((eventX "asdfsadf") Debug)
-    Expect.equal one 1 "Should equals 1"
-    let two = x.Next()
-    // logger.logSimple (Message.eventFormat (Debug, "{number}", two))
-    Expect.equal two 2 "Should equals 2"
-    let three = x.Next()
-    // logger.logSimple (Message.eventFormat (Debug, "{number}", three))
-    Expect.equal three 3 "Should equals 3"
-  }
-
-
-// Separated types for matching overloads in Bind
-type Render =
-  | Render of ReactElement
-type RenderContinue =
-  | RenderContinue of ReactElement
-type Props =
-  | Props
-type State =
-  | State
-type Context =
-  | Context
-
-// Combined operations for storage in HacnControl
-// type HacnOperations = 
-//   | PropsOperation
-
-type HacnControl<'props> =
-    | PropsControl of ('props -> HacnControl<'props>)
-    | ContextControl of ('props -> HacnControl<'props>)
+type HacnControl<'returnType> =
+    | Render of ReactElement
+    | RenderControl of ReactElement * ('returnType -> HacnControl<'returnType>)
+    | State
+    | Props
+    | PropsControl of ('returnType -> HacnControl<'returnType>)
+    | Context
+    | ContextControl of ('returnType -> HacnControl<'returnType>)
     | End
-
-// let Continue underlying = 
-//   match underlying with 
-//     | Render(element) -> RenderContinue(element)
 
 let useFakeRef initialValue =
   let mutable refValue = initialValue
   { new IRefValue<_> with
       member this.current with get() = refValue and set value = refValue <- value }
 
-type RefState<'props> =
+type RefState<'props, 'returnType> =
   {
-    NextControl: HacnControl<'props> option; 
+    NextControl: HacnControl<'returnType> option; 
     PrevProps: 'props option;
     PropsControl: HacnControl<'props> option;
   }
 
-type HacnBuilder<'props>(useRef: RefState<'props> -> IRefValue<RefState<'props>>) = 
-  member this.Bind(x: Props, f: 'props -> HacnControl<'props>) =
-    PropsControl(fun (props: 'props) -> f(props))
-  member this.Bind(x: Context, f: 'props -> HacnControl<'props>) =
-    ContextControl(fun (props: 'props) -> f(props))
-  member this.Bind(x: State, f: string -> HacnControl<'props>) =
-    f("asdfasdf")
-  member this.Bind(x: Render, f: string -> HacnControl<'props>) =
-    f("sadf")
-  member this.Bind(x: RenderContinue, f: string -> HacnControl<'props>) =
-    f("sadf")
-  member this.Bind(x: Render, f: unit -> HacnControl<'props>) =
-    f()
+type TestProps =
+  { Hello: string}
+
+type HacnBuilder(useRef) = 
+  member this.Bind(x: HacnControl<'a>, f) =
+    match x with
+      | Props ->  PropsControl(fun (props) -> f(props))
+      | Render(element) -> RenderControl(element, fun (renderResult) -> f(renderResult))
+      | _ -> failwith "Unimplemented"
   member this.Zero() =
-    // handle case of ending here
     End
-  // member this.Combine(a: HacnControl, b: unit -> HacnControl) =
-  //   // if a is suspend then return operation
-  //   failwith "dddd"
-  member this.Delay(f: unit -> HacnControl<'props>) =
+  member this.Delay(f) =
     f
-  member this.Run(delayedFunc: unit -> HacnControl<'props>) =
+  member this.Run(delayedFunc) =
     let render (props: 'props) =
       let refState = useRef({
         NextControl = None; 
@@ -182,13 +87,18 @@ let hacnTests =
   test "A hacn test" {
     let element = hacnTest {
         let! props = Props
-        do! Render (div [||] [| str "Test Element"; str props |])
+        do! Render (div [||] [| str "Test Element"; str props.Hello |])
       }
     
-    // let ddd = async {
-    //   do! Async.Sleep 100
-    //   do! File.ReadAllBytesAsync "hello.txt" |> Async.AwaitTask
-    // }
+    let url = "https://google.com"
+    let asdf = async {                             
+        let uri = System.Uri(url)
+        let webClient = new System.Net.WebClient()
+        let! html = webClient.AsyncDownloadString(uri)
+        do! Async.Sleep(1)
+        let! data = webClient.AsyncDownloadData(uri)
+        return html
+      }
     
     let x = element "hello" [||] 
 
@@ -197,13 +107,13 @@ let hacnTests =
 
 [<EntryPoint>]
 let main argv =
-  let logary =
-    Config.create "MyProject.Tests" "localhost"
-    |> Config.targets [ LiterateConsole.create LiterateConsole.empty "console" ]
-    |> Config.processing (Events.events |> Events.sink ["console";])
-    |> Config.build
-    |> run
-  LogaryFacadeAdapter.initialise<Expecto.Logging.Logger> logary
+  // let logary =
+  //   Config.create "MyProject.Tests" "localhost"
+  //   |> Config.targets [ LiterateConsole.create LiterateConsole.empty "console" ]
+  //   |> Config.processing (Events.events |> Events.sink ["console";])
+  //   |> Config.build
+  //   |> run
+  // LogaryFacadeAdapter.initialise<Expecto.Logging.Logger> logary
 
 
   // Invoke Expecto:
