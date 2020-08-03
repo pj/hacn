@@ -5,7 +5,6 @@
   <ItemGroup>
     <Compile Include="App.fs" />
     <Compile Include="Hacn.fs" />
-    <Compile Include="AnotherTry.fs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Expecto" Version="9.0.2" />

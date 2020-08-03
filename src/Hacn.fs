@@ -1,31 +1,48 @@
 module Hacn
 open Fable.React
-open Browser.Types
-open Browser
-open Fable.Core
+open Fable.React.Props
 
-// type HacnControl<'returnType> =
-//     | Render of ReactElement
-//     | RenderControl of ReactElement * ('returnType -> HacnControl<'returnType>)
-//     | State of 'returnType
-//     | StateControl of 'returnType * ('returnType -> HacnControl<'returnType>)
-//     | Props
-//     | PropsControl of ('returnType -> HacnControl<'returnType>)
-//     | Context of IContext<'returnType>
-//     | ContextControl of IContext<'returnType> * ('returnType -> HacnControl<'returnType>)
-//     | End
 type RefState<'props> =
   {
     PrevProps: 'props option;
     CurrentProps: 'props;
+    Element: ReactElement option;
+    AllOperations: Hacn<'props, unit> list;
+  }
+and InvokeResult<'props> =
+  {
+    NextState: RefState<'props>;
+    NextOperation: Hacn<'props, unit> option;
+    Element: ReactElement option;
+  }
+and Hacn<'props, 'returnType> =
+  { 
+    Invoke: RefState<'props> -> (InvokeResult<'props> * 'returnType);
+    Changed: RefState<'props> -> bool;
   }
 
-type Hacn<'props, 'returnType> =
-  { Invoke: RefState<'props> -> 'returnType}
+let Props() =
+  { 
+    Invoke = fun refState -> (({
+      NextState = refState; 
+      NextOperation = None; 
+      Element = None;
+    }, refState.CurrentProps));
+    Changed = fun (refState) -> 
+      match refState.PrevProps with
+        | Some(prevProps) -> prevProps <> refState.CurrentProps
+        | None -> true;
+  }
 
-let getProps() =
-  { Invoke = fun (refState) -> 
-    refState.CurrentProps
+let Render(element) =
+  { 
+    Invoke = fun (refState) -> 
+      (({
+        NextState = refState; 
+        NextOperation = None; 
+        Element = Some(element);
+      }, ()));
+    Changed = fun (_) -> false
   }
 
 let runOperation refState operation =
@@ -40,50 +57,92 @@ type RenderResponse =
 type ContextResponse =
   { Everyone: string}
 
-type HacnBuilder() = 
-  member this.Bind(x, f) =
-    { Invoke = 
-      fun (refState) -> 
-        runOperation refState x 
+type HacnBuilder(useRef) = 
+  member this.Bind(operation, f) = //: Hacn<'props, 'returnType>, f: 'returnType -> Hacn<'props, unit>) =
+    { 
+      Invoke = 
+        fun (refState) ->
+          let (operationResult, returnType) = operation.Invoke(refState)
+          let nextOperation = f(returnType)
+          ({
+            operationResult with 
+              NextOperation = Some(nextOperation); 
+          }, ());
+      Changed =
+        fun (refState) ->
+          operation.Changed(refState)
     }
   member this.Zero() =
-    { Invoke = 
-      fun (refState) ->
-        null
+    { 
+      Invoke = fun (refState) -> 
+        (({
+          NextState = refState; 
+          NextOperation = None; 
+          Element = None;
+        }, ()));
+      Changed = fun (refState) -> false
     }
   member this.Delay(f) =
     f
-  member this.Run(delayedFunc) =
-    let render (props: 'props) =
-      // TODO: implement rendering logic
-      div [||] [| str "Hello world!" |]
+  member this.Run(f) =
+    let render (props) =
+      let refState: IRefValue<_> = useRef({
+        PrevProps = None;
+        CurrentProps = props;
+        Element = None;
+        AllOperations = [];
+      })
+      
+      let (currentOperation, appendNext) = 
+        let changeOperation = List.tryFind (fun op -> op.Changed(refState.current)) refState.current.AllOperations
+        match changeOperation with
+          | Some(op) -> (op, false)
+          | None -> 
+            let lastOp = List.tryLast refState.current.AllOperations
+            match lastOp with
+              | Some(op) -> (op, true)
+              | None -> 
+                let firstOp = f()
+                refState.current <- {
+                  refState.current with AllOperations = List.append refState.current.AllOperations [firstOp]
+                  }
+                (firstOp, true)
+      
+      let (currentResult, _) = currentOperation.Invoke(refState.current)
+
+      let withOp = 
+        match currentResult.NextOperation with
+          | Some(op) when appendNext -> 
+            {currentResult.NextState with AllOperations = List.append currentResult.NextState.AllOperations [op]}
+          | _ -> currentResult.NextState
+      refState.current <- withOp
+
+      match refState.current.Element with
+        | Some(element) -> element
+        | None -> null
     
-    let ofHacn (props: 'props) children = 
+    let ofHacn (props) children = 
       ofFunction 
         render
         props 
         children
     ofHacn
 
-let hacn = HacnBuilder()
+let useFakeRef initialValue =
+  let mutable refValue = initialValue
+  { new IRefValue<_> with
+      member this.current with get() = refValue and set value = refValue <- value }
+
+let hacn = HacnBuilder(useFakeRef)
 
 let context = createContext({Everyone = "Everyone"})
 
 let element = hacn {
-  // Props corresponds to props in react and would act kind of like a stream. 
-  // When the component rerenders props might have changed and so the 
-  // computation would restart from here.
-  let! props = getProps()
+  let! props = Props()
 
-  // Context would work similarly to props.
-  let! contextResponse = Context(context)
+  let! clicked = Render (button [ OnClick (fun (event) -> failwith "TODO: Logic to capture events here") ] [])
 
-  // Renders can capture events that happen at a lower level and return them 
-  // into the computation.
-  let! clicked = Render (button [| OnClick (fun (event) -> failwith "TODO: Logic to capture events here") |] [||])
-
-  // Render everything, not capturing events.
-  do! Render (div [||] [| str "Test Element"; str props.Hello; str "World"; str contextResponse.Everyone |])
+  do! Render (div [] [ str "Test Element"; str props.Hello; str "World" ])
 }
 
-let x = element "hello" [||] 
+let x = element {Hello = "Hello"} [] 
