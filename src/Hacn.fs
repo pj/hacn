@@ -72,8 +72,8 @@ type HacnBuilder<'props>(useRef: RefState<'props> -> IRefValue<RefState<'props>>
   member this.Delay(f) =
     f
   member this.Run(f) =
-    let render (props: 'props) =
-      let refState: IRefValue<RefState<'props>> = useRef({
+    let render props =
+      let refState = useRef({
         PrevProps = None;
         CurrentProps = props;
         Element = None;
@@ -108,7 +108,7 @@ type HacnBuilder<'props>(useRef: RefState<'props> -> IRefValue<RefState<'props>>
         | Some(element) -> element
         | None -> null
     
-    fun (props: 'props) children -> 
+    fun props children -> 
       ofFunction 
         render
         props 

@@ -28,7 +28,7 @@ let useFakeRef initialValue =
 [<Tests>]
 let tests = 
   test "A useful test of Hacn" {
-    let hacn = HacnBuilder<TestProps>(useFakeRef)
+    let hacn = HacnBuilder(useFakeRef)
 
     let context = createContext({Everyone = "Everyone"})
 
