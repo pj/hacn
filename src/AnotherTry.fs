@@ -3,6 +3,7 @@ open Fable.React
 open Browser.Types
 open Browser
 open Fable.Core
+open Fable.React.Props
 
 // type HacnControl<'returnType> =
 //     | Render of ReactElement
@@ -18,28 +19,29 @@ type RefState<'props> =
   {
     PrevProps: 'props option;
     CurrentProps: 'props;
+    Element: ReactElement option;
   }
 
 type Hacn<'props, 'returnType> =
   { 
-    Invoke: RefState<'props> -> (ReactElement option * 'returnType);
+    Invoke: RefState<'props> -> (RefState<'props> * Hacn<'props, unit> option * 'returnType);
     Change: RefState<'props> -> bool;
-    Next: 'returnType -> Hacn<'props, _>
   }
 
 let Props() =
-  { Invoke = fun (refState) -> (None, refState.CurrentProps);
+  { 
+    Invoke = fun refState -> (refState, None, refState.CurrentProps);
     Change = fun (refState) -> 
       match refState.PrevProps with
         | Some(prevProps) -> prevProps <> refState.CurrentProps
         | None -> true;
-    Next = fun (nextValue, refState)
-    ;
   }
 
 let Render(element) =
-  { Invoke = fun (_) -> (element, ());
-    Change = fun (refState) -> false
+  { 
+    Invoke = fun (refState) -> 
+      ({refState with Element = Some(element)}, None, ());
+    Change = fun (_) -> false
   }
 
 let runOperation refState operation =
@@ -54,26 +56,32 @@ type RenderResponse =
 type ContextResponse =
   { Everyone: string}
 
-type HacnBuilder() = 
+type HacnBuilder(useRef) = 
   member this.Bind(operation, f) =
     { 
       Invoke = 
         fun (refState) -> 
-          let (element, nextValue) = operation.Invoke(refState)
-          f(nextValue)
+          let (nextRefState, _, nextValue) = operation.Invoke(refState)
+          let nextOperation = f(nextValue)
+          (nextRefState, Some(nextOperation), ())
       Change =
         fun (refState) ->
           operation.Change(refState)
     }
   member this.Zero() =
     { 
-      Invoke = fun (refState) -> (None, ())
+      Invoke = fun (refState) -> (refState, None, ())
       Change = fun (refState) -> false
     }
   member this.Delay(f) =
     f
-  member this.Run(delayedFunc) =
+  member this.Run(f) =
     let render (props: 'props) =
+      let refState = useRef({
+        PrevProps = None;
+        CurrentProps = props;
+        Element = None;
+      })
       // TODO: implement rendering logic
       div [||] [| str "Hello world!" |]
     
@@ -84,7 +92,12 @@ type HacnBuilder() =
         children
     ofHacn
 
-let hacn = HacnBuilder()
+let useFakeRef initialValue =
+  let mutable refValue = initialValue
+  { new IRefValue<_> with
+      member this.current with get() = refValue and set value = refValue <- value }
+
+let hacn = HacnBuilder(useFakeRef)
 
 let context = createContext({Everyone = "Everyone"})
 
@@ -93,7 +106,7 @@ let element = hacn {
 
   let! clicked = Render (button [| OnClick (fun (event) -> failwith "TODO: Logic to capture events here") |] [||])
 
-  do! Render (div [||] [| str "Test Element"; str props.Hello; str "World"; str contextResponse.Everyone |])
+  do! Render (div [||] [| str "Test Element"; str props.Hello; str "World" |])
 }
 
 let x = element "hello" [||] 
