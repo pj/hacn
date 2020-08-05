@@ -16,12 +16,15 @@ and InvokeResult<'props> =
   }
 and Hacn<'props, 'returnType> =
   { 
+    // PreProcess: RefState<'props> -> (IContext<'returnType> -> 'returnType) -> unit;
+    PreProcess: RefState<'props> -> unit;
     Invoke: RefState<'props> -> (InvokeResult<'props> * 'returnType);
     Changed: RefState<'props> -> bool;
   }
 
 let Props() =
   { 
+    PreProcess = fun _ -> ();
     Invoke = fun refState -> (({
       NextState = refState; 
       NextOperation = None; 
@@ -35,6 +38,7 @@ let Props() =
 
 let Render(element) =
   { 
+    PreProcess = fun _ -> ();
     Invoke = fun (refState) -> 
       (({
         NextState = refState; 
@@ -44,9 +48,32 @@ let Render(element) =
     Changed = fun (_) -> false
   }
 
+let ContextNonPartial (useContext: IContext<'returnType> -> 'returnType) (context: IContext<'returnType>) =
+  // TODO: figure out how to remove nasty mutable state.
+  let mutable returnType = None
+  { 
+    PreProcess = fun refState -> 
+      returnType <- Some(useContext(context));
+    Invoke = fun refState -> 
+      let returnVar = 
+        match returnType with
+        | Some(v) -> v
+        | None -> failwith "PreProcess not called before invoking"
+      ({
+        NextState = refState; 
+        NextOperation = None; 
+        Element = None;
+      }, returnVar);
+    Changed = fun (refState) -> 
+      match refState.PrevProps with
+        | Some(prevProps) -> prevProps <> refState.CurrentProps
+        | None -> true;
+  }
+
 type HacnBuilder<'props>(useRef: RefState<'props> -> IRefValue<RefState<'props>>) = 
   member this.Bind(operation, f) =
     { 
+      PreProcess = fun (refState) -> operation.PreProcess(refState);
       Invoke = 
         fun (refState) ->
           let (operationResult, returnType) = operation.Invoke(refState)
@@ -61,6 +88,7 @@ type HacnBuilder<'props>(useRef: RefState<'props> -> IRefValue<RefState<'props>>
     }
   member this.Zero() =
     { 
+      PreProcess = fun (_) -> ();
       Invoke = fun (refState) -> 
         (({
           NextState = refState; 
@@ -79,6 +107,9 @@ type HacnBuilder<'props>(useRef: RefState<'props> -> IRefValue<RefState<'props>>
         Element = None;
         AllOperations = [];
       })
+
+      for op in refState.current.AllOperations do
+        op.PreProcess refState.current
       
       let (currentOperation, appendNext) = 
         let changeOperation = List.tryFind (fun op -> op.Changed(refState.current)) refState.current.AllOperations

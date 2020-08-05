@@ -25,19 +25,26 @@ let useFakeRef initialValue =
   { new IRefValue<_> with
       member this.current with get() = refValue and set value = refValue <- value }
 
+let useFakeContext (context) =
+  { Everyone = "Everyone"}
+
+let Context = ContextNonPartial useFakeContext
+
 [<Tests>]
 let tests = 
   test "A useful test of Hacn" {
     let hacn = HacnBuilder(useFakeRef)
 
     let context = createContext({Everyone = "Everyone"})
+    let x = Hooks.useContext
 
     let element = hacn {
       let! props = Props()
+      let! myContext = Context context
 
       let! clicked = Render (button [ OnClick (fun (event) -> failwith "TODO: Logic to capture events here") ] [])
 
-      do! Render (div [] [ str "Test Element"; str props.Hello; str "World" ])
+      do! Render (div [] [ str props.Hello; str "World"; str myContext.Everyone ])
     }
 
     let x = element {Hello = "Hello"} [] 
