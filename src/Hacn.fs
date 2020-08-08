@@ -70,77 +70,84 @@ let ContextNonPartial (useContext: IContext<'returnType> -> 'returnType) (contex
         | None -> true;
   }
 
-type HacnBuilder<'props>(useRef: RefState<'props> -> IRefValue<RefState<'props>>) = 
-  member this.Bind(operation, f) =
-    { 
-      PreProcess = fun (refState) -> operation.PreProcess(refState);
-      Invoke = 
-        fun (refState) ->
-          let (operationResult, returnType) = operation.Invoke(refState)
-          let nextOperation = f(returnType)
-          ({
-            operationResult with 
-              NextOperation = Some(nextOperation); 
-          }, ());
-      Changed =
-        fun (refState) ->
-          operation.Changed(refState)
-    }
-  member this.Zero() =
-    { 
-      PreProcess = fun (_) -> ();
-      Invoke = fun (refState) -> 
-        (({
-          NextState = refState; 
-          NextOperation = None; 
-          Element = None;
-        }, ()));
-      Changed = fun (refState) -> false
-    }
-  member this.Delay(f) =
-    f
-  member this.Run(f) =
-    let render props =
-      let refState = useRef({
-        PrevProps = None;
-        CurrentProps = props;
+let Context context = ContextNonPartial Hooks.useContext context
+
+let bind operation f = 
+  { 
+    PreProcess = fun (refState) -> operation.PreProcess(refState);
+    Invoke = 
+      fun (refState) ->
+        let (operationResult, returnType) = operation.Invoke(refState)
+        let nextOperation = f(returnType)
+        ({
+          operationResult with 
+            NextOperation = Some(nextOperation); 
+        }, ());
+    Changed =
+      fun (refState) ->
+        operation.Changed(refState)
+  }
+
+let zero() =
+  { 
+    PreProcess = fun (_) -> ();
+    Invoke = fun (refState) -> 
+      (({
+        NextState = refState; 
+        NextOperation = None; 
         Element = None;
-        AllOperations = [];
-      })
+      }, ()));
+    Changed = fun (refState) -> false
+  } 
 
-      for op in refState.current.AllOperations do
-        op.PreProcess refState.current
-      
-      let (currentOperation, appendNext) = 
-        let changeOperation = List.tryFind (fun op -> op.Changed(refState.current)) refState.current.AllOperations
-        match changeOperation with
-          | Some(op) -> (op, false)
+let render (useRef: RefState<'props> -> IRefValue<RefState<'props>>) delayedFunc props = 
+  let refState = useRef({
+    PrevProps = None;
+    CurrentProps = props;
+    Element = None;
+    AllOperations = [];
+  })
+
+  for op in refState.current.AllOperations do
+    op.PreProcess refState.current
+  
+  let (currentOperation, appendNext) = 
+    let changeOperation = List.tryFind (fun op -> op.Changed(refState.current)) refState.current.AllOperations
+    match changeOperation with
+      | Some(op) -> (op, false)
+      | None -> 
+        let lastOp = List.tryLast refState.current.AllOperations
+        match lastOp with
+          | Some(op) -> (op, true)
           | None -> 
-            let lastOp = List.tryLast refState.current.AllOperations
-            match lastOp with
-              | Some(op) -> (op, true)
-              | None -> 
-                let firstOp = f()
-                refState.current <- {
-                  refState.current with AllOperations = List.append refState.current.AllOperations [firstOp]
-                  }
-                (firstOp, true)
-      
-      let (invokeResult, _) = currentOperation.Invoke(refState.current)
+            let firstOp = delayedFunc()
+            refState.current <- {
+              refState.current with AllOperations = List.append refState.current.AllOperations [firstOp]
+              }
+            (firstOp, true)
+  
+  let (invokeResult, _) = currentOperation.Invoke(refState.current)
 
-      let withOp = 
-        match invokeResult.NextOperation with
-          | Some(op) when appendNext -> 
-            {invokeResult.NextState with AllOperations = List.append invokeResult.NextState.AllOperations [op]}
-          | _ -> invokeResult.NextState
-      refState.current <- withOp
+  let withOp = 
+    match invokeResult.NextOperation with
+      | Some(op) when appendNext -> 
+        {invokeResult.NextState with AllOperations = List.append invokeResult.NextState.AllOperations [op]}
+      | _ -> invokeResult.NextState
+  refState.current <- withOp
 
-      match refState.current.Element with
-        | Some(element) -> element
-        | None -> null
-    
+  match refState.current.Element with
+    | Some(element) -> element
+    | None -> null
+
+type HacnBuilder<'props>(useRef: RefState<'props> -> IRefValue<RefState<'props>>) = 
+  member this.Bind(operation, f) = bind operation f
+  member this.Zero() = zero()
+  member this.Delay(f) = f
+  member this.Run(f) =
     fun props children -> 
       ofFunction 
-        render
+        (render useRef f)
         props 
         children
+
+let hacn<'a> = HacnBuilder<'a>(Hooks.useRef)

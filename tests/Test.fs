@@ -9,13 +9,11 @@ open Fable.React.Helpers
 open Fable.React.Standard
 open Fable.React
 open Fable.React.Props
+open Fable.ReactServer
 open Hacn
 
 type TestProps =
   { Hello: string}
-
-// type RenderResponse =
-//   { World: string}
 
 type ContextResponse =
   { Everyone: string}
@@ -28,27 +26,37 @@ let useFakeRef initialValue =
 let useFakeContext (context) =
   { Everyone = "Everyone"}
 
-let Context = ContextNonPartial useFakeContext
+let TestContext = ContextNonPartial useFakeContext
+
+type TestHacnBuilder<'props>(useRef: RefState<'props> -> IRefValue<RefState<'props>>) = 
+  member this.Bind(operation, f) = bind operation f
+  member this.Zero() = zero()
+  member this.Delay(f) = f
+  member this.Run(f) =
+    fun props -> castHTMLNode (render useRef f props)
+
+let testHacn = TestHacnBuilder(useFakeRef)
 
 [<Tests>]
 let tests = 
   test "A useful test of Hacn" {
-    let hacn = HacnBuilder(useFakeRef)
 
     let context = createContext({Everyone = "Everyone"})
     let x = Hooks.useContext
 
-    let element = hacn {
+    let element = testHacn {
       let! props = Props()
-      let! myContext = Context context
+      let! myContext = TestContext context
 
       let! clicked = Render (button [ OnClick (fun (event) -> failwith "TODO: Logic to capture events here") ] [])
 
       do! Render (div [] [ str props.Hello; str "World"; str myContext.Everyone ])
     }
 
-    let x = element {Hello = "Hello"} [] 
-    Expect.equal 1 1 "One equals one"
+    let x = element {Hello = "Hello"}
+    match x with 
+      | Node(elementName, _, _) -> Expect.equal elementName "div" "div name is correct"
+      | _ -> failwith "Not a node"
   }
 
 [<EntryPoint>]
