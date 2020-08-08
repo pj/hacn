@@ -2,7 +2,8 @@
   "private": true,
   "scripts": {
     "start:server": "webpack-dev-server",
-    "test": "dotnet run --project=tests/Test.fsproj"
+    "pretest": "fable-splitter -c tests/splitter.config.js",
+    "test": "jest"
   },
   "dependencies": {
     "@babel/core": "^7.8.4",
@@ -13,5 +14,15 @@
     "webpack": "^4.41.6",
     "webpack-cli": "^3.3.11",
     "webpack-dev-server": "^3.10.3"
+  },
+  "devDependencies": {
+    "@babel/plugin-transform-modules-commonjs": "^7.10.4",
+    "@sinonjs/fake-timers": "^6.0.1",
+    "@testing-library/jest-dom": "^5.11.2",
+    "@testing-library/react": "^10.4.8",
+    "@testing-library/user-event": "^12.1.1",
+    "fable-splitter": "^2.2.1",
+    "jest": "^26.2.2",
+    "prettier": "^2.0.5"
   }
 }
