@@ -3,7 +3,8 @@
     <TargetFramework>netstandard2.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="App.fs" />
+    <Compile Include="Types.fs" />
+    <Compile Include="Operations.fs" />
     <Compile Include="Hacn.fs" />
   </ItemGroup>
   <ItemGroup>

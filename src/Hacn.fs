@@ -1,80 +1,21 @@
 module Hacn
 open Fable.React
+open Hacn.Types
 
 type RefState<'props> =
   {
     PrevProps: 'props option;
     CurrentProps: 'props;
     Element: ReactElement option;
-    AllOperations: Hacn<'props, unit> list;
+    NextOperation: (string * Operation<'props, unit>) option;
+    PreProcessOperations: Operation<'props, unit> list;
+    PropsOperation: Operation<'props, unit> option;
   }
-and InvokeResult<'props> =
-  {
-    NextState: RefState<'props>;
-    NextOperation: Hacn<'props, unit> option;
-    Element: ReactElement option;
-  }
-and Hacn<'props, 'returnType> =
-  { 
-    // PreProcess: RefState<'props> -> (IContext<'returnType> -> 'returnType) -> unit;
-    PreProcess: RefState<'props> -> unit;
-    Invoke: RefState<'props> -> (InvokeResult<'props> * 'returnType);
-    Changed: RefState<'props> -> bool;
-  }
-
-let Props() =
-  { 
-    PreProcess = fun _ -> ();
-    Invoke = fun refState -> (({
-      NextState = refState; 
-      NextOperation = None; 
-      Element = None;
-    }, refState.CurrentProps));
-    Changed = fun (refState) -> 
-      match refState.PrevProps with
-        | Some(prevProps) -> prevProps <> refState.CurrentProps
-        | None -> true;
-  }
-
-let Render(element) =
-  { 
-    PreProcess = fun _ -> ();
-    Invoke = fun (refState) -> 
-      (({
-        NextState = refState; 
-        NextOperation = None; 
-        Element = Some(element);
-      }, ()));
-    Changed = fun (_) -> false
-  }
-
-let ContextNonPartial (useContext: IContext<'returnType> -> 'returnType) (context: IContext<'returnType>) =
-  // TODO: figure out how to remove nasty mutable state.
-  let mutable returnType = None
-  { 
-    PreProcess = fun refState -> 
-      returnType <- Some(useContext(context));
-    Invoke = fun refState -> 
-      let returnVar = 
-        match returnType with
-        | Some(v) -> v
-        | None -> failwith "PreProcess not called before invoking"
-      ({
-        NextState = refState; 
-        NextOperation = None; 
-        Element = None;
-      }, returnVar);
-    Changed = fun (refState) -> 
-      match refState.PrevProps with
-        | Some(prevProps) -> prevProps <> refState.CurrentProps
-        | None -> true;
-  }
-
-let Context context = ContextNonPartial Hooks.useContext context
 
 let bind operation f = 
-  { 
-    PreProcess = fun (refState) -> operation.PreProcess(refState);
+  {
+    NeedsPreprocess = fun () -> operation.NeedsPreprocess();
+    PreProcess = fun (operationState) -> operation.PreProcess(operationState);
     Invoke = 
       fun (refState) ->
         let (operationResult, returnType) = operation.Invoke(refState)
@@ -83,21 +24,17 @@ let bind operation f =
           operationResult with 
             NextOperation = Some(nextOperation); 
         }, ());
-    Changed =
-      fun (refState) ->
-        operation.Changed(refState)
   }
 
 let zero() =
   { 
-    PreProcess = fun (_) -> ();
+    NeedsPreprocess = fun () -> false;
+    PreProcess = fun () -> ();
     Invoke = fun (refState) -> 
       (({
-        NextState = refState; 
         NextOperation = None; 
         Element = None;
       }, ()));
-    Changed = fun (refState) -> false
   } 
 
 let render (useRef: RefState<'props> -> IRefValue<RefState<'props>>) delayedFunc props = 
@@ -105,35 +42,37 @@ let render (useRef: RefState<'props> -> IRefValue<RefState<'props>>) delayedFunc
     PrevProps = None;
     CurrentProps = props;
     Element = None;
-    AllOperations = [];
+    PreProcessOperations = [];
+    PropsOperation = None;
+    NextOperation = None;
   })
 
-  for op in refState.current.AllOperations do
-    op.PreProcess refState.current
+  // for op in refState.current.AllOperations do
+  //   op.PreProcess()
   
-  let (currentOperation, appendNext) = 
-    let changeOperation = List.tryFind (fun op -> op.Changed(refState.current)) refState.current.AllOperations
-    match changeOperation with
-      | Some(op) -> (op, false)
-      | None -> 
-        let lastOp = List.tryLast refState.current.AllOperations
-        match lastOp with
-          | Some(op) -> (op, true)
-          | None -> 
-            let firstOp = delayedFunc()
-            refState.current <- {
-              refState.current with AllOperations = List.append refState.current.AllOperations [firstOp]
-              }
-            (firstOp, true)
+  // let (currentOperation, appendNext) = 
+  //   let changeOperation = List.tryFind (fun op -> op.Changed(refState.current)) refState.current.AllOperations
+  //   match changeOperation with
+  //     | Some(op) -> (op, false)
+  //     | None -> 
+  //       let lastOp = List.tryLast refState.current.AllOperations
+  //       match lastOp with
+  //         | Some(op) -> (op, true)
+  //         | None -> 
+  //           let firstOp = delayedFunc()
+  //           refState.current <- {
+  //             refState.current with AllOperations = List.append refState.current.AllOperations [firstOp]
+  //             }
+  //           (firstOp, true)
   
-  let (invokeResult, _) = currentOperation.Invoke(refState.current)
+  // let (invokeResult, _) = currentOperation.Invoke(refState.current)
 
-  let withOp = 
-    match invokeResult.NextOperation with
-      | Some(op) when appendNext -> 
-        {invokeResult.NextState with AllOperations = List.append invokeResult.NextState.AllOperations [op]}
-      | _ -> invokeResult.NextState
-  refState.current <- withOp
+  // let withOp = 
+  //   match invokeResult.NextOperation with
+  //     | Some(op) when appendNext -> 
+  //       {invokeResult.NextState with AllOperations = List.append invokeResult.NextState.AllOperations [op]}
+  //     | _ -> invokeResult.NextState
+  // refState.current <- withOp
 
   match refState.current.Element with
     | Some(element) -> element
