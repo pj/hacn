@@ -2,14 +2,23 @@ module Hacn
 open Fable.React
 open Hacn.Types
 
+type OpTreeNode<'props> =
+  | OpState of OperationState * Operation<'props, unit>
+
 type RefState<'props> =
   {
     PrevProps: 'props option;
     CurrentProps: 'props;
     Element: ReactElement option;
-    NextOperation: (string * Operation<'props, unit>) option;
-    PreProcessOperations: Operation<'props, unit> list;
-    PropsOperation: Operation<'props, unit> option;
+    NextOperation: OpTreeNode<'props> option;
+    PreProcessOperations: OpTreeNode<'props> list;
+    OpTree: OpTreeNode<'props> list;
+  }
+
+type PreProcessResult<'props> = 
+  {
+    UpdatedPreProcessOperations: OpTreeNode<'props> list;
+    ChangedPreProcessOperation: OpTreeNode<'props> option;
   }
 
 let bind operation f = 
@@ -29,13 +38,55 @@ let bind operation f =
 let zero() =
   { 
     NeedsPreprocess = fun () -> false;
-    PreProcess = fun () -> ();
-    Invoke = fun (refState) -> 
+    PreProcess = fun (_) -> None;
+    Invoke = fun (operationState) -> 
       (({
         NextOperation = None; 
         Element = None;
+        UpdatedOperationState = None;
       }, ()));
   } 
+
+// Preprocess operations e.g. props, context, refs
+let preprocessOperations state =
+  let preProcessResult = 
+    let updateState state item =
+      let changed, updatedOpState = 
+        match item with
+          | OpState(opState, op) ->
+            let result = op.PreProcess(Some(opState));
+            match result with
+              | Some(newOpState) -> 
+                (true, OpState(newOpState, op))
+              | None -> 
+                (false, OpState(opState, op))
+
+      let updatedOperations = List.append state.UpdatedPreProcessOperations [updatedOpState]
+      let changedOp =
+        match state with
+          | {ChangedPreProcessOperation = None} -> 
+            if changed then
+              Some(updatedOpState)
+            else
+              None
+          | _ -> state.ChangedPreProcessOperation
+      {UpdatedPreProcessOperations = updatedOperations; ChangedPreProcessOperation = changedOp}
+
+    List.fold 
+      updateState 
+      {UpdatedPreProcessOperations = []; ChangedPreProcessOperation = None}
+      state.PreProcessOperations
+
+  match preProcessResult.ChangedPreProcessOperation with
+    | Some(op) -> 
+      {
+        state with 
+          PreProcessOperations = preProcessResult.UpdatedPreProcessOperations;
+          NextOperation = Some(op)
+        }
+    | _ -> 
+      {state with PreProcessOperations = preProcessResult.UpdatedPreProcessOperations}
+
 
 let render (useRef: RefState<'props> -> IRefValue<RefState<'props>>) delayedFunc props = 
   let refState = useRef({
@@ -43,36 +94,24 @@ let render (useRef: RefState<'props> -> IRefValue<RefState<'props>>) delayedFunc
     CurrentProps = props;
     Element = None;
     PreProcessOperations = [];
-    PropsOperation = None;
     NextOperation = None;
+    OpTree = [];
   })
 
-  // for op in refState.current.AllOperations do
-  //   op.PreProcess()
-  
-  // let (currentOperation, appendNext) = 
-  //   let changeOperation = List.tryFind (fun op -> op.Changed(refState.current)) refState.current.AllOperations
-  //   match changeOperation with
-  //     | Some(op) -> (op, false)
-  //     | None -> 
-  //       let lastOp = List.tryLast refState.current.AllOperations
-  //       match lastOp with
-  //         | Some(op) -> (op, true)
-  //         | None -> 
-  //           let firstOp = delayedFunc()
-  //           refState.current <- {
-  //             refState.current with AllOperations = List.append refState.current.AllOperations [firstOp]
-  //             }
-  //           (firstOp, true)
-  
-  // let (invokeResult, _) = currentOperation.Invoke(refState.current)
+  refState.current <- 
+    match refState.current.NextOperation with
+    | Some(_) -> refState.current
+    | None -> 
+      let firstOperation = delayedFunc()
+      {refState.current with NextOperation = firstOperation}
+      // let firstState = 
+      //   if firstOperation.IsProps then 
+      //     Some(Hacn.Operations.PropsOperationState(props) :> OperationState)
+      //   else 
+      //     None
+      // let invokeResult, _ = firstOperation.Invoke(firstState)
 
-  // let withOp = 
-  //   match invokeResult.NextOperation with
-  //     | Some(op) when appendNext -> 
-  //       {invokeResult.NextState with AllOperations = List.append invokeResult.NextState.AllOperations [op]}
-  //     | _ -> invokeResult.NextState
-  // refState.current <- withOp
+  refState.current <- preprocessOperations refState.current
 
   match refState.current.Element with
     | Some(element) -> element

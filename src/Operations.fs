@@ -9,8 +9,6 @@ type PropsOperationState<'props>(props: 'props) =
 let Props<'props>() =
   let mutable mutablePrevProps = None;
   { 
-    InitialOperationState = fun (props: 'props) -> 
-      new PropsOperationState<'props>(props) :> OperationState
     NeedsPreprocess = fun () -> true;
     PreProcess = fun (operationState) -> 
       let castOperationState = operationState :?> PropsOperationState<'props>

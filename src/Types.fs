@@ -14,8 +14,9 @@ type InvokeResult<'props> =
   }
 and Operation<'props, 'returnType> =
   { 
-    InitialOperationState: 'props -> OperationState
-    NeedsPreprocess: unit -> bool;
-    PreProcess: OperationState -> (OperationState option);
-    Invoke: OperationState -> (InvokeResult<'props> * 'returnType);
+    // InitialOperationState: 'props -> OperationState
+    NeedsPreprocess: bool;
+    PreProcess: OperationState option -> (OperationState option);
+    Invoke: OperationState option -> (InvokeResult<'props> * 'returnType);
+    IsProps: bool;
   }
