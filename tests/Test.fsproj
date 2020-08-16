@@ -1,25 +1,19 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- <PropertyGroup>
+  <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>netcoreapp3.1</TargetFramework>
     <GenerateProgramFile>false</GenerateProgramFile>
-  </PropertyGroup> -->
-  <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="Test.test.fs" />
+    <Compile Include="Test.fs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="../src/App.fsproj">
-      <Name>App.fsproj</Name>
+    <ProjectReference Include="../src/Hacn.fsproj">
+      <Name>Hacn.fsproj</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Fable.Browser.Dom" Version="1.1.0" />
-    <PackageReference Include="Fable.Core" Version="3.1.5" />
-    <PackageReference Include="Fable.Jester" Version="0.25.0" />
-    <PackageReference Include="Fable.React" Version="6.2.0" />
-    <PackageReference Include="Fable.ReactTestingLibrary" Version="0.25.0" />
+    <PackageReference Include="Expecto" Version="9.0.2" />
+    <PackageReference Include="Fable.Mocha" Version="2.9.1" />
   </ItemGroup>
 </Project>
