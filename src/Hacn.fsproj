@@ -5,7 +5,7 @@
   <ItemGroup>
     <Compile Include="Types.fs" />
     <Compile Include="Operations.fs" />
-    <Compile Include="Hacn.fs" />
+    <Compile Include="Core.fs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Expecto" Version="9.0.2" />

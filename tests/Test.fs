@@ -1,12 +1,43 @@
 module Test
 open Fable.Mocha
 open Expecto
-open Hacn
+open Hacn.Core
+open Hacn.Operations
+open Fable.React
+open Fable.ReactServer
+
+type TestProps = { Hello: string}
+
+let useFakeRef initialValue =
+  let mutable refValue = initialValue
+  { new IRefValue<_> with
+      member this.current with get() = refValue and set value = refValue <- value }
+
+type ContextResponse = { Everyone: string}
+
+let useFakeContext (context) =
+  { Everyone = "Everyone"}
+
+let useFakeState _ =
+  ()
 
 let allTests =
   testList "Arithmetic tests" [
     testCase "plus works" <| fun () ->
-      Expect.equal (1 + 1) 2 "plus"
+      let hacnTest = HacnBuilder<'props>((render useFakeRef Hooks.useState Hooks.useEffect))
+
+      let element = hacnTest {
+        let! x = Props()
+        do! Render(div [] [str x.Hello; str " World"])
+      }
+
+      let createdElement = element {Hello = "Hello"} []
+
+      let htmlNode = castHTMLNode createdElement
+      match htmlNode with
+      | HTMLNode.Node (tag, attrs, children) ->
+        Expect.equal tag "div" "Success"
+      | _ -> failwith "Not html node"
   ]
 
 [<EntryPoint>]

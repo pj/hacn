@@ -1,6 +1,5 @@
 module Hacn.Operations
 open Fable.React
-open Hacn.Types
 
 type PropsOperationState<'props when 'props: equality>(props: 'props, prevProps: 'props option) =
   inherit OperationState()
@@ -8,7 +7,7 @@ type PropsOperationState<'props when 'props: equality>(props: 'props, prevProps:
   member _.PrevProps() = prevProps
 
 let Props<'props when 'props: equality>() =
-  { 
+  Perform({ 
     IsPropsOperation = true;
     PreProcess = fun (operationState) -> 
       match operationState with 
@@ -31,24 +30,25 @@ let Props<'props when 'props: equality>() =
             UpdatedOperationState = None;
             Effect = None;
           }, 
-          castOperationState.Props
+          castOperationState.Props()
         );
-  }
+  })
 
-// let Render(element) =
-//   { 
-//     NeedsPreprocess = fun () -> false;
-//     PreProcess = fun (operationState) -> None;
-//     Invoke = fun (refState) -> 
-//       (
-//         {
-//           NextOperation = None; 
-//           Element = Some(element);
-//           UpdatedOperationState = None;
-//         }, 
-//         ()
-//       );
-//   }
+let Render(element) =
+  Perform({ 
+    IsPropsOperation = false;
+    PreProcess = fun _ -> None;
+    Invoke = fun _ -> 
+      (
+        {
+          NextOperation = None; 
+          Element = Some(element);
+          UpdatedOperationState = None;
+          Effect = None;
+        }, 
+        ()
+      );
+  })
 
 // let ContextNonPartial (useContext: IContext<'returnType> -> 'returnType) (context: IContext<'returnType>) =
 //   // TODO: figure out how to remove nasty mutable state.
