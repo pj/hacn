@@ -71,14 +71,27 @@ let getFirstOperation delayedFunc componentState =
 
 
 // Preprocess operations e.g. props, context, refs
-let preprocessOperations state =
+let preprocessOperations<'props when 'props: equality> state (props: 'props) =
   let mutable nextIndex = state.OperationIndex
   let mutable nextState = state
   for item in state.Operations do
     match item with
       | OpState({State = opState; Operation = op; Index = index}) ->
         match op with 
-          | Perform({PreProcess = preProcess}) -> 
+          | Perform({PreProcess = preProcess; IsPropsOperation = isProps}) -> 
+            let processOpState = 
+              if isProps then
+                match opState with
+                | None -> 
+                  let propsState = Operations.PropsOperationState(props, None) :> OperationState
+                  Some(propsState)
+                | Some(existingPropsState) -> 
+                  let castPropsState = existingPropsState :?> Operations.PropsOperationState<'props>
+                  let propsState = Operations.PropsOperationState(props, Some(castPropsState.Props())) :> OperationState
+                  Some(propsState)
+              else
+                opState
+
             let result = preProcess opState
             match result with
               | Some(newOpState) -> 
@@ -142,7 +155,7 @@ let execute state props =
               else
                 let preProcessState = 
                   if nextOpData.IsPropsOperation then
-                    let propsOperationState = Hacn.Operations.PropsOperationState(props, None) :> OperationState
+                    let propsOperationState = Operations.PropsOperationState(props, None) :> OperationState
                     nextOpData.PreProcess(Some(propsOperationState)) |> ignore
                     Some(propsOperationState)
                   else
@@ -204,7 +217,7 @@ let runEffects (componentStateRef: IRefValue<RefState<'props>>) (useState: 'T ->
 
   useEffect handleEffects
 
-let render (useRef: RefState<'props> -> IRefValue<RefState<'props>>) useState useEffect delayedFunc props = 
+let render (useRef: RefState<'props> -> IRefValue<RefState<'props>>) useState useEffect delayedFunc (props: 'props) = 
   let componentStateRef = useRef({
     Element = None;
     Operations = [||];
@@ -215,7 +228,7 @@ let render (useRef: RefState<'props> -> IRefValue<RefState<'props>>) useState us
   componentStateRef.current <- getFirstOperation delayedFunc componentStateRef.current
 
   // run any preprocess operations.
-  componentStateRef.current <- preprocessOperations componentStateRef.current
+  componentStateRef.current <- preprocessOperations componentStateRef.current props
 
   // execute until we hit suspend/end.
   let nextState, effects = execute componentStateRef.current props
