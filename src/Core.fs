@@ -71,7 +71,7 @@ let getFirstOperation delayedFunc componentState =
 
 
 // Preprocess operations e.g. props, context, refs
-let preprocessOperations<'props when 'props: equality> state (props: 'props) =
+let preprocessOperations state props =
   let mutable nextIndex = state.OperationIndex
   let mutable nextState = state
   for item in state.Operations do
@@ -87,12 +87,12 @@ let preprocessOperations<'props when 'props: equality> state (props: 'props) =
                   Some(propsState)
                 | Some(existingPropsState) -> 
                   let castPropsState = existingPropsState :?> Operations.PropsOperationState<'props>
-                  let propsState = Operations.PropsOperationState(props, Some(castPropsState.Props())) :> OperationState
+                  let propsState = Operations.PropsOperationState(props, Some(castPropsState.Props)) :> OperationState
                   Some(propsState)
               else
                 opState
 
-            let result = preProcess opState
+            let result = preProcess processOpState
             match result with
               | Some(newOpState) -> 
                 Array.set 
@@ -181,8 +181,8 @@ let execute state props =
     nextEffects
   )
 
-let runEffects (componentStateRef: IRefValue<RefState<'props>>) (useState: 'T -> IStateHook<'T>) useEffect effects =
-  let state = useState("asdf")
+let runEffects (componentStateRef: IRefValue<RefState<'props>>) useState useEffect effects =
+  let state: IStateHook<string> = useState("asdf")
   let rerender opTreeIndex nextOpState =
     let currentOperation = componentStateRef.current.Operations.[opTreeIndex]
     match currentOperation with
@@ -217,8 +217,8 @@ let runEffects (componentStateRef: IRefValue<RefState<'props>>) (useState: 'T ->
 
   useEffect handleEffects
 
-let render (useRef: RefState<'props> -> IRefValue<RefState<'props>>) useState useEffect delayedFunc (props: 'props) = 
-  let componentStateRef = useRef({
+let render useRef useState useEffect delayedFunc props = 
+  let componentStateRef: IRefValue<RefState<'props>> = useRef({
     Element = None;
     Operations = [||];
     OperationIndex = -1;
@@ -243,7 +243,7 @@ let render (useRef: RefState<'props> -> IRefValue<RefState<'props>>) useState us
     | Some(element) -> element
     | None -> null
 
-type HacnBuilder<'props when 'props: equality>(render: (unit -> Operation<'props,unit>) -> 'props -> ReactElement) = 
+type HacnBuilder(render) = 
   member this.Bind(operation, f) = bind operation f
   member this.Zero() = zero()
   member this.Delay(f) = f
@@ -254,4 +254,4 @@ type HacnBuilder<'props when 'props: equality>(render: (unit -> Operation<'props
         props 
         children
 
-let hacn<'props when 'props: equality> = HacnBuilder<'props>((render Hooks.useRef Hooks.useState Hooks.useEffect))
+let hacn _ = HacnBuilder((render Hooks.useRef Hooks.useState Hooks.useEffect))

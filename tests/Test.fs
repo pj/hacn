@@ -24,7 +24,7 @@ let useFakeState _ =
 let allTests =
   testList "Arithmetic tests" [
     testCase "plus works" <| fun () ->
-      let hacnTest = HacnBuilder<'props>((render useFakeRef Hooks.useState Hooks.useEffect))
+      let hacnTest = HacnBuilder((render useFakeRef Hooks.useState Hooks.useEffect))
 
       let element = hacnTest {
         let! x = Props()
