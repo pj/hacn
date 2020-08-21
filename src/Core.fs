@@ -14,7 +14,7 @@ type OpTreeNode<'props> =
 type OpTree<'props> =
   | OpState of OpTreeNode<'props>
 
-type RefState<'props> =
+type RefState<'props, 'state> =
   {
     // Last element rendered.
     Element: ReactElement option;
@@ -23,20 +23,23 @@ type RefState<'props> =
     // 'current' operation to perform, get's updated as operations change it
     // e.g. props changes
     OperationIndex: int;
+
+    // Component state object
+    ComponentState: Operations.StateContainer<'state>;
   }
 
 let bind underlyingOperation f = 
   Perform(
     {
-      IsPropsOperation = 
+      OperationType = 
         match underlyingOperation with
-         | Perform(opData) -> opData.IsPropsOperation; 
-         | _ -> false
+         | Perform(opData) -> opData.OperationType; 
+         | _ -> failwith "Underlying must be perform Operation"
       PreProcess = 
         fun operationState -> 
           match underlyingOperation with
            | Perform(opData) -> opData.PreProcess(operationState)
-           | _ -> None;
+           | _ -> failwith "Underlying must be perform Operation"
       Invoke = 
         fun (operationState) ->
           match underlyingOperation with
@@ -69,27 +72,32 @@ let getFirstOperation delayedFunc componentState =
   else
     componentState
 
+let getOperationState operationType opState props =
+  match operationType with
+  | Some(coreOperationType) -> 
+    match coreOperationType with
+    | PropsOperation -> 
+      match opState with
+      | None -> 
+        let propsState: Operations.PropsOperationState<obj> = {Props = props; PrevProps = None}
+        Some(propsState :> obj)
+      | Some(existingPropsState) -> 
+        let propsState: Operations.PropsOperationState<obj> = {Props = props; PrevProps = Some(existingPropsState)}
+        Some(propsState :> obj)
+    | _ -> None
+  | None -> 
+    opState
 
 // Preprocess operations e.g. props, context, refs
-let preprocessOperations state props =
-  let mutable nextIndex = state.OperationIndex
-  let mutable nextState = state
-  for item in state.Operations do
+let preprocessOperations refState props =
+  let mutable nextIndex = refState.OperationIndex
+  let mutable nextState = refState
+  for item in refState.Operations do
     match item with
       | OpState({State = opState; Operation = op; Index = index}) ->
         match op with 
-          | Perform({PreProcess = preProcess; IsPropsOperation = isProps}) -> 
-            let processOpState: obj option = 
-              if isProps then
-                match opState with
-                | None -> 
-                  let propsState: Operations.PropsOperationState<obj> = {Props = props; PrevProps = None}
-                  Some(propsState :> obj)
-                | Some(existingPropsState) -> 
-                  let propsState: Operations.PropsOperationState<obj> = {Props = props; PrevProps = Some(existingPropsState)}
-                  Some(propsState :> obj)
-              else
-                opState
+          | Perform({PreProcess = preProcess; OperationType = operationType}) -> 
+            let processOpState: obj option = getOperationState operationType opState props
 
             let result = preProcess processOpState
             match result with
@@ -99,16 +107,16 @@ let preprocessOperations state props =
                   index 
                   (OpState({State = Some(newOpState); Operation = op; Index = index}))
                 if index < nextIndex then
-                  nextState <- {state with OperationIndex = index}
+                  nextState <- {refState with OperationIndex = index}
                   nextIndex <- index
 
   nextState
 
-let execute state props =
-  let mutable currentIndex = state.OperationIndex
+let execute refState props =
+  let mutable currentIndex = refState.OperationIndex
   let mutable stop = false
   let mutable renderedElement = None
-  let mutable nextOperations = state.Operations
+  let mutable nextOperations = refState.Operations
   let mutable nextEffects = [||]
   while not stop do
     let currentOperation = nextOperations.[currentIndex]
@@ -121,7 +129,7 @@ let execute state props =
           match invokeResult.UpdatedOperationState with 
           | Some(nextOpState) ->
             Array.set
-              state.Operations
+              refState.Operations
               currentIndex
               (OpState({opState with State = Some(nextOpState)}))
           | _ -> ()
@@ -146,22 +154,29 @@ let execute state props =
           | Some(nextOp) -> 
             match nextOp with
             | Suspend -> stop <- true
-            | End ->  stop <- true
+            | End -> stop <- true
             | Perform(nextOpData) ->
               // If the op already exists update the stored op
-              if (currentIndex + 1) < state.Operations.Length then
+              if (currentIndex + 1) < refState.Operations.Length then
                 Array.set
                   nextOperations
                   (currentIndex + 1)
                   (OpState({opState with Operation = Perform(nextOpData)})) 
               else
                 let preProcessState = 
-                  if nextOpData.IsPropsOperation then
-                    let propsOperationState: Operations.PropsOperationState<obj> = {Props = props; PrevProps = None}
-                    nextOpData.PreProcess(Some(propsOperationState :> obj)) |> ignore
-                    Some(propsOperationState :> obj)
-                  else
-                    nextOpData.PreProcess(None)
+                  match nextOpData.OperationType with
+                    | Some(coreOperationType) -> 
+                      match coreOperationType with
+                      | PropsOperation -> 
+                        let propsOperationState: Operations.PropsOperationState<obj> = {Props = props; PrevProps = None}
+                        nextOpData.PreProcess(Some(propsOperationState :> obj)) |> ignore
+                        Some(propsOperationState :> obj)
+                      | StateGet ->
+                        
+                      | _ ->
+                        nextOpData.PreProcess(None)
+                    | None -> 
+                        nextOpData.PreProcess(None)
                 nextOperations <- 
                   Array.append 
                     nextOperations 

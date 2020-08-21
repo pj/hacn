@@ -10,7 +10,7 @@ type PropsOperationState<'props> =
 
 let Props<'props when 'props: equality>() =
   Perform({ 
-    IsPropsOperation = true;
+    OperationType = Some(PropsOperation);
     PreProcess = fun (operationState) -> 
       match operationState with 
       | None -> failwith "Should never happen"
@@ -42,7 +42,7 @@ let Props<'props when 'props: equality>() =
 
 let Render(element) =
   Perform({ 
-    IsPropsOperation = false;
+    OperationType = None;
     PreProcess = fun _ -> None;
     Invoke = fun _ -> 
       (
@@ -56,6 +56,43 @@ let Render(element) =
       );
   })
 
+type StateContainer<'state> = 
+  {
+    Updated: bool;
+    ComponentState: 'state option;
+  }
+
+let Get<'state>() =
+  Perform({ 
+    OperationType = Some(StateGet);
+    PreProcess = fun _ -> None;
+    Invoke = fun _ -> 
+      (
+        {
+          NextOperation = None; 
+          Element = None;
+          UpdatedOperationState = None;
+          Effect = None;
+        }, 
+        ()
+      );
+  })
+
+let Set<'state>(newState) =
+  Perform({
+    OperationType = Some(StateSet);
+    PreProcess = fun _ -> None;
+    Invoke = fun _ -> 
+      (
+        {
+          NextOperation = None; 
+          Element = None;
+          UpdatedOperationState = None;
+          Effect = None;
+        }, 
+        newState
+      );
+  })
 // let ContextNonPartial (useContext: IContext<'returnType> -> 'returnType) (context: IContext<'returnType>) =
 //   // TODO: figure out how to remove nasty mutable state.
 //   let mutable mutableReturnType = None

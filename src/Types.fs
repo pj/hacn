@@ -3,6 +3,11 @@ module Hacn.Types
 
 open Fable.React
 
+type CoreOperationTypes =
+  | PropsOperation
+  | StateGet
+  | StateSet
+
 type InvokeResult<'props> =
   {
     // The next operation to perform after this, can be Suspend, if the 
@@ -29,7 +34,7 @@ and OperationData<'props, 'returnType> =
     // NeedsPreprocess: bool;
     // Hack needed to determine if the operation is props and therefore needs
     // special handling by the runtime.
-    IsPropsOperation: bool;
+    OperationType: CoreOperationTypes option;
     // For hooks like useContext and useRef, we have to run them at the 
     // beginning in order on every render.
     PreProcess: obj option -> obj option;
