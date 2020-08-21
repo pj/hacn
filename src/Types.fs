@@ -3,9 +3,6 @@ module Hacn.Types
 
 open Fable.React
 
-type OperationState = 
-  new() = {}
-
 type InvokeResult<'props> =
   {
     // The next operation to perform after this, can be Suspend, if the 
@@ -15,10 +12,10 @@ type InvokeResult<'props> =
     Element: ReactElement option;
     // Any modifications to the operation state made as a result of invoking the 
     // operation.
-    UpdatedOperationState: OperationState option;
+    UpdatedOperationState: obj option;
     // A function to run to perform some type of effect using the useEffect hook,
     // after the component has rendered.
-    Effect: ((unit -> OperationState option) -> (OperationState option -> unit) -> unit) option
+    Effect: ((unit -> obj option) -> (obj option -> unit) -> unit) option
   }
 and Operation<'props, 'returnType> =
   // Righthand side of the bind, contains the logic for the operation
@@ -35,9 +32,9 @@ and OperationData<'props, 'returnType> =
     IsPropsOperation: bool;
     // For hooks like useContext and useRef, we have to run them at the 
     // beginning in order on every render.
-    PreProcess: OperationState option -> OperationState option;
+    PreProcess: obj option -> obj option;
     // Invoke this operation with the current operation state, and return the 
     // result of the operation to be passed to the next operations and various 
     // things to return to the runtime.
-    Invoke: OperationState option -> (InvokeResult<'props> * 'returnType);
+    Invoke: obj option -> (InvokeResult<'props> * 'returnType);
   }

@@ -1,10 +1,12 @@
 module Hacn.Operations
 open Fable.React
+open FSharp.Interop.Dynamic
 
-type PropsOperationState<'props>(props: 'props, prevProps: 'props option) =
-  inherit OperationState()
-  member _.Props = props
-  member _.PrevProps = prevProps
+type PropsOperationState<'props> =
+  {
+    Props: 'props;
+    PrevProps: 'props option;
+  }
 
 let Props<'props when 'props: equality>() =
   Perform({ 
@@ -12,30 +14,30 @@ let Props<'props when 'props: equality>() =
     PreProcess = fun (operationState) -> 
       match operationState with 
       | None -> failwith "Should never happen"
-      | Some(opState) ->
-        match opState with
-        | :? PropsOperationState<_> as pos -> 
-          match pos.Props, pos.PrevProps with
-          | (_, None) -> operationState 
-          | (props, Some(prevProps)) when props <> prevProps -> operationState
-          | _ -> None
-        | _ -> failwith "should not happen";
+      | Some(propsOpState) ->
+        let props: 'props = propsOpState?Props
+        let prevPropsOption: 'props option = propsOpState?PrevProps
+        match prevPropsOption with
+        | None -> operationState
+        | Some(prevProps) -> 
+          if props <> prevProps then
+            operationState
+          else
+            None
     Invoke = fun operationState -> 
       match operationState with
       | None -> failwith "Should not happen"
       | Some(propsOpState) ->
-        match propsOpState with
-        | :? PropsOperationState<_> as pos ->
-          (
-            {
-              NextOperation = None; 
-              Element = None;
-              UpdatedOperationState = None;
-              Effect = None;
-            }, 
-            pos.Props
-          );
-        | _ -> failwith "Runtime passed incorrect operation state subclass into props operation invoke"
+        let props: 'props = propsOpState?Props
+        (
+          {
+            NextOperation = None; 
+            Element = None;
+            UpdatedOperationState = None;
+            Effect = None;
+          }, 
+          props
+        );
   })
 
 let Render(element) =

@@ -4,7 +4,7 @@ open Fable.React
 type OpTreeNode<'props> =
   {
     // State storage for the operation.
-    State: OperationState option;
+    State: obj option;
     // Operation at this index.
     Operation: Operation<'props, unit>;
     // Index of the operation.
@@ -79,16 +79,15 @@ let preprocessOperations state props =
       | OpState({State = opState; Operation = op; Index = index}) ->
         match op with 
           | Perform({PreProcess = preProcess; IsPropsOperation = isProps}) -> 
-            let processOpState = 
+            let processOpState: obj option = 
               if isProps then
                 match opState with
                 | None -> 
-                  let propsState = Operations.PropsOperationState(props, None) :> OperationState
-                  Some(propsState)
+                  let propsState: Operations.PropsOperationState<obj> = {Props = props; PrevProps = None}
+                  Some(propsState :> obj)
                 | Some(existingPropsState) -> 
-                  let castPropsState = existingPropsState :?> Operations.PropsOperationState<'props>
-                  let propsState = Operations.PropsOperationState(props, Some(castPropsState.Props)) :> OperationState
-                  Some(propsState)
+                  let propsState: Operations.PropsOperationState<obj> = {Props = props; PrevProps = Some(existingPropsState)}
+                  Some(propsState :> obj)
               else
                 opState
 
@@ -125,11 +124,13 @@ let execute state props =
               state.Operations
               currentIndex
               (OpState({opState with State = Some(nextOpState)}))
+          | _ -> ()
           
           // set rendered element
           match invokeResult.Element with
           | Some(element) -> 
             renderedElement <- Some(element)
+          | _ -> ()
           
           // handle effects
           match invokeResult.Effect with
@@ -138,6 +139,7 @@ let execute state props =
               Array.append
                 nextEffects
                 [|(effect, currentOperation)|]
+          | _ -> ()
 
           // handle next operation
           match invokeResult.NextOperation with 
@@ -155,9 +157,9 @@ let execute state props =
               else
                 let preProcessState = 
                   if nextOpData.IsPropsOperation then
-                    let propsOperationState = Operations.PropsOperationState(props, None) :> OperationState
-                    nextOpData.PreProcess(Some(propsOperationState)) |> ignore
-                    Some(propsOperationState)
+                    let propsOperationState: Operations.PropsOperationState<obj> = {Props = props; PrevProps = None}
+                    nextOpData.PreProcess(Some(propsOperationState :> obj)) |> ignore
+                    Some(propsOperationState :> obj)
                   else
                     nextOpData.PreProcess(None)
                 nextOperations <- 

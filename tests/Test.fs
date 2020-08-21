@@ -35,7 +35,7 @@ let allTests =
 
       let htmlNode = castHTMLNode createdElement
       match htmlNode with
-      | HTMLNode.Node (tag, attrs, children) ->
+      | Node (tag, _, _) ->
         Expect.equal tag "div" "Success"
       | _ -> failwith "Not html node"
   ]
