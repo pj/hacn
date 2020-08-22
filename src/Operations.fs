@@ -1,6 +1,7 @@
 module Hacn.Operations
 open Fable.React
 open FSharp.Interop.Dynamic
+open FSharp.Interop.Dynamic.Dyn
 
 type PropsOperationState<'props> =
   {
@@ -10,7 +11,7 @@ type PropsOperationState<'props> =
 
 let Props<'props when 'props: equality>() =
   Perform({ 
-    OperationType = Some(PropsOperation);
+    OperationType = PropsOperation;
     PreProcess = fun (operationState) -> 
       match operationState with 
       | None -> failwith "Should never happen"
@@ -29,31 +30,15 @@ let Props<'props when 'props: equality>() =
       | None -> failwith "Should not happen"
       | Some(propsOpState) ->
         let props: 'props = propsOpState?Props
-        (
-          {
-            NextOperation = None; 
-            Element = None;
-            UpdatedOperationState = None;
-            Effect = None;
-          }, 
-          props
-        );
+        Result(props)
   })
 
 let Render(element) =
   Perform({ 
-    OperationType = None;
+    OperationType = NotCore;
     PreProcess = fun _ -> None;
     Invoke = fun _ -> 
-      (
-        {
-          NextOperation = None; 
-          Element = Some(element);
-          UpdatedOperationState = None;
-          Effect = None;
-        }, 
-        ()
-      );
+      Render(element)
   })
 
 type StateContainer<'state> = 
@@ -62,36 +47,48 @@ type StateContainer<'state> =
     ComponentState: 'state option;
   }
 
-let Get<'state>() =
+let Get<'state>(initialState: 'state option) =
   Perform({ 
-    OperationType = Some(StateGet);
-    PreProcess = fun _ -> None;
-    Invoke = fun _ -> 
-      (
-        {
-          NextOperation = None; 
-          Element = None;
-          UpdatedOperationState = None;
-          Effect = None;
-        }, 
-        ()
-      );
+    OperationType = StateGet;
+    PreProcess = fun operationState -> 
+      let castOperationState: StateContainer<'state> option = explicitConvert operationState
+      match castOperationState with 
+      | None -> 
+        Some(
+          {
+            Updated = false; 
+            ComponentState = initialState;
+          } :> obj
+        )
+      | Some(currentState) -> 
+        if currentState.Updated then
+          Some({currentState with Updated = false} :> obj)
+        else 
+          None
+    Invoke = fun operationState -> 
+      let stateCast: 'state option = operationState?State
+      match stateCast with
+      | Some(state) -> 
+        Result(state)
+      | None -> failwith "Please set state before calling Get()"
   })
 
-let Set<'state>(newState) =
+let Set<'state>(newState: 'state) =
   Perform({
-    OperationType = Some(StateSet);
+    OperationType = StateSet;
     PreProcess = fun _ -> None;
     Invoke = fun _ -> 
-      (
-        {
-          NextOperation = None; 
-          Element = None;
-          UpdatedOperationState = None;
-          Effect = None;
-        }, 
-        newState
-      );
+      Effect(
+        fun _ render -> 
+          render(
+            Some(
+              {
+                Updated = true;
+                ComponentState = Some(newState)
+              } :> obj
+            )
+          )
+      )
   })
 // let ContextNonPartial (useContext: IContext<'returnType> -> 'returnType) (context: IContext<'returnType>) =
 //   // TODO: figure out how to remove nasty mutable state.

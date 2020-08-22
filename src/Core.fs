@@ -44,20 +44,13 @@ let bind underlyingOperation f =
         fun (operationState) ->
           match underlyingOperation with
           | Perform(operationData) -> 
-            let (operationResult, returnType) = operationData.Invoke(operationState)
+            let operationResult = operationData.Invoke(operationState)
 
-            match operationResult.NextOperation with
-            | Some(underly) ->
-            | None ->  
-              let nextOperation = f(returnType)
-              (
-                {
-                  operationResult with
-                    NextOperation = Some(nextOperation)
-                }, 
-                ()
-              )
-          | Suspend -> failwith "Suspend passed as operation"
+            match operationResult with
+            | Result(result) -> 
+              let nextOperation = f(result)
+              NextOperation(nextOperation)
+            | _ -> operationResult
           | End -> failwith "End passed as operation"
     }
   )
@@ -76,21 +69,19 @@ let getFirstOperation delayedFunc componentState =
   else
     componentState
 
-let getOperationState operationType opState props =
+let getOperationState refState operationType opState props =
   match operationType with
-  | Some(coreOperationType) -> 
-    match coreOperationType with
-    | PropsOperation -> 
-      match opState with
-      | None -> 
-        let propsState: Operations.PropsOperationState<obj> = {Props = props; PrevProps = None}
-        Some(propsState :> obj)
-      | Some(existingPropsState) -> 
-        let propsState: Operations.PropsOperationState<obj> = {Props = props; PrevProps = Some(existingPropsState)}
-        Some(propsState :> obj)
-    | _ -> None
-  | None -> 
-    opState
+  | PropsOperation -> 
+    match opState with
+    | None -> 
+      let propsState: Operations.PropsOperationState<obj> = {Props = props; PrevProps = None}
+      Some(propsState :> obj)
+    | Some(existingPropsState) -> 
+      let propsState: Operations.PropsOperationState<obj> = {Props = props; PrevProps = Some(existingPropsState)}
+      Some(propsState :> obj)
+  | StateGet -> 
+    Some(refState.ComponentState :> obj)
+  | _ -> opState
 
 // Preprocess operations e.g. props, context, refs
 let preprocessOperations refState props =
@@ -101,7 +92,7 @@ let preprocessOperations refState props =
       | OpState({State = opState; Operation = op; Index = index}) ->
         match op with 
           | Perform({PreProcess = preProcess; OperationType = operationType}) -> 
-            let processOpState: obj option = getOperationState operationType opState props
+            let processOpState: obj option = getOperationState refState operationType opState props
 
             let result = preProcess processOpState
             match result with
@@ -113,6 +104,8 @@ let preprocessOperations refState props =
                 if index < nextIndex then
                   nextState <- {refState with OperationIndex = index}
                   nextIndex <- index
+              | None -> ()
+          | End -> ()
 
   nextState
 
@@ -121,43 +114,29 @@ let execute refState props =
   let mutable stop = false
   let mutable renderedElement = None
   let mutable nextOperations = refState.Operations
-  let mutable nextEffects = [||]
+  let mutable nextEffect = None
+  // let mutable nextComponentState = None
   while not stop do
     let currentOperation = nextOperations.[currentIndex]
     match currentOperation with
       | OpState(opState) ->
         match opState.Operation with
         | Perform(opData) ->
-          let invokeResult, _ = opData.Invoke opState.State 
-          // Update op state
-          match invokeResult.UpdatedOperationState with 
-          | Some(nextOpState) ->
-            Array.set
-              refState.Operations
-              currentIndex
-              (OpState({opState with State = Some(nextOpState)}))
-          | _ -> ()
-          
-          // set rendered element
-          match invokeResult.Element with
-          | Some(element) -> 
+          let invokeResult = opData.Invoke opState.State 
+          match invokeResult with
+          | Render(element) -> 
             renderedElement <- Some(element)
-          | _ -> ()
-          
-          // handle effects
-          match invokeResult.Effect with
-          | Some(effect) ->
-            nextEffects <- 
-              Array.append
-                nextEffects
-                [|(effect, currentOperation)|]
-          | _ -> ()
-
-          // handle next operation
-          match invokeResult.NextOperation with 
-          | Some(nextOp) -> 
-            match nextOp with
-            | Suspend -> stop <- true
+            stop <- true
+          // | UpdateState(componentState) ->
+          //   nextComponentState <- Some(componentState)
+          //   stop <- true
+          | Effect(effect) ->
+            nextEffect <- Some((effect, currentOperation))
+            stop <- true
+          | Result(_) -> failwith "Can't return result to runtime"
+          | NextOperation(nextOperation) ->
+            // handle next operation
+            match nextOperation with
             | End -> stop <- true
             | Perform(nextOpData) ->
               // If the op already exists update the stored op
@@ -169,18 +148,14 @@ let execute refState props =
               else
                 let preProcessState = 
                   match nextOpData.OperationType with
-                    | Some(coreOperationType) -> 
-                      match coreOperationType with
-                      | PropsOperation -> 
-                        let propsOperationState: Operations.PropsOperationState<obj> = {Props = props; PrevProps = None}
-                        nextOpData.PreProcess(Some(propsOperationState :> obj)) |> ignore
-                        Some(propsOperationState :> obj)
-                      | StateGet ->
-                        
-                      | _ ->
-                        nextOpData.PreProcess(None)
-                    | None -> 
-                        nextOpData.PreProcess(None)
+                  | PropsOperation -> 
+                    let propsOperationState: Operations.PropsOperationState<obj> = {Props = props; PrevProps = None}
+                    nextOpData.PreProcess(Some(propsOperationState :> obj)) |> ignore
+                    Some(propsOperationState :> obj)
+                  | StateGet -> 
+                    Some(refState.ComponentState :> obj)
+                  | _ ->
+                    nextOpData.PreProcess(None)
                 nextOperations <- 
                   Array.append 
                     nextOperations 
@@ -190,19 +165,19 @@ let execute refState props =
                       Index = currentIndex + 1
                     })|]
               currentIndex <- currentIndex + 1
-          | None -> failwith "Control operations should always return a next operation"
-        | _ -> failwith "Should not happen"
+        | _ -> failwith "Unknown "
   
   (
     {
       OperationIndex = currentIndex; 
       Operations = nextOperations; 
       Element = renderedElement;
+      ComponentState = refState.ComponentState;
     },
-    nextEffects
+    nextEffect
   )
 
-let runEffects (componentStateRef: IRefValue<RefState<'props>>) useState useEffect effects =
+let runEffects (componentStateRef: IRefValue<RefState<'props, 'state>>) useState useEffect effect =
   let state: IStateHook<string> = useState("asdf")
   let rerender opTreeIndex nextOpState =
     let currentOperation = componentStateRef.current.Operations.[opTreeIndex]
@@ -228,21 +203,25 @@ let runEffects (componentStateRef: IRefValue<RefState<'props>>) useState useEffe
     | OpState(node) -> 
       node.State
 
-  let handleEffects = 
+  let handleEffect = 
     fun () ->
-      for (effect, opTree) in effects do
-        match opTree with
-        | OpState(node) ->
-          effect (getOperationState node.Index) (rerender node.Index)
+      let (effect, opTree) = effect
+      match opTree with
+      | OpState(node) ->
+        effect (getOperationState node.Index) (rerender node.Index)
       ()
 
-  useEffect handleEffects
+  useEffect handleEffect
 
 let render useRef useState useEffect delayedFunc props = 
-  let componentStateRef: IRefValue<RefState<'props>> = useRef({
+  let componentStateRef: IRefValue<RefState<'props, 'state>> = useRef({
     Element = None;
     Operations = [||];
     OperationIndex = -1;
+    ComponentState = {
+      Updated = false;
+      ComponentState = None;
+    };
   })
 
   // Run first operation if none already exist.
@@ -252,12 +231,14 @@ let render useRef useState useEffect delayedFunc props =
   componentStateRef.current <- preprocessOperations componentStateRef.current props
 
   // execute until we hit suspend/end.
-  let nextState, effects = execute componentStateRef.current props
+  let nextState, effect = execute componentStateRef.current props
 
   componentStateRef.current <- nextState
 
   // run any effects.
-  runEffects componentStateRef useState useEffect effects
+  match effect with
+  | Some(effect) -> runEffects componentStateRef useState useEffect effect
+  | None -> ()
 
   // Render current element
   match componentStateRef.current.Element with
@@ -265,10 +246,10 @@ let render useRef useState useEffect delayedFunc props =
     | None -> null
 
 type HacnBuilder(render) = 
-  member this.Bind(operation, f) = bind operation f
-  member this.Zero() = zero()
-  member this.Delay(f) = f
-  member this.Run(delayedFunc) =
+  member _.Bind(operation, f) = bind operation f
+  member _.Zero() = zero()
+  member _.Delay(f) = f
+  member _.Run(delayedFunc) =
     fun props children -> 
       ofFunction 
         (render delayedFunc)
