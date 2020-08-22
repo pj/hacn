@@ -45,14 +45,18 @@ let bind underlyingOperation f =
           match underlyingOperation with
           | Perform(operationData) -> 
             let (operationResult, returnType) = operationData.Invoke(operationState)
-            let nextOperation = f(returnType)
-            (
-              {
-                operationResult with
-                  NextOperation = Some(nextOperation)
-              }, 
-              ()
-            )
+
+            match operationResult.NextOperation with
+            | Some(underly) ->
+            | None ->  
+              let nextOperation = f(returnType)
+              (
+                {
+                  operationResult with
+                    NextOperation = Some(nextOperation)
+                }, 
+                ()
+              )
           | Suspend -> failwith "Suspend passed as operation"
           | End -> failwith "End passed as operation"
     }
