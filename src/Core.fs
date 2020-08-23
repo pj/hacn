@@ -47,10 +47,10 @@ let bind underlyingOperation f =
             let operationResult = operationData.Run(operationState)
 
             match operationResult with
-            | InvokeResult(result) -> 
+            | InvokeReturn(result) -> 
               let nextOperation = f(result)
               ControlNextOperation(nextOperation)
-            | InvokeRender(element) -> ControlRender(element)
+            | InvokeRender(element, effects) -> ControlRender(element, effects)
             | InvokeEffect(effect) -> ControlEffect(effect)
           | Control(_) -> failwith "Control passed as operation"
           | End -> failwith "End passed as operation"

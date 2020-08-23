@@ -30,7 +30,7 @@ let Props<'props when 'props: equality>() =
       | None -> failwith "Should not happen"
       | Some(propsOpState) ->
         let props: 'props = propsOpState?Props
-        InvokeResult(props)
+        InvokeReturn(props)
   })
 
 let Render(element) =
@@ -38,7 +38,7 @@ let Render(element) =
     OperationType = NotCore;
     PreProcess = fun _ -> None;
     Run = fun _ -> 
-      InvokeRender(element)
+      InvokeRender(element, [])
   })
 
 type StateContainer<'state> = 
@@ -68,8 +68,7 @@ let Get<'state>(initialState: 'state option) =
     Run = fun operationState -> 
       let stateCast: 'state option = operationState?State
       match stateCast with
-      | Some(state) -> 
-        InvokeResult(state)
+      | Some(state) -> InvokeReturn(state)
       | None -> failwith "Please set state before calling Get()"
   })
 
@@ -79,41 +78,73 @@ let Set<'state>(newState: 'state) =
     PreProcess = fun _ -> None;
     Run = fun _ -> 
       InvokeEffect(
-        fun _ render -> 
-          render(
-            Some(
-              {
-                Updated = true;
-                ComponentState = Some(newState)
-              } :> obj
+        [
+          fun control -> 
+            control.Rerender(
+              Some(
+                {
+                  Updated = true;
+                  ComponentState = Some(newState)
+                } :> obj
+              )
             )
-          )
+        ]
       )
   })
-// let ContextNonPartial (useContext: IContext<'returnType> -> 'returnType) (context: IContext<'returnType>) =
-//   // TODO: figure out how to remove nasty mutable state.
-//   let mutable mutableReturnType = None
-//   { 
 
-//     NeedsPreprocess = fun () -> true;
-//     PreProcess = fun operationState -> 
-//       let nextReturnType = useContext(context)
-//       if nextReturnType <> mutableReturnType then
-//         Some()
-//       returnType <- Some(useContext(context));
-//     Invoke = fun refState -> 
-//       let returnVar = 
-//         match returnType with
-//         | Some(v) -> v
-//         | None -> failwith "PreProcess not called before invoking"
-//       (
-//         {
-//           NextOperation = None; 
-//           Element = None;
-//           UpdatedOperationState = None;
-//         }, 
-//         returnVar
-//       );
-//   }
+let ContextCore<'returnType when 'returnType : equality> (useContext: IContext<'returnType> -> 'returnType) (context: IContext<'returnType>) =
+  Perform({ 
+    OperationType = NotCore;
+    PreProcess = fun operationState -> 
+      let currentContext = useContext(context)
+      let castOperationState: 'returnType option = explicitConvert operationState
+      match castOperationState with
+      | Some(existingContext) -> 
+        if existingContext <> currentContext then
+          Some(currentContext :> obj)
+        else 
+          None
+      | None -> Some(currentContext :> obj)
+    Run = fun operationState -> 
+      let castOperationState: 'returnType option = explicitConvert operationState
+      match castOperationState with
+      | Some(existingContext) -> InvokeReturn(existingContext)
+      | None -> failwith "should not happen"
+  })
 
-// let Context context = ContextNonPartial Hooks.useContext context
+let Context context = ContextCore Hooks.useContext context
+
+let Continue operation = 
+  Perform({ 
+    OperationType = NotCore;
+    PreProcess = fun _ -> None
+    Run = fun _ -> 
+      InvokeReturn(operation)
+  })
+
+let Wait operations = 
+  Perform({ 
+    OperationType = NotCore;
+    PreProcess = fun _ -> None
+    Run = fun _ -> 
+      InvokeReturn(operations)
+  })
+
+let WaitAny = End
+// Return a series of suspended effect results as a stream
+let Next = End
+// Return a series of suspended effect results as a stream (in any order)
+let NextAny = End
+let Timeout = End
+let Interval = End
+let Fetch = End
+let Ref = End
+
+// Call a function passed in through props in an effect.
+let Call = End
+
+// Merging results
+
+// Error handling
+
+// Handling events
