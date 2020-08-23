@@ -21,10 +21,40 @@ let useFakeContext (context) =
 let useFakeState _ =
   ()
 
+type FakeHooks = 
+  static member useRef initialValue =
+    let mutable refValue = initialValue
+    { new IRefValue<_> with
+        member this.current with get() = refValue and set value = refValue <- value }
+  static member useState() = ()
+  static member useEffect() = ()
+let FakeHooks: IHooks =
+  let mutable refValue = null
+  // Placeholder for SSR
+  { new IHooks with
+    member __.useState(initialState: 'T) =
+      { new IStateHook<'T> with
+        member __.current = value
+        member __.update(x: 'T) = ()
+        member __.update(f: 'T->'T) = () }
+    member __.useEffect(effect, dependencies) = ()
+    member __.useRef(initialValue) =
+      { new IRefValue<_> with
+        member this.current with get() = refValue and set value = refValue <- value }
+    member __.useContext ctx = failwith "Unimplemented"
+    member __.useDebugValue(label): unit = failwith "Unimplemented"
+    member __.useDebugValue(value, format): unit = failwith "Unimplemented"
+    member __.useReducer(reducer,initialState) = failwith "Unimplemented"
+    member __.useReducer(reducer, initialArgument, init) = failwith "Unimplemented"
+    member __.useEffectDisposable(effect, dependencies) = failwith "Unimplemented"
+    member __.useMemo(callback, dependencies) = failwith "Unimplemented"
+    member __.useStateLazy(initialState) = failwith "Unimplemented"
+  }
+
 let allTests =
   testList "Arithmetic tests" [
     testCase "plus works" <| fun () ->
-      let hacnTest = HacnBuilder((render useFakeRef Hooks.useState Hooks.useEffect))
+      let hacnTest = HacnBuilder((render FakeHooks))
 
       let element = hacnTest {
         let! x = Props()

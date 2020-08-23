@@ -29,7 +29,7 @@ type RefState<'props, 'state> =
   }
 
 let bind underlyingOperation f = 
-  Perform(
+  Control(
     {
       OperationType = 
         match underlyingOperation with
@@ -44,13 +44,15 @@ let bind underlyingOperation f =
         fun (operationState) ->
           match underlyingOperation with
           | Perform(operationData) -> 
-            let operationResult = operationData.Invoke(operationState)
+            let operationResult, actualResult = operationData.Run(operationState)
 
             match operationResult with
-            | Result(result) -> 
-              let nextOperation = f(result)
-              NextOperation(nextOperation)
-            | _ -> operationResult
+            | InvokeResult -> 
+              let nextOperation = f(actualResult)
+              ControlNextOperation(nextOperation)
+            | InvokeRender(element) -> ControlRender(element)
+            | InvokeEffect(effect) -> ControlEffect(effect)
+          | Control(_) -> failwith "Control passed as operation"
           | End -> failwith "End passed as operation"
     }
   )
@@ -91,7 +93,7 @@ let preprocessOperations refState props =
     match item with
       | OpState({State = opState; Operation = op; Index = index}) ->
         match op with 
-          | Perform({PreProcess = preProcess; OperationType = operationType}) -> 
+          | Control({PreProcess = preProcess; OperationType = operationType}) -> 
             let processOpState: obj option = getOperationState refState operationType opState props
 
             let result = preProcess processOpState
@@ -105,6 +107,7 @@ let preprocessOperations refState props =
                   nextState <- {refState with OperationIndex = index}
                   nextIndex <- index
               | None -> ()
+          | Perform(_) -> failwith "Should not happen"
           | End -> ()
 
   nextState
@@ -121,20 +124,19 @@ let execute refState props =
     match currentOperation with
       | OpState(opState) ->
         match opState.Operation with
-        | Perform(opData) ->
+        | Control(opData) ->
           let invokeResult = opData.Invoke opState.State 
           match invokeResult with
-          | Render(element) -> 
+          | ControlRender(element) -> 
             renderedElement <- Some(element)
             stop <- true
           // | UpdateState(componentState) ->
           //   nextComponentState <- Some(componentState)
           //   stop <- true
-          | Effect(effect) ->
+          | ControlEffect(effect) ->
             nextEffect <- Some((effect, currentOperation))
             stop <- true
-          | Result(_) -> failwith "Can't return result to runtime"
-          | NextOperation(nextOperation) ->
+          | ControlNextOperation(nextOperation) ->
             // handle next operation
             match nextOperation with
             | End -> stop <- true
@@ -177,8 +179,8 @@ let execute refState props =
     nextEffect
   )
 
-let runEffects (componentStateRef: IRefValue<RefState<'props, 'state>>) useState useEffect effect =
-  let state: IStateHook<string> = useState("asdf")
+let runEffects (componentStateRef: IRefValue<RefState<'props, 'state>>) (hooks: IHooks) effect =
+  let state: IStateHook<string> = hooks.useState("asdf")
   let rerender opTreeIndex nextOpState =
     let currentOperation = componentStateRef.current.Operations.[opTreeIndex]
     match currentOperation with
@@ -211,10 +213,12 @@ let runEffects (componentStateRef: IRefValue<RefState<'props, 'state>>) useState
         effect (getOperationState node.Index) (rerender node.Index)
       ()
 
-  useEffect handleEffect
+  hooks.useEffect handleEffect
 
-let render useRef useState useEffect delayedFunc props = 
-  let componentStateRef: IRefValue<RefState<'props, 'state>> = useRef({
+type UseEffect = ((unit -> unit)  -> (obj array) option) -> unit
+
+let render (hooks: IHooks) delayedFunc props = 
+  let componentStateRef: IRefValue<RefState<'props, 'state>> = hooks.useRef({
     Element = None;
     Operations = [||];
     OperationIndex = -1;
@@ -237,7 +241,7 @@ let render useRef useState useEffect delayedFunc props =
 
   // run any effects.
   match effect with
-  | Some(effect) -> runEffects componentStateRef useState useEffect effect
+  | Some(effect) -> runEffects componentStateRef hooks effect
   | None -> ()
 
   // Render current element
@@ -253,7 +257,7 @@ type HacnBuilder(render) =
     fun props children -> 
       ofFunction 
         (render delayedFunc)
-        props 
+        props
         children
 
-let hacn _ = HacnBuilder((render Hooks.useRef Hooks.useState Hooks.useEffect))
+let hacn _ = HacnBuilder((render Hooks))

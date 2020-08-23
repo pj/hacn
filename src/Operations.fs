@@ -25,20 +25,20 @@ let Props<'props when 'props: equality>() =
             operationState
           else
             None
-    Invoke = fun operationState -> 
+    Run = fun operationState -> 
       match operationState with
       | None -> failwith "Should not happen"
       | Some(propsOpState) ->
         let props: 'props = propsOpState?Props
-        Result(props)
+        (InvokeResult, props)
   })
 
 let Render(element) =
   Perform({ 
     OperationType = NotCore;
     PreProcess = fun _ -> None;
-    Invoke = fun _ -> 
-      Render(element)
+    Run = fun _ -> 
+      InvokeRender(element), ()
   })
 
 type StateContainer<'state> = 
@@ -65,11 +65,11 @@ let Get<'state>(initialState: 'state option) =
           Some({currentState with Updated = false} :> obj)
         else 
           None
-    Invoke = fun operationState -> 
+    Run = fun operationState -> 
       let stateCast: 'state option = operationState?State
       match stateCast with
       | Some(state) -> 
-        Result(state)
+        (InvokeResult, state)
       | None -> failwith "Please set state before calling Get()"
   })
 
@@ -77,8 +77,8 @@ let Set<'state>(newState: 'state) =
   Perform({
     OperationType = StateSet;
     PreProcess = fun _ -> None;
-    Invoke = fun _ -> 
-      Effect(
+    Run = fun _ -> 
+      InvokeEffect(
         fun _ render -> 
           render(
             Some(
@@ -88,7 +88,7 @@ let Set<'state>(newState: 'state) =
               } :> obj
             )
           )
-      )
+      ), ()
   })
 // let ContextNonPartial (useContext: IContext<'returnType> -> 'returnType) (context: IContext<'returnType>) =
 //   // TODO: figure out how to remove nasty mutable state.
