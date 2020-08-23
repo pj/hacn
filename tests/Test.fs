@@ -29,18 +29,23 @@ type FakeHooks =
   static member useState() = ()
   static member useEffect() = ()
 let FakeHooks: IHooks =
-  let mutable refValue = null
-  // Placeholder for SSR
   { new IHooks with
     member __.useState(initialState: 'T) =
       { new IStateHook<'T> with
-        member __.current = value
+        member __.current = initialState
         member __.update(x: 'T) = ()
         member __.update(f: 'T->'T) = () }
     member __.useEffect(effect, dependencies) = ()
     member __.useRef(initialValue) =
+      // let unboxedValue = 
+      //   match refValue with 
+      //   | Some(value) -> value
+      //   | None -> 
+      //     refValue <- Some(initialValue)
+      //     initialValue
+      let mutable refValue = None
       { new IRefValue<_> with
-        member this.current with get() = refValue and set value = refValue <- value }
+        member this.current with get() = initialValue and set value = refValue <- Some(value) }
     member __.useContext ctx = failwith "Unimplemented"
     member __.useDebugValue(label): unit = failwith "Unimplemented"
     member __.useDebugValue(value, format): unit = failwith "Unimplemented"

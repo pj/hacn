@@ -9,7 +9,7 @@ type CoreOperationTypes =
   | StateSet
   | NotCore
 
-type InvokeResult<'props> =
+type InvokeResult<'props, 'returnType> =
   // An element to render.
   | InvokeRender of ReactElement
   // Any modifications to the operation state made as a result of invoking the 
@@ -18,7 +18,7 @@ type InvokeResult<'props> =
   // A function to run to perform some type of effect using the useEffect hook,
   // after the component has rendered.
   | InvokeEffect of ((unit -> obj option) -> (obj option -> unit) -> unit)
-  | InvokeResult
+  | InvokeResult of 'returnType
 and PerformData<'props, 'returnType> =
   { 
     // Hack needed to determine if the operation is props and therefore needs
@@ -30,7 +30,7 @@ and PerformData<'props, 'returnType> =
     // Invoke this operation with the current operation state, and return the 
     // result of the operation to be passed to the next operations and various 
     // things to return to the runtime.
-    Run: obj option -> InvokeResult<'props> * 'returnType;
+    Run: obj option -> InvokeResult<'props, 'returnType>;
   }
 
 and ControlResult<'props> =

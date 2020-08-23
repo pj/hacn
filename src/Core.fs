@@ -44,11 +44,11 @@ let bind underlyingOperation f =
         fun (operationState) ->
           match underlyingOperation with
           | Perform(operationData) -> 
-            let operationResult, actualResult = operationData.Run(operationState)
+            let operationResult = operationData.Run(operationState)
 
             match operationResult with
-            | InvokeResult -> 
-              let nextOperation = f(actualResult)
+            | InvokeResult(result) -> 
+              let nextOperation = f(result)
               ControlNextOperation(nextOperation)
             | InvokeRender(element) -> ControlRender(element)
             | InvokeEffect(effect) -> ControlEffect(effect)
@@ -140,13 +140,13 @@ let execute refState props =
             // handle next operation
             match nextOperation with
             | End -> stop <- true
-            | Perform(nextOpData) ->
+            | Control(nextOpData) ->
               // If the op already exists update the stored op
               if (currentIndex + 1) < refState.Operations.Length then
                 Array.set
                   nextOperations
                   (currentIndex + 1)
-                  (OpState({opState with Operation = Perform(nextOpData)})) 
+                  (OpState({opState with Operation = Control(nextOpData)})) 
               else
                 let preProcessState = 
                   match nextOpData.OperationType with
@@ -163,7 +163,7 @@ let execute refState props =
                     nextOperations 
                     [|OpState({
                       State = preProcessState; 
-                      Operation = Perform(nextOpData); 
+                      Operation = Control(nextOpData); 
                       Index = currentIndex + 1
                     })|]
               currentIndex <- currentIndex + 1
