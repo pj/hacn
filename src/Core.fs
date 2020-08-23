@@ -140,6 +140,7 @@ let execute refState props =
             // handle next operation
             match nextOperation with
             | End -> stop <- true
+            | Perform(_) -> failwith "Perform should not be passed here"
             | Control(nextOpData) ->
               // If the op already exists update the stored op
               if (currentIndex + 1) < refState.Operations.Length then
@@ -179,8 +180,8 @@ let execute refState props =
     nextEffect
   )
 
-let runEffects (componentStateRef: IRefValue<RefState<'props, 'state>>) (hooks: IHooks) effect =
-  let state: IStateHook<string> = hooks.useState("asdf")
+let runEffects (componentStateRef: IRefValue<RefState<'props, 'state>>) useState useEffect effect =
+  let state: IStateHook<string> = useState("asdf")
   let rerender opTreeIndex nextOpState =
     let currentOperation = componentStateRef.current.Operations.[opTreeIndex]
     match currentOperation with
@@ -213,12 +214,12 @@ let runEffects (componentStateRef: IRefValue<RefState<'props, 'state>>) (hooks: 
         effect (getOperationState node.Index) (rerender node.Index)
       ()
 
-  hooks.useEffect handleEffect
+  useEffect handleEffect
 
 type UseEffect = ((unit -> unit)  -> (obj array) option) -> unit
 
-let render (hooks: IHooks) delayedFunc props = 
-  let componentStateRef: IRefValue<RefState<'props, 'state>> = hooks.useRef({
+let render useRef useState useEffect delayedFunc props = 
+  let componentStateRef: IRefValue<RefState<'props, 'state>> = useRef({
     Element = None;
     Operations = [||];
     OperationIndex = -1;
@@ -241,7 +242,7 @@ let render (hooks: IHooks) delayedFunc props =
 
   // run any effects.
   match effect with
-  | Some(effect) -> runEffects componentStateRef hooks effect
+  | Some(effect) -> runEffects componentStateRef useState useEffect effect
   | None -> ()
 
   // Render current element
@@ -260,4 +261,4 @@ type HacnBuilder(render) =
         props
         children
 
-let hacn _ = HacnBuilder((render Hooks))
+let hacn _ = HacnBuilder((render Hooks.useRef Hooks.useState Hooks.useEffect))

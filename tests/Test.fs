@@ -18,60 +18,64 @@ type ContextResponse = { Everyone: string}
 let useFakeContext (context) =
   { Everyone = "Everyone"}
 
-let useFakeState _ =
+let useFakeState initialState =
+  let mutable value = initialState
+  { new IStateHook<'T> with
+    member __.current = value
+    member __.update(x: 'T) = ()
+    member __.update(f: 'T->'T) = () }
+
+let useFakeEffect effectFunction =
   ()
 
-type FakeHooks = 
-  static member useRef initialValue =
-    let mutable refValue = initialValue
-    { new IRefValue<_> with
-        member this.current with get() = refValue and set value = refValue <- value }
-  static member useState() = ()
-  static member useEffect() = ()
-let FakeHooks: IHooks =
-  { new IHooks with
-    member __.useState(initialState: 'T) =
-      { new IStateHook<'T> with
-        member __.current = initialState
-        member __.update(x: 'T) = ()
-        member __.update(f: 'T->'T) = () }
-    member __.useEffect(effect, dependencies) = ()
-    member __.useRef(initialValue) =
-      // let unboxedValue = 
-      //   match refValue with 
-      //   | Some(value) -> value
-      //   | None -> 
-      //     refValue <- Some(initialValue)
-      //     initialValue
-      let mutable refValue = None
-      { new IRefValue<_> with
-        member this.current with get() = initialValue and set value = refValue <- Some(value) }
-    member __.useContext ctx = failwith "Unimplemented"
-    member __.useDebugValue(label): unit = failwith "Unimplemented"
-    member __.useDebugValue(value, format): unit = failwith "Unimplemented"
-    member __.useReducer(reducer,initialState) = failwith "Unimplemented"
-    member __.useReducer(reducer, initialArgument, init) = failwith "Unimplemented"
-    member __.useEffectDisposable(effect, dependencies) = failwith "Unimplemented"
-    member __.useMemo(callback, dependencies) = failwith "Unimplemented"
-    member __.useStateLazy(initialState) = failwith "Unimplemented"
-  }
-
+let hacnTest = HacnBuilder((render useFakeRef useFakeState useFakeEffect))
 let allTests =
   testList "Arithmetic tests" [
-    testCase "plus works" <| fun () ->
-      let hacnTest = HacnBuilder((render FakeHooks))
+    testCase "Props test" <| fun () ->
 
       let element = hacnTest {
         let! x = Props()
         do! Render(div [] [str x.Hello; str " World"])
       }
 
-      let createdElement = element {Hello = "Hello"} []
+      let helloElement = element {Hello = "Hello"} []
 
-      let htmlNode = castHTMLNode createdElement
-      match htmlNode with
-      | Node (tag, _, _) ->
-        Expect.equal tag "div" "Success"
+      let helloNode = castHTMLNode helloElement
+      match helloNode with
+      | Node (tag, _, children) ->
+        Expect.equal tag "div" "Correct tag"
+        Expect.hasLength children 2 "Correct length"
+        match List.ofSeq children with
+        | [helloElement; worldElement] -> 
+          let helloNode = castHTMLNode helloElement
+          let worldNode = castHTMLNode worldElement
+          match helloNode with
+          | Text helloStr -> Expect.equal helloStr "Hello" "Correct child 1"
+          | _ -> failwith "Not text node"
+          match worldNode with
+          | Text worldStr -> Expect.equal worldStr " World" "Correct child 1"
+          | _ -> failwith "Not text node"
+        | _ -> failwith "More than 2 children"
+      | _ -> failwith "Not html node"
+
+      let goodbyeElement = element {Hello = "Goodbye"} []
+
+      let goodbyeNode = castHTMLNode goodbyeElement
+      match goodbyeNode with
+      | Node (tag, _, children) ->
+        Expect.equal tag "div" "Correct tag"
+        Expect.hasLength children 2 "Correct length"
+        match List.ofSeq children with
+        | [helloElement; worldElement] -> 
+          let helloNode = castHTMLNode helloElement
+          let worldNode = castHTMLNode worldElement
+          match helloNode with
+          | Text helloStr -> Expect.equal helloStr "Goodbye" "Correct child 1"
+          | _ -> failwith "Not text node"
+          match worldNode with
+          | Text worldStr -> Expect.equal worldStr " World" "Correct child 1"
+          | _ -> failwith "Not text node"
+        | _ -> failwith "More than 2 children"
       | _ -> failwith "Not html node"
   ]
 
