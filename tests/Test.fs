@@ -34,7 +34,7 @@ let allTests =
     testCase "Props test" <| fun () ->
 
       let element = hacnTest {
-        let! x = Props()
+        let! x = Props ()
         do! Render(div [] [str x.Hello; str " World"])
       }
 

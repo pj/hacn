@@ -1,33 +1,6 @@
 module Hacn.Core
 open Fable.React
 
-type OpTreeNode<'props> =
-  {
-    // State storage for the operation.
-    State: obj option;
-    // Operation at this index.
-    Operation: Operation<'props, unit>;
-    // Index of the operation.
-    Index: int;
-  }
-
-type OpTree<'props> =
-  | OpState of OpTreeNode<'props>
-
-type RefState<'props, 'state> =
-  {
-    // Last element rendered.
-    Element: ReactElement option;
-    // list of current operations.
-    Operations: OpTree<'props> array;
-    // 'current' operation to perform, get's updated as operations change it
-    // e.g. props changes
-    OperationIndex: int;
-
-    // Component state object
-    ComponentState: Operations.StateContainer<'state>;
-  }
-
 let bind underlyingOperation f = 
   Control(
     {
@@ -40,18 +13,19 @@ let bind underlyingOperation f =
           match underlyingOperation with
            | Perform(opData) -> opData.PreProcess(operationState)
            | _ -> failwith "Underlying must be perform Operation"
-      Invoke = 
-        fun (operationState) ->
+      RunOperation = 
+        fun effectWrapper operationState ->
           match underlyingOperation with
           | Perform(operationData) -> 
-            let operationResult = operationData.Run(operationState)
+            let operationResult = operationData.GetResult(operationState)
 
             match operationResult with
             | InvokeReturn(result) -> 
               let nextOperation = f(result)
               ControlNextOperation(nextOperation)
             | InvokeRender(element, effects) -> ControlRender(element, effects)
-            | InvokeEffect(effect) -> ControlEffect(effect)
+            | InvokeWait -> ControlWait
+            // | InvokeEffect(effect) -> ControlEffect(effect)
           | Control(_) -> failwith "Control passed as operation"
           | End -> failwith "End passed as operation"
     }
@@ -125,7 +99,7 @@ let execute refState props =
       | OpState(opState) ->
         match opState.Operation with
         | Control(opData) ->
-          let invokeResult = opData.Invoke opState.State 
+          let invokeResult = opData.RunOperation opState.State 
           match invokeResult with
           | ControlRender(element) -> 
             renderedElement <- Some(element)

@@ -25,7 +25,7 @@ let Props<'props when 'props: equality>() =
             operationState
           else
             None
-    Run = fun operationState -> 
+    GetResult = fun operationState -> 
       match operationState with
       | None -> failwith "Should not happen"
       | Some(propsOpState) ->
@@ -37,7 +37,7 @@ let Render(element) =
   Perform({ 
     OperationType = NotCore;
     PreProcess = fun _ -> None;
-    Run = fun _ -> 
+    GetResult = fun _ -> 
       InvokeRender(element, [])
   })
 
@@ -65,7 +65,7 @@ let Get<'state>(initialState: 'state option) =
           Some({currentState with Updated = false} :> obj)
         else 
           None
-    Run = fun operationState -> 
+    GetResult = fun operationState -> 
       let stateCast: 'state option = operationState?State
       match stateCast with
       | Some(state) -> InvokeReturn(state)
@@ -76,7 +76,7 @@ let Set<'state>(newState: 'state) =
   Perform({
     OperationType = StateSet;
     PreProcess = fun _ -> None;
-    Run = fun _ -> 
+    GetResult = fun _ -> 
       InvokeEffect(
         [
           fun control -> 
@@ -105,7 +105,7 @@ let ContextCore<'returnType when 'returnType : equality> (useContext: IContext<'
         else 
           None
       | None -> Some(currentContext :> obj)
-    Run = fun operationState -> 
+    GetResult = fun operationState -> 
       let castOperationState: 'returnType option = explicitConvert operationState
       match castOperationState with
       | Some(existingContext) -> InvokeReturn(existingContext)
@@ -118,15 +118,25 @@ let Continue operation =
   Perform({ 
     OperationType = NotCore;
     PreProcess = fun _ -> None
-    Run = fun _ -> 
+    GetResult = fun _ -> 
       InvokeReturn(operation)
   })
 
-let Wait operations = 
+let Wait operation = 
   Perform({ 
     OperationType = NotCore;
     PreProcess = fun _ -> None
-    Run = fun _ -> 
+    GetResult = fun operationState -> 
+      match operation with
+      | Perform(performData) -> performData.GetResult(operationState)
+      | _ -> failwith "Can't wait on non-Perform operation"
+  })
+
+let Wait2 op1 op2 = 
+  Perform({ 
+    OperationType = NotCore;
+    PreProcess = fun _ -> None
+    GetResult = fun _ -> 
       InvokeReturn(operations)
   })
 
