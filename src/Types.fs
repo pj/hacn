@@ -21,8 +21,11 @@ type EffectControlWrapper = EffectFunction -> unit
 type ContinuedEffect = EffectControlWrapper
 
 type InvokeResult<'props, 'returnType> =
-  | InvokeRender of ReactElement * (EffectControl -> unit) list
-  | InvokeEffect of (EffectControl -> unit) list
+  | InvokeRender of ReactElement * (EffectControl -> unit)
+  // | InvokeMultipleEffect of (EffectControl -> unit) list
+  // | InvokeCombined of ReactElement * (EffectControl -> unit) list
+  // | InvokeCombined2 of InvokeResult<'props, unit> * InvokeResult<'props, unit>
+  // | InvokeCombined3 of InvokeResult<'props, unit> * InvokeResult<'props, unit> * InvokeResult<'props, unit>
   | InvokeReturn of 'returnType
   | InvokeWait
 and PerformData<'props, 'returnType> =
@@ -33,8 +36,8 @@ and PerformData<'props, 'returnType> =
   }
 
 and ControlResult<'props> =
-  | ControlRender of ReactElement * (EffectControl -> unit) list
-  | ControlEffect of (EffectControl -> unit) list
+  | ControlRender of (ReactElement option) * (EffectControl -> unit) list
+  // | ControlEffect of (EffectControl -> unit) list
   | ControlNextOperation of Operation<'props, unit>
   | ControlWait
 and ControlData<'props> =

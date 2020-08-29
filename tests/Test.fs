@@ -35,6 +35,11 @@ let allTests =
 
       let element = hacnTest {
         let! x = Props ()
+        // let y = 
+        //   if true then
+        //     Props ()
+        //   else 
+        //     Props ()
         do! Render(div [] [str x.Hello; str " World"])
       }
 

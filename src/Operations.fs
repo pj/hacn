@@ -77,7 +77,8 @@ let Set<'state>(newState: 'state) =
     OperationType = StateSet;
     PreProcess = fun _ -> None;
     GetResult = fun _ -> 
-      InvokeEffect(
+      InvokeRender(
+        None,
         [
           fun control -> 
             control.Rerender(
@@ -114,37 +115,69 @@ let ContextCore<'returnType when 'returnType : equality> (useContext: IContext<'
 
 let Context context = ContextCore Hooks.useContext context
 
-let Continue operation = 
-  Perform({ 
-    OperationType = NotCore;
-    PreProcess = fun _ -> None
-    GetResult = fun _ -> 
-      InvokeReturn(operation)
-  })
+// let Continue operation = 
+//   Perform({ 
+//     OperationType = NotCore;
+//     PreProcess = fun _ -> None
+//     GetResult = fun _ -> 
+//       InvokeReturn(operation)
+//   })
 
-let Wait operation = 
-  Perform({ 
-    OperationType = NotCore;
-    PreProcess = fun _ -> None
-    GetResult = fun operationState -> 
-      match operation with
-      | Perform(performData) -> performData.GetResult(operationState)
-      | _ -> failwith "Can't wait on non-Perform operation"
-  })
+// let Wait operation = 
+//   Perform({ 
+//     OperationType = NotCore;
+//     PreProcess = fun _ -> None
+//     GetResult = fun operationState -> 
+//       match operation with
+//       | Perform(performData) -> performData.GetResult(operationState)
+//       | _ -> failwith "Can't wait on non-Perform operation"
+//   })
 
 let Wait2 op1 op2 = 
   Perform({ 
     OperationType = NotCore;
     PreProcess = fun _ -> None
-    GetResult = fun _ -> 
-      InvokeReturn(operations)
+    GetResult = fun operationState -> 
+      match operationState with
+      | Some(underlyingState) ->
+        let underlyingStateCast: (obj option) list = explicitConvert underlyingState
+        let opState1 = underlyingStateCast.[0]
+        let opResult1 = 
+          match op1 with
+          | Perform(pd1) -> 
+            pd1.GetResult(opState1)
+          | _ -> failwith "Can only work with Perform operations"
+        let opState2 = underlyingStateCast.[1]
+        let opResult2 = 
+          match op2 with
+          | Perform(pd2) -> 
+            pd2.GetResult(opState2)
+          | _ -> failwith "Can only work with Perform operations"
+        
+        match opResult1, opResult2 with
+        | InvokeRender(_), InvokeEffect(_) -> 
+          InvokeCombined2(opResult1, opResult2)
+        | InvokeEffect(_), InvokeRender(_) -> 
+          InvokeCombined2(opResult1, opResult2)
+        | InvokeEffect(_), InvokeEffect(_) -> 
+          InvokeCombined2(opResult1, opResult2)
+        | InvokeWait, _ -> InvokeWait
+        | _, InvokeWait -> InvokeWait
+        | InvokeReturn(ret1), InvokeReturn(ret2) -> InvokeReturn((ret1, ret2))
+        | _ -> failwith "Incorrect lifecycle or non-waitable effect"
+      | None ->
+        InvokeWait
   })
 
 let WaitAny = End
+let WaitAny2 = End
+let WaitAny3 = End
 // Return a series of suspended effect results as a stream
 let Next = End
 // Return a series of suspended effect results as a stream (in any order)
 let NextAny = End
+
+// time operations
 let Timeout = End
 let Interval = End
 let Fetch = End
@@ -153,7 +186,7 @@ let Ref = End
 // Call a function passed in through props in an effect.
 let Call = End
 
-// Merging results
+// Merging results?
 
 // Error handling
 
