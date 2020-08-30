@@ -9,10 +9,9 @@ type OpTreeNode<'props> =
     Operation: Operation<'props, unit>;
     // Index of the operation.
     Index: int;
-  }
 
-// type OpTree<'props> =
-//   | OpState of OpTreeNode<'props>
+    Disposer: Dispose option;
+  }
 
 type RefState<'props, 'state> =
   {
@@ -70,7 +69,7 @@ let getFirstOperation delayedFunc componentState =
     {
       componentState with 
         OperationIndex = 0
-        Operations = [|{State = None; Operation = firstOperation; Index = 0}|]
+        Operations = [|{State = None; Operation = firstOperation; Index = 0; Disposer = None}|]
     }
   else
     componentState
@@ -106,7 +105,7 @@ let preprocessOperations refState props =
                 Array.set 
                   nextState.Operations 
                   index 
-                  {State = Some(newOpState); Operation = op; Index = index}
+                  {State = Some(newOpState); Operation = op; Index = index; Disposer = None}
                 if index < nextIndex then
                   nextState <- {refState with OperationIndex = index}
                   nextIndex <- index
@@ -116,24 +115,12 @@ let preprocessOperations refState props =
 
   nextState
 
-let execute rerender (componentStateRef: IRefValue<RefState<'props, 'state>>) props =
-  let componentState = componentStateRef.current
+let execute resultCapture wrapEffect componentState props =
   let mutable currentIndex = componentState.OperationIndex
   let mutable stop = false
   let mutable renderedElement = None
   let mutable nextOperations = componentState.Operations
   let mutable nextEffect = None
-
-  let resultCapture index newOpState = 
-    let op = componentStateRef.current.Operations.[index]
-    let updatedOp = {op with State = newOpState}
-    Array.set
-      componentStateRef.current.Operations
-      index
-      updatedOp
-    rerender ()
-
-  let 
 
   while not stop do
     let currentOperation = nextOperations.[currentIndex]
@@ -148,11 +135,11 @@ let execute rerender (componentStateRef: IRefValue<RefState<'props, 'state>>) pr
           renderedElement <- Some(element)
           stop <- true
         | ControlEffect(effect) ->
-          nextEffect <- Some((effect, currentOperation))
+          nextEffect <- Some (wrapEffect currentOperation.Index effect)
           stop <- true
         | ControlBoth(element, effect) -> 
           renderedElement <- Some(element)
-          nextEffect <- Some((effect, currentOperation))
+          nextEffect <- Some (wrapEffect currentOperation.Index effect)
           stop <- true
         | ControlNextOperation(nextOperation) ->
           match nextOperation with
@@ -182,7 +169,8 @@ let execute rerender (componentStateRef: IRefValue<RefState<'props, 'state>>) pr
                     {
                       State = preProcessState; 
                       Operation = Control(nextOpData); 
-                      Index = currentIndex + 1
+                      Index = currentIndex + 1;
+                      Disposer = None;
                     }
                   |]
             currentIndex <- currentIndex + 1
@@ -198,39 +186,6 @@ let execute rerender (componentStateRef: IRefValue<RefState<'props, 'state>>) pr
     nextEffect
   )
 
-let runEffects (componentStateRef: IRefValue<RefState<'props, 'state>>) rerender useEffect effect =
-  let rerender opTreeIndex nextOpState =
-    let currentOperation = componentStateRef.current.Operations.[opTreeIndex]
-      Array.set
-        componentStateRef.current.Operations
-        opTreeIndex
-        (OpState({node with State = nextOpState}))
-      if opTreeIndex < componentStateRef.current.OperationIndex then  
-        componentStateRef.current <- 
-          {
-            componentStateRef.current with 
-              OperationIndex = opTreeIndex
-              Element = None
-          }
-      state.update("blah")
-    ()
-
-  let getOperationState opTreeIndex _ =
-    let currentOperation = componentStateRef.current.Operations.[opTreeIndex]
-    match currentOperation with
-    | OpState(node) -> 
-      node.State
-
-  let handleEffect = 
-    fun () ->
-      let (effect, opTree) = effect
-      match opTree with
-      | OpState(node) ->
-        effect (getOperationState node.Index) (rerender node.Index)
-      ()
-
-  useEffect handleEffect
-
 let render useRef useState useEffect delayedFunc props = 
   let componentStateRef: IRefValue<RefState<'props, 'state>> = useRef({
     Element = None;
@@ -241,24 +196,61 @@ let render useRef useState useEffect delayedFunc props =
       ComponentState = None;
     };
   })
+
+  // trigger rerender by updating a state variable
   let state: IStateHook<string> = useState("asdf")
   let rerender _ =
     state.update("blah")
 
-  // Run first operation if none already exist.
+  // Capture a result to return to the flow.
+  let updateStateAt index newOpState = 
+    let op = componentStateRef.current.Operations.[index]
+    let updatedOp = {op with State = newOpState}
+    Array.set
+      componentStateRef.current.Operations
+      index
+      updatedOp
+    rerender ()
+
+  let updateDisposer index disposer = 
+    let op = componentStateRef.current.Operations.[index]
+    let updatedOp = {op with Disposer = disposer}
+    Array.set
+      componentStateRef.current.Operations
+      index
+      updatedOp
+
+  let wrapEffect index effect =
+    let wrapUpdateState index stateUpdater = 
+      let op = componentStateRef.current.Operations.[index]
+      let updatedState = stateUpdater op.State
+      Array.set
+        componentStateRef.current.Operations
+        index
+        {op with State = updatedState}
+      rerender ()
+    let updateState = wrapUpdateState index
+    let wrappedEffect _ =
+      let disposer = effect updateState
+      updateDisposer index disposer
+      ()
+    wrappedEffect
+
   componentStateRef.current <- getFirstOperation delayedFunc componentStateRef.current
 
-  // run any preprocess operations.
   componentStateRef.current <- preprocessOperations componentStateRef.current props
 
-  // execute until we hit suspend/end.
-  let nextState, effect = execute rerender componentStateRef props
+  let nextState, wrappedEffectOpt = execute updateStateAt wrapEffect componentStateRef.current props
 
   componentStateRef.current <- nextState
 
   // run any effects.
-  match effect with
-  | Some(effect) -> runEffects componentStateRef useState useEffect effect
+  match wrappedEffectOpt with
+  | Some(wrappedEffect) -> 
+    useEffect (
+      fun () ->
+        wrappedEffect ()
+      )
   | None -> ()
 
   // Render current element
