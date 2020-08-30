@@ -5,6 +5,7 @@ open Hacn.Core
 open Hacn.Operations
 open Fable.React
 open Fable.ReactServer
+open Fable.React.Props
 
 type TestProps = { Hello: string}
 
@@ -34,13 +35,9 @@ let allTests =
     testCase "Props test" <| fun () ->
 
       let element = hacnTest {
-        let! x = Props ()
-        // let y = 
-        //   if true then
-        //     Props ()
-        //   else 
-        //     Props ()
-        do! Render(div [] [str x.Hello; str " World"])
+        let! x = Props
+        let! y = Render (div) [] [CaptureClick(fun _ -> 1)] [str x.Hello; str " World"]
+        do! Render (div) [] [] [str "Success!"; str y]
       }
 
       let helloElement = element {Hello = "Hello"} []

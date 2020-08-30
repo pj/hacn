@@ -1,6 +1,35 @@
 module Hacn.Core
 open Fable.React
 
+type OpTreeNode<'props> =
+  {
+    // State storage for the operation.
+    State: obj option;
+    // Operation at this index.
+    Operation: Operation<'props, unit>;
+    // Index of the operation.
+    Index: int;
+  }
+
+// type OpTree<'props> =
+//   | OpState of OpTreeNode<'props>
+
+type RefState<'props, 'state> =
+  {
+    // Last element rendered.
+    Element: ReactElement option;
+
+    // list of current operations.
+    Operations: OpTreeNode<'props> array;
+
+    // 'current' operation to perform, get's updated as operations change it
+    // e.g. props changes
+    OperationIndex: int;
+
+    // Component state object
+    ComponentState: Operations.StateContainer<'state>;
+  }
+
 let bind underlyingOperation f = 
   Control(
     {
@@ -14,18 +43,19 @@ let bind underlyingOperation f =
            | Perform(opData) -> opData.PreProcess(operationState)
            | _ -> failwith "Underlying must be perform Operation"
       RunOperation = 
-        fun effectWrapper operationState ->
+        fun captureFunc operationState ->
           match underlyingOperation with
           | Perform(operationData) -> 
-            let operationResult = operationData.GetResult(operationState)
+            let operationResult = operationData.GetResult captureFunc operationState
 
             match operationResult with
             | InvokeReturn(result) -> 
               let nextOperation = f(result)
               ControlNextOperation(nextOperation)
-            | InvokeRender(element, effects) -> ControlRender(element, effects)
+            | InvokeBoth(element, effect) -> ControlBoth(element, effect)
+            | InvokeEffect(effect) -> ControlEffect effect
+            | InvokeRender(element) -> ControlRender element
             | InvokeWait -> ControlWait
-            // | InvokeEffect(effect) -> ControlEffect(effect)
           | Control(_) -> failwith "Control passed as operation"
           | End -> failwith "End passed as operation"
     }
@@ -40,7 +70,7 @@ let getFirstOperation delayedFunc componentState =
     {
       componentState with 
         OperationIndex = 0
-        Operations = [|OpState({State = None; Operation = firstOperation; Index = 0})|]
+        Operations = [|{State = None; Operation = firstOperation; Index = 0}|]
     }
   else
     componentState
@@ -65,7 +95,7 @@ let preprocessOperations refState props =
   let mutable nextState = refState
   for item in refState.Operations do
     match item with
-      | OpState({State = opState; Operation = op; Index = index}) ->
+      | {State = opState; Operation = op; Index = index} ->
         match op with 
           | Control({PreProcess = preProcess; OperationType = operationType}) -> 
             let processOpState: obj option = getOperationState refState operationType opState props
@@ -76,7 +106,7 @@ let preprocessOperations refState props =
                 Array.set 
                   nextState.Operations 
                   index 
-                  (OpState({State = Some(newOpState); Operation = op; Index = index}))
+                  {State = Some(newOpState); Operation = op; Index = index}
                 if index < nextIndex then
                   nextState <- {refState with OperationIndex = index}
                   nextIndex <- index
@@ -86,80 +116,91 @@ let preprocessOperations refState props =
 
   nextState
 
-let execute refState props =
-  let mutable currentIndex = refState.OperationIndex
+let execute rerender (componentStateRef: IRefValue<RefState<'props, 'state>>) props =
+  let componentState = componentStateRef.current
+  let mutable currentIndex = componentState.OperationIndex
   let mutable stop = false
   let mutable renderedElement = None
-  let mutable nextOperations = refState.Operations
+  let mutable nextOperations = componentState.Operations
   let mutable nextEffect = None
-  // let mutable nextComponentState = None
+
+  let resultCapture index newOpState = 
+    let op = componentStateRef.current.Operations.[index]
+    let updatedOp = {op with State = newOpState}
+    Array.set
+      componentStateRef.current.Operations
+      index
+      updatedOp
+    rerender ()
+
+  let 
+
   while not stop do
     let currentOperation = nextOperations.[currentIndex]
-    match currentOperation with
-      | OpState(opState) ->
-        match opState.Operation with
-        | Control(opData) ->
-          let invokeResult = opData.RunOperation opState.State 
-          match invokeResult with
-          | ControlRender(element) -> 
-            renderedElement <- Some(element)
-            stop <- true
-          // | UpdateState(componentState) ->
-          //   nextComponentState <- Some(componentState)
-          //   stop <- true
-          | ControlEffect(effect) ->
-            nextEffect <- Some((effect, currentOperation))
-            stop <- true
-          | ControlNextOperation(nextOperation) ->
-            // handle next operation
-            match nextOperation with
-            | End -> stop <- true
-            | Perform(_) -> failwith "Perform should not be passed here"
-            | Control(nextOpData) ->
-              // If the op already exists update the stored op
-              if (currentIndex + 1) < refState.Operations.Length then
-                Array.set
-                  nextOperations
-                  (currentIndex + 1)
-                  (OpState({opState with Operation = Control(nextOpData)})) 
-              else
-                let preProcessState = 
-                  match nextOpData.OperationType with
-                  | PropsOperation -> 
-                    let propsOperationState: Operations.PropsOperationState<obj> = {Props = props; PrevProps = None}
-                    nextOpData.PreProcess(Some(propsOperationState :> obj)) |> ignore
-                    Some(propsOperationState :> obj)
-                  | StateGet -> 
-                    Some(refState.ComponentState :> obj)
-                  | _ ->
-                    nextOpData.PreProcess(None)
-                nextOperations <- 
-                  Array.append 
-                    nextOperations 
-                    [|OpState({
+    match currentOperation.Operation with
+      | Control({RunOperation = runOperation}) ->
+        let capture = resultCapture currentOperation.Index 
+        let invokeResult = runOperation capture currentOperation.State 
+        match invokeResult with
+        | ControlWait -> 
+          stop <- true
+        | ControlRender(element) -> 
+          renderedElement <- Some(element)
+          stop <- true
+        | ControlEffect(effect) ->
+          nextEffect <- Some((effect, currentOperation))
+          stop <- true
+        | ControlBoth(element, effect) -> 
+          renderedElement <- Some(element)
+          nextEffect <- Some((effect, currentOperation))
+          stop <- true
+        | ControlNextOperation(nextOperation) ->
+          match nextOperation with
+          | End -> stop <- true
+          | Perform(_) -> failwith "Perform should not be passed here"
+          | Control(nextOpData) ->
+            if (currentIndex + 1) < componentState.Operations.Length then
+              Array.set
+                nextOperations
+                (currentIndex + 1)
+                {currentOperation with Operation = Control(nextOpData)}
+            else
+              let preProcessState = 
+                match nextOpData.OperationType with
+                | PropsOperation -> 
+                  let propsOperationState: Operations.PropsOperationState<obj> = {Props = props; PrevProps = None}
+                  nextOpData.PreProcess(Some(propsOperationState :> obj)) |> ignore
+                  Some(propsOperationState :> obj)
+                | StateGet -> 
+                  Some(componentState.ComponentState :> obj)
+                | _ ->
+                  nextOpData.PreProcess(None)
+              nextOperations <- 
+                Array.append 
+                  nextOperations 
+                  [|
+                    {
                       State = preProcessState; 
                       Operation = Control(nextOpData); 
                       Index = currentIndex + 1
-                    })|]
-              currentIndex <- currentIndex + 1
-        | _ -> failwith "Unknown "
+                    }
+                  |]
+            currentIndex <- currentIndex + 1
+      | _ -> failwith "Unknown "
   
   (
     {
       OperationIndex = currentIndex; 
       Operations = nextOperations; 
       Element = renderedElement;
-      ComponentState = refState.ComponentState;
+      ComponentState = componentState.ComponentState;
     },
     nextEffect
   )
 
-let runEffects (componentStateRef: IRefValue<RefState<'props, 'state>>) useState useEffect effect =
-  let state: IStateHook<string> = useState("asdf")
+let runEffects (componentStateRef: IRefValue<RefState<'props, 'state>>) rerender useEffect effect =
   let rerender opTreeIndex nextOpState =
     let currentOperation = componentStateRef.current.Operations.[opTreeIndex]
-    match currentOperation with
-    | OpState(node) -> 
       Array.set
         componentStateRef.current.Operations
         opTreeIndex
@@ -190,8 +231,6 @@ let runEffects (componentStateRef: IRefValue<RefState<'props, 'state>>) useState
 
   useEffect handleEffect
 
-type UseEffect = ((unit -> unit)  -> (obj array) option) -> unit
-
 let render useRef useState useEffect delayedFunc props = 
   let componentStateRef: IRefValue<RefState<'props, 'state>> = useRef({
     Element = None;
@@ -202,6 +241,9 @@ let render useRef useState useEffect delayedFunc props =
       ComponentState = None;
     };
   })
+  let state: IStateHook<string> = useState("asdf")
+  let rerender _ =
+    state.update("blah")
 
   // Run first operation if none already exist.
   componentStateRef.current <- getFirstOperation delayedFunc componentStateRef.current
@@ -210,7 +252,7 @@ let render useRef useState useEffect delayedFunc props =
   componentStateRef.current <- preprocessOperations componentStateRef.current props
 
   // execute until we hit suspend/end.
-  let nextState, effect = execute componentStateRef.current props
+  let nextState, effect = execute rerender componentStateRef props
 
   componentStateRef.current <- nextState
 
