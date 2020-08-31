@@ -36,8 +36,8 @@ let allTests =
 
       let element = hacnTest {
         let! x = Props
-        let! y = Render (div) [] [CaptureClick(fun _ -> 1)] [str x.Hello; str " World"]
-        do! Render (div) [] [] [str "Success!"; str y]
+        let! y = Render div [] [CaptureClick(fun _ -> "asdfer")] [str x.Hello; str " World"]
+        do! Render div [] [] [str "Success!"; str y]
       }
 
       let helloElement = element {Hello = "Hello"} []

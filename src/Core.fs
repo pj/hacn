@@ -10,7 +10,7 @@ type OpTreeNode<'props> =
     // Index of the operation.
     Index: int;
 
-    Disposer: Dispose option;
+    Disposer: Dispose;
   }
 
 type RefState<'props, 'state> =

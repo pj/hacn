@@ -105,14 +105,16 @@ type Captures<'returnType> =
   // | CaptureAnimationIteration of (AnimationEvent -> 'returnType)
   // | CaptureTransitionEnd of (TransitionEvent -> 'returnType)
 
-let Render<'returnType> element props (captures: Captures<'returnType> list) children =
+let Render<'returnType> element props (captures: Captures<'returnType> list) (children: ReactElement seq) =
   Perform({ 
     OperationType = NotCore;
     PreProcess = fun _ -> None;
     GetResult = fun captureResult operationState -> 
-      let operationState: 'returnType option = explicitConvert operationState
+
       match operationState with
-      | Some(result) -> InvokeReturn(result)
+      | Some(result) -> 
+        let castReturn: 'returnType = explicitConvert result
+        InvokeReturn(castReturn)
       | _ ->
         let convertCaptureToProp capture =
           let x = 

@@ -32,7 +32,6 @@ and ControlResult<'props> =
   | ControlBoth of ReactElement * Effect
   | ControlRender of ReactElement
   | ControlEffect of Effect
-  // | ControlEffect of (EffectControl -> unit) list
   | ControlNextOperation of Operation<'props, unit>
   | ControlWait
 and ControlData<'props> =
