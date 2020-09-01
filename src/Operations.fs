@@ -212,24 +212,6 @@ let ContextCore<'returnType when 'returnType : equality> (useContext: IContext<'
 
 let Context context = ContextCore Hooks.useContext context
 
-// let Continue operation = 
-//   Perform({ 
-//     OperationType = NotCore;
-//     PreProcess = fun _ -> None
-//     GetResult = fun _ -> 
-//       InvokeReturn(operation)
-//   })
-
-// let Wait operation = 
-//   Perform({ 
-//     OperationType = NotCore;
-//     PreProcess = fun _ -> None
-//     GetResult = fun operationState -> 
-//       match operation with
-//       | Perform(performData) -> performData.GetResult(operationState)
-//       | _ -> failwith "Can't wait on non-Perform operation"
-//   })
-
 let Wait2 op1 op2 = 
   Perform({ 
     OperationType = NotCore;
@@ -297,11 +279,79 @@ let Wait2 op1 op2 =
         InvokeWait
   })
 
-let WaitAny = End
-let WaitAny2 = End
+let WaitAny2 op1 op2 = 
+  Perform({ 
+    OperationType = NotCore;
+    PreProcess = fun _ -> None
+    GetResult = fun capture operationState -> 
+      match operationState with
+      | Some(underlyingState) ->
+        let underlyingStateCast: (obj option) list = explicitConvert underlyingState
+        let opState1 = underlyingStateCast.[0]
+        let opResult1 = 
+          match op1 with
+          | Perform(pd1) -> 
+            pd1.GetResult capture opState1
+          | _ -> failwith "Can only work with Perform operations"
+        let opState2 = underlyingStateCast.[1]
+        let opResult2 = 
+          match op2 with
+          | Perform(pd2) -> 
+            pd2.GetResult capture opState2
+          | _ -> failwith "Can only work with Perform operations"
+        
+        match opResult1, opResult2 with
+        | InvokeRender(ren1), InvokeEffect(eff2) -> 
+          InvokeBoth(ren1, eff2)
+        | InvokeEffect(eff1), InvokeRender(ren2) -> 
+          InvokeBoth(ren2, eff1)
+        | InvokeEffect(eff1), InvokeEffect(eff2) -> 
+          let combinedEffect render =
+            let indexedRerender stateLength index stateUpdater = 
+              let indexedStateUpdater underlyingState =
+                let castState: ((obj option) array) option = explicitConvert underlyingState
+                let currentState = 
+                  match castState with 
+                  | None -> Array.create stateLength None
+                  | Some(x) -> x
+                let updatedState = stateUpdater (currentState.[index])
+                Array.set
+                  currentState
+                  index
+                  updatedState
+                Some(currentState :> obj)
+              render indexedStateUpdater
+
+            let disposeOpt1 = eff1 (indexedRerender 2 0)
+            let disposeOpt2 = eff2 (indexedRerender 2 1)
+
+            Some(
+              fun () -> 
+                match disposeOpt1 with 
+                | Some(dispose) -> dispose ()
+                | _ -> ()
+
+                match disposeOpt2 with
+                | Some(dispose) -> dispose ()
+                | _ -> ()
+                ()
+            )
+
+          InvokeEffect(combinedEffect)
+        | InvokeWait, InvokeWait -> InvokeWait
+        | InvokeReturn(ret1), InvokeWait -> InvokeReturn((Some(ret1), None))
+        | InvokeWait, InvokeReturn(ret2) -> InvokeReturn((None, Some(ret2)))
+        | InvokeReturn(ret1), InvokeReturn(ret2) -> InvokeReturn((Some(ret1), Some(ret2)))
+        | _ -> failwith "Incorrect lifecycle or non-waitable effect"
+      | None ->
+        InvokeWait
+  })
+
 let WaitAny3 = End
+
 // Return a series of suspended effect results as a stream
 let Next = End
+
 // Return a series of suspended effect results as a stream (in any order)
 let NextAny = End
 
@@ -318,7 +368,8 @@ let Ref = End
 // Call a function passed in through props in an effect.
 let Call = End
 
-// Merging results?
+// Don't auto-dispose an element?
+let Background = End
 
 // Error handling
 
