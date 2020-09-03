@@ -11,8 +11,8 @@
     <Compile Include="Test.test.fs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="../src/App.fsproj">
-      <Name>App.fsproj</Name>
+    <ProjectReference Include="../src/Hacn.fsproj">
+      <Name>Hacn.fsproj</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>

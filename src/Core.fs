@@ -223,7 +223,9 @@ let render useRef useState useEffect delayedFunc props =
   let wrapEffect index effect =
     let wrapUpdateState index stateUpdater = 
       let op = componentStateRef.current.Operations.[index]
+      printf "Before state: %A\n" op.State
       let updatedState = stateUpdater op.State
+      printf "After state: %A\n" op.State
       Array.set
         componentStateRef.current.Operations
         index

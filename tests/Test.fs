@@ -28,7 +28,7 @@ let useFakeState initialState =
     member __.update(f: 'T->'T) = () }
 
 let useFakeEffect effectFunction =
-  ()
+  effectFunction ()
 
 type TestHTMLNode = 
   | Text of string
@@ -53,8 +53,8 @@ let convertElementToTestNode element =
   convertToTestNode (castHTMLNode element)
 
 let hacnTest = HacnBuilder((render useFakeRef useFakeState useFakeEffect))
-
 type TestProps = { Hello: string}
+
 let propsTest () = 
   let element = hacnTest {
     let! x = Props
@@ -92,15 +92,27 @@ let TestOperation<'returnType> (result: 'returnType) =
 
 let anyTest () = 
   let element = hacnTest {
-    let! y, x = (WaitAny2 (Render div [] [] [str "asdf"]) (TestOperation "asdf"))
-    do! Render div [] [] [str y]
+    let! _, testResponse = WaitAny2 (Render div [] [] [str "Hello"]) (TestOperation "Goodbye")
+    match testResponse with
+    | Some(testValue) -> 
+      do! Render div [] [] [str testValue]
+    | _ -> 
+      do! Render div [] [] [str "No value..."]
   }
 
-  let helloElement = element {Hello = "Hello"} []
+  let helloElement = element [] []
+  let helloNode = convertElementToTestNode helloElement
 
-  match convertElementToTestNode helloElement with 
-  | Node("div", _, [Text("Hello"); Text(" World")]) -> ()
-  | _ -> failwith "node does not match"
+  match helloNode with 
+  | Node("div", _, [Text("Hello")]) -> ()
+  | _ -> failwith (sprintf "node does not match: %A" helloNode)
+
+  let goodbyeElement = element [] []
+  let goodbyeNode = convertElementToTestNode goodbyeElement
+
+  match goodbyeNode with 
+  | Node("div", _, [Text("Goodbye")]) -> ()
+  | _ -> failwith (sprintf "node does not match: %A" goodbyeNode)
 
 let stateTest () = 
   Tests.skiptest "Unimplemented"
@@ -141,7 +153,7 @@ let compositionTest () =
 let allTests =
   testList "All tests" [
     testCase "Test changing props" propsTest;
-    testCase "Test waiting any" anyTest;
+    ftestCase "Test waiting any" anyTest;
     testCase "Test setting state" stateTest;
     testCase "Test context" contextTest;
     testCase "Test capturing variables" eventCaptureTest;
