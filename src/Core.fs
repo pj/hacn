@@ -1,5 +1,6 @@
 module Hacn.Core
 open Fable.React
+open FSharp.Interop.Dynamic.Dyn
 
 type OpTreeNode<'props> =
   {
@@ -82,7 +83,8 @@ let getOperationState refState operationType opState props =
       let propsState: Operations.PropsOperationState<obj> = {Props = props; PrevProps = None}
       Some(propsState :> obj)
     | Some(existingPropsState) -> 
-      let propsState: Operations.PropsOperationState<obj> = {Props = props; PrevProps = Some(existingPropsState)}
+      let castPropsState: Operations.PropsOperationState<obj> = explicitConvert existingPropsState
+      let propsState: Operations.PropsOperationState<obj> = {Props = props; PrevProps = Some(castPropsState.Props)}
       Some(propsState :> obj)
   | StateGet -> 
     Some(refState.ComponentState :> obj)
@@ -99,7 +101,10 @@ let preprocessOperations refState props =
           | Control({PreProcess = preProcess; OperationType = operationType}) -> 
             let processOpState: obj option = getOperationState refState operationType opState props
 
+            // printf "------------------\n"
+            // printf "%A\n" processOpState
             let result = preProcess processOpState
+            // printf "%A\n" result
             match result with
               | Some(newOpState) -> 
                 Array.set 
@@ -124,9 +129,12 @@ let execute resultCapture wrapEffect componentState props =
 
   while not stop do
     let currentOperation = nextOperations.[currentIndex]
+    printf "%A\n" nextOperations
+    printf "%A\n" currentIndex
     match currentOperation.Operation with
       | Control({RunOperation = runOperation}) ->
         let capture = resultCapture currentOperation.Index 
+        printf "%A\n" currentOperation.State
         let invokeResult = runOperation capture currentOperation.State 
         match invokeResult with
         | ControlWait -> 
@@ -223,9 +231,7 @@ let render useRef useState useEffect delayedFunc props =
   let wrapEffect index effect =
     let wrapUpdateState index stateUpdater = 
       let op = componentStateRef.current.Operations.[index]
-      printf "Before state: %A\n" op.State
       let updatedState = stateUpdater op.State
-      printf "After state: %A\n" op.State
       Array.set
         componentStateRef.current.Operations
         index
@@ -241,6 +247,8 @@ let render useRef useState useEffect delayedFunc props =
   componentStateRef.current <- getFirstOperation delayedFunc componentStateRef.current
 
   componentStateRef.current <- preprocessOperations componentStateRef.current props
+
+  printf "-------------------\n"
 
   let nextState, wrappedEffectOpt = execute updateStateAt wrapEffect componentStateRef.current props
 

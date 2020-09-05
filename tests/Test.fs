@@ -10,10 +10,22 @@ open Hacn.Types
 open FSharp.Interop.Dynamic
 open FSharp.Interop.Dynamic.Dyn
 
-let useFakeRef initialValue =
-  let mutable refValue = initialValue
-  { new IRefValue<_> with
-      member this.current with get() = refValue and set value = refValue <- value }
+let generateFakeRefHook () =
+  let mutable refValue = None
+  let useFakeRef initialValue =
+    match refValue with
+    | None -> 
+      refValue <- Some(initialValue)
+    | _ -> ()
+
+    { new IRefValue<_> with
+        member this.current 
+          with get() = 
+            match refValue with
+            | Some(x) -> x
+            | None -> failwith "no initial value provided"
+          and set value = refValue <- Some(value) }
+  useFakeRef
 
 type ContextResponse = { Everyone: string}
 
@@ -52,10 +64,11 @@ let rec convertToTestNode (htmlNode: HTMLNode) =
 let convertElementToTestNode element = 
   convertToTestNode (castHTMLNode element)
 
-let hacnTest = HacnBuilder((render useFakeRef useFakeState useFakeEffect))
 type TestProps = { Hello: string}
 
 let propsTest () = 
+  let useFakeRef = generateFakeRefHook ()
+  let hacnTest = HacnBuilder((render useFakeRef useFakeState useFakeEffect))
   let element = hacnTest {
     let! x = Props
     let! y = Render div [] [CaptureClick(fun _ -> "asdfer")] [str x.Hello; str " World"]
@@ -90,7 +103,39 @@ let TestOperation<'returnType> (result: 'returnType) =
         InvokeReturn(castResult)
   })
 
+type DelayedStatus =
+  | Delayed
+  | Returned
+
+type DelayedOperationState = 
+  {
+    Status: DelayedStatus
+  }
+
+let TestDelayedOperation<'returnType> (result: 'returnType) = 
+  Perform({
+    OperationType = NotCore
+    PreProcess = fun _ -> None
+    GetResult = fun _ operationState ->
+      let delayedFunc rerender =
+        rerender (fun _ -> Some({Status = Delayed} :> obj))
+        None
+      let returnedFunc rerender =
+        rerender (fun _ -> Some({Status = Returned} :> obj))
+        None
+      match operationState with
+      | None -> 
+        InvokeEffect(delayedFunc)
+      | Some(status) -> 
+        let castStatus: DelayedOperationState = explicitConvert status
+        match castStatus with
+        | {Status = Delayed} -> InvokeEffect(delayedFunc)
+        | {Status = Returned} -> InvokeEffect(returnedFunc)
+  })
+
 let anyTest () = 
+  let useFakeRef = generateFakeRefHook ()
+  let hacnTest = HacnBuilder((render useFakeRef useFakeState useFakeEffect))
   let element = hacnTest {
     let! _, testResponse = WaitAny2 (Render div [] [] [str "Hello"]) (TestOperation "Goodbye")
     match testResponse with
@@ -114,6 +159,135 @@ let anyTest () =
   | Node("div", _, [Text("Goodbye")]) -> ()
   | _ -> failwith (sprintf "node does not match: %A" goodbyeNode)
 
+// type StreamState<'returnType> = 
+//   {
+//     CurrentIdx: int;
+//     Result: 'returnType;
+//   }
+
+// let TestStreamOperation<'returnType> (result: 'returnType array) = 
+//   Perform({
+//     OperationType = NotCore
+//     PreProcess = fun _ -> None
+//     GetResult = fun _ operationState ->
+//       let effectFunc rerender =
+//         let nextResult streamState = 
+//           match streamState with
+//           | None -> 
+//             {CurrentIdx = 0; Result = result.[0]}
+//         rerender nextResult
+//         None
+//       match operationState with
+//       | None -> 
+//         InvokeEffect(effectFunc)
+//       | Some(result) -> 
+//         let castResult: 'returnType = explicitConvert result
+//         InvokeReturn(castResult)
+//   })
+
+let streamTest () = 
+  Tests.skiptest "Unimplemented"
+//   let useFakeRef = generateFakeRefHook ()
+//   let hacnTest = HacnBuilder((render useFakeRef useFakeState useFakeEffect))
+//   let element = hacnTest {
+//     let! _, testResponse = WaitAny2 (Render div [] [] [str "Hello"]) (TestOperation "Goodbye")
+//     match testResponse with
+//     | Some(testValue) -> 
+//       do! Render div [] [] [str testValue]
+//     | _ -> 
+//       do! Render div [] [] [str "No value..."]
+//   }
+
+//   let helloElement = element [] []
+//   let helloNode = convertElementToTestNode helloElement
+
+//   match helloNode with 
+//   | Node("div", _, [Text("Hello")]) -> ()
+//   | _ -> failwith (sprintf "node does not match: %A" helloNode)
+
+//   let goodbyeElement = element [] []
+//   let goodbyeNode = convertElementToTestNode goodbyeElement
+
+//   match goodbyeNode with 
+//   | Node("div", _, [Text("Goodbye")]) -> ()
+//   | _ -> failwith (sprintf "node does not match: %A" goodbyeNode)
+
+let waitSingleTest () = 
+  let useFakeRef = generateFakeRefHook ()
+  let hacnTest = HacnBuilder((render useFakeRef useFakeState useFakeEffect))
+  let element = hacnTest {
+    let! testResponse = TestOperation "Hello"
+    do! Render div [] [] [str testResponse]
+  }
+
+  let emptyElement = element [] []
+  let emptyNode = convertElementToTestNode emptyElement
+
+  match emptyNode with 
+  | Empty -> ()
+  | _ -> failwith (sprintf "node does not match: %A" emptyNode)
+
+  let helloElement = element [] []
+  let helloNode = convertElementToTestNode helloElement
+
+  match helloNode with 
+  | Node("div", _, [Text("Hello")]) -> ()
+  | _ -> failwith (sprintf "node does not match: %A" helloNode)
+
+let waitBothTest () = 
+  let useFakeRef = generateFakeRefHook ()
+  let hacnTest = HacnBuilder((render useFakeRef useFakeState useFakeEffect))
+  let element = hacnTest {
+    let! hello, world = Wait2 (TestOperation "Hello") (TestOperation "World")
+    do! Render div [] [] [str (sprintf "%s, %s!" hello world)]
+  }
+
+  let emptyElement = element [] []
+  let emptyNode = convertElementToTestNode emptyElement
+
+  match emptyNode with 
+  | Empty -> ()
+  | _ -> failwith (sprintf "node does not match: %A" emptyNode)
+
+  let helloElement = element [] []
+  let helloNode = convertElementToTestNode helloElement
+
+  match helloNode with 
+  | Node("div", _, [Text("Hello, World!")]) -> ()
+  | _ -> failwith (sprintf "node does not match: %A" helloNode)
+
+let waitSequentialTest () = 
+  let useFakeRef = generateFakeRefHook ()
+  let hacnTest = HacnBuilder((render useFakeRef useFakeState useFakeEffect))
+  let element = hacnTest {
+    let! hello, world = Wait2 (TestOperation "Hello") (TestDelayedOperation "World")
+    do! Render div [] [] [str (sprintf "%s, %s!" hello world)]
+  }
+
+  let startElement = element [] []
+  let startNode = convertElementToTestNode startElement
+
+  match startNode with 
+  | Empty -> ()
+  | _ -> failwith (sprintf "node does not match: %A" startNode)
+
+  let delayedElement = element [] []
+  let delayedNode = convertElementToTestNode delayedElement
+
+  match delayedNode with 
+  | Empty -> ()
+  | _ -> failwith (sprintf "node does not match: %A" delayedNode)
+
+  let helloElement = element [] []
+  let helloNode = convertElementToTestNode helloElement
+
+  match helloNode with 
+  | Node("div", _, [Text("Hello, World!")]) -> ()
+  | _ -> failwith (sprintf "node does not match: %A" helloNode)
+
+let waitMultipleTest () = 
+  Tests.skiptest "Unimplemented"
+
 let stateTest () = 
   Tests.skiptest "Unimplemented"
 
@@ -132,11 +306,6 @@ let refTest () =
 let backgroundTest () = 
   Tests.skiptest "Unimplemented"
 
-let waitTest () = 
-  Tests.skiptest "Unimplemented"
-
-let waitMultipleTest () = 
-  Tests.skiptest "Unimplemented"
 
 let ifThenTest () = 
   Tests.skiptest "Unimplemented"
@@ -152,15 +321,18 @@ let compositionTest () =
 
 let allTests =
   testList "All tests" [
-    testCase "Test changing props" propsTest;
-    ftestCase "Test waiting any" anyTest;
+    ftestCase "Test changing props" propsTest;
+    testCase "Test waiting any" anyTest;
+    testCase "Test waiting single" waitSingleTest;
+    testCase "Test waiting both at same time" waitBothTest;
+    ptestCase "Test waiting both one after another" waitSequentialTest;
+    testCase "Test stream effect" streamTest;
     testCase "Test setting state" stateTest;
     testCase "Test context" contextTest;
     testCase "Test capturing variables" eventCaptureTest;
     testCase "Test calling external function" callExternalTest;
     testCase "Test ref" refTest;
     testCase "Test background variable" backgroundTest;
-    testCase "Test waiting" waitTest;
     testCase "Test multiple waiting" waitMultipleTest;
     testCase "Test if/then" ifThenTest;
     testCase "Test match" matchTest;

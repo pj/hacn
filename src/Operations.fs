@@ -18,12 +18,13 @@ let Props<'props when 'props: equality> =
       match operationState with 
       | None -> failwith "Should never happen"
       | Some(propsOpState) ->
-        let props: 'props = propsOpState?Props
-        let prevPropsOption: 'props option = propsOpState?PrevProps
-        match prevPropsOption with
+        let castPropsOpState: PropsOperationState<obj> = explicitConvert propsOpState
+        match castPropsOpState.PrevProps with
         | None -> operationState
         | Some(prevProps) -> 
-          if props <> prevProps then
+          let castPrevProps: 'props = explicitConvert prevProps
+          let castProps: 'props = explicitConvert castPropsOpState.Props
+          if castProps <> castPrevProps then
             operationState
           else
             None
@@ -110,7 +111,6 @@ let Render<'returnType> element props (captures: Captures<'returnType> list) (ch
     OperationType = NotCore;
     PreProcess = fun _ -> None;
     GetResult = fun captureResult operationState -> 
-
       match operationState with
       | Some(result) -> 
         let castReturn: 'returnType = explicitConvert result
@@ -212,71 +212,81 @@ let ContextCore<'returnType when 'returnType : equality> (useContext: IContext<'
 
 let Context context = ContextCore Hooks.useContext context
 
+let createCombinedEffect eff1Opt eff2Opt = 
+  let combinedEffect render =
+    let indexedRerender stateLength index stateUpdater = 
+      let indexedStateUpdater underlyingState =
+        let currentState: (obj option) array = 
+          match underlyingState with 
+          | None -> Array.create stateLength None
+          | Some(x) -> explicitConvert x
+        let updatedState = stateUpdater (currentState.[index])
+        Array.set
+          currentState
+          index
+          updatedState
+        Some(currentState :> obj)
+      render indexedStateUpdater
+
+    let disposeOpt1 = 
+      match eff1Opt with
+        | Some(eff1) ->
+          eff1 (indexedRerender 2 0)
+        | _ -> None
+    
+    let disposeOpt2 = 
+      match eff2Opt with
+        | Some(eff2) ->
+          eff2 (indexedRerender 2 1)
+        | _ -> None
+
+    Some(
+      fun () -> 
+        match disposeOpt1 with 
+        | Some(dispose) -> dispose ()
+        | _ -> ()
+
+        match disposeOpt2 with
+        | Some(dispose) -> dispose ()
+        | _ -> ()
+        ()
+    )
+  combinedEffect
+      
+
 let Wait2 op1 op2 = 
   Perform({ 
     OperationType = NotCore;
     PreProcess = fun _ -> None
     GetResult = fun capture operationState -> 
-      match operationState with
-      | Some(underlyingState) ->
-        let underlyingStateCast: (obj option) list = explicitConvert underlyingState
-        let opState1 = underlyingStateCast.[0]
-        let opResult1 = 
-          match op1 with
-          | Perform(pd1) -> 
-            pd1.GetResult capture opState1
-          | _ -> failwith "Can only work with Perform operations"
-        let opState2 = underlyingStateCast.[1]
-        let opResult2 = 
-          match op2 with
-          | Perform(pd2) -> 
-            pd2.GetResult capture opState2
-          | _ -> failwith "Can only work with Perform operations"
-        
-        match opResult1, opResult2 with
-        // | InvokeRender(ren1), InvokeEffect(eff2) -> 
-        //   InvokeWait
-        // | InvokeEffect(eff1), InvokeRender(ren2) -> 
-        //   InvokeWait
-        | InvokeEffect(eff1), InvokeEffect(eff2) -> 
-          let combinedEffect render =
-            let indexedRerender stateLength index stateUpdater = 
-              let indexedStateUpdater underlyingState =
-                let castState: ((obj option) array) option = explicitConvert underlyingState
-                let currentState = 
-                  match castState with 
-                  | None -> Array.create stateLength None
-                  | Some(x) -> x
-                let updatedState = stateUpdater (currentState.[index])
-                Array.set
-                  currentState
-                  index
-                  updatedState
-                Some(currentState :> obj)
-              render indexedStateUpdater
-
-            let disposeOpt1 = eff1 (indexedRerender 2 0)
-            let disposeOpt2 = eff2 (indexedRerender 2 1)
-
-            Some(
-              fun () -> 
-                match disposeOpt1 with 
-                | Some(dispose) -> dispose ()
-                | _ -> ()
-
-                match disposeOpt2 with
-                | Some(dispose) -> dispose ()
-                | _ -> ()
-                ()
-            )
-
-          InvokeEffect(combinedEffect)
-        | InvokeWait, _ -> InvokeWait
-        | _, InvokeWait -> InvokeWait
-        | InvokeReturn(ret1), InvokeReturn(ret2) -> InvokeReturn((ret1, ret2))
-        | _ -> failwith "Incorrect lifecycle or non-waitable effect"
-      | None ->
-        InvokeWait
+      let underlyingStateCast: (obj option) array = 
+        match operationState with
+        | Some(x) -> explicitConvert x
+        | None -> [|None; None|]
+      let opState1 = underlyingStateCast.[0]
+      let opResult1 = 
+        match op1 with
+        | Perform(pd1) -> 
+          pd1.GetResult capture opState1
+        | _ -> failwith "Can only work with Perform operations"
+      let opState2 = underlyingStateCast.[1]
+      let opResult2 = 
+        match op2 with
+        | Perform(pd2) -> 
+          pd2.GetResult capture opState2
+        | _ -> failwith "Can only work with Perform operations"
+      
+      match opResult1, opResult2 with
+      // | InvokeRender(ren1), InvokeEffect(eff2) -> 
+      //   InvokeWait
+      // | InvokeEffect(eff1), InvokeRender(ren2) -> 
+      //   InvokeWait
+      | InvokeEffect(eff1), InvokeEffect(eff2) -> 
+        InvokeEffect(createCombinedEffect (Some(eff1)) (Some(eff2)))
+      | InvokeWait, _ -> InvokeWait
+      | _, InvokeWait -> InvokeWait
+      | InvokeReturn(ret1), InvokeReturn(ret2) -> InvokeReturn((ret1, ret2))
+      | _ -> failwith "Incorrect lifecycle or non-waitable effect"
   })
 
 let WaitAny2 op1 op2 = 
@@ -284,10 +294,10 @@ let WaitAny2 op1 op2 =
     OperationType = NotCore;
     PreProcess = fun _ -> None
     GetResult = fun capture operationState -> 
-      let underlyingStateCast: (obj option) list = 
+      let underlyingStateCast: (obj option) array = 
         match operationState with
         | Some(x) -> explicitConvert x
-        | None -> [None; None]
+        | None -> [|None; None|]
       let opState1 = underlyingStateCast.[0]
       let opResult1 = 
         match op1 with
@@ -303,42 +313,11 @@ let WaitAny2 op1 op2 =
       
       match opResult1, opResult2 with
       | InvokeRender(ren1), InvokeEffect(eff2) -> 
-        InvokeBoth(ren1, eff2)
+        InvokeBoth(ren1, createCombinedEffect None (Some(eff2)))
       | InvokeEffect(eff1), InvokeRender(ren2) -> 
-        InvokeBoth(ren2, eff1)
+        InvokeBoth(ren2, createCombinedEffect (Some(eff1)) None)
       | InvokeEffect(eff1), InvokeEffect(eff2) -> 
-        let combinedEffect render =
-          let indexedRerender stateLength index stateUpdater = 
-            let indexedStateUpdater underlyingState =
-              let castState: ((obj option) array) option = explicitConvert underlyingState
-              let currentState = 
-                match castState with 
-                | None -> Array.create stateLength None
-                | Some(x) -> x
-              let updatedState = stateUpdater (currentState.[index])
-              Array.set
-                currentState
-                index
-                updatedState
-              Some(currentState :> obj)
-            render indexedStateUpdater
-
-          let disposeOpt1 = eff1 (indexedRerender 2 0)
-          let disposeOpt2 = eff2 (indexedRerender 2 1)
-
-          Some(
-            fun () -> 
-              match disposeOpt1 with 
-              | Some(dispose) -> dispose ()
-              | _ -> ()
-
-              match disposeOpt2 with
-              | Some(dispose) -> dispose ()
-              | _ -> ()
-              ()
-          )
-
-        InvokeEffect(combinedEffect)
+        InvokeEffect(createCombinedEffect (Some(eff1)) (Some(eff2)))
       | InvokeWait, InvokeWait -> 
         InvokeWait
       | InvokeReturn(ret1), InvokeWait -> 
