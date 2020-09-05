@@ -27,7 +27,7 @@ type RefState<'props, 'state> =
     OperationIndex: int;
 
     // Component state object
-    ComponentState: Operations.StateContainer<'state>;
+    ComponentState: obj option;
   }
 
 let bind underlyingOperation f = 
@@ -47,6 +47,7 @@ let bind underlyingOperation f =
           match underlyingOperation with
           | Perform(operationData) -> 
             let operationResult = operationData.GetResult captureFunc operationState
+            printf "Result: %A\n" operationResult
 
             match operationResult with
             | InvokeReturn(result) -> 
@@ -87,7 +88,7 @@ let getOperationState refState operationType opState props =
       let propsState: Operations.PropsOperationState<obj> = {Props = props; PrevProps = Some(castPropsState.Props)}
       Some(propsState :> obj)
   | StateGet -> 
-    Some(refState.ComponentState :> obj)
+    Option.map (fun state -> state :> obj) refState.ComponentState
   | _ -> opState
 
 // Preprocess operations e.g. props, context, refs
@@ -102,11 +103,13 @@ let preprocessOperations refState props =
             let processOpState: obj option = getOperationState refState operationType opState props
 
             // printf "------------------\n"
-            // printf "%A\n" processOpState
+            printf "Before preProcess %A\n" processOpState
             let result = preProcess processOpState
-            // printf "%A\n" result
+            printf "%A\n" result
             match result with
               | Some(newOpState) -> 
+                if operationType = StateGet then
+                  nextState <- {refState with ComponentState = Some(newOpState)}
                 Array.set 
                   nextState.Operations 
                   index 
@@ -126,6 +129,7 @@ let execute resultCapture wrapEffect componentState props =
   let mutable renderedElement = None
   let mutable nextOperations = componentState.Operations
   let mutable nextEffect = None
+  let mutable updatedComponentState = componentState.ComponentState
 
   while not stop do
     let currentOperation = nextOperations.[currentIndex]
@@ -165,7 +169,9 @@ let execute resultCapture wrapEffect componentState props =
                   nextOpData.PreProcess(Some(propsOperationState :> obj)) |> ignore
                   Some(propsOperationState :> obj)
                 | StateGet -> 
-                  Some(componentState.ComponentState :> obj)
+                  let updatedStateGet = nextOpData.PreProcess(componentState.ComponentState) |> ignore
+                  updatedComponentState <- Some(updatedStateGet :> obj)
+                  Some(updatedStateGet :> obj)
                 | _ ->
                   nextOpData.PreProcess(None)
               nextOperations <- 
@@ -187,7 +193,7 @@ let execute resultCapture wrapEffect componentState props =
       OperationIndex = currentIndex; 
       Operations = nextOperations; 
       Element = renderedElement;
-      ComponentState = componentState.ComponentState;
+      ComponentState = updatedComponentState
     },
     nextEffect
   )
@@ -197,10 +203,7 @@ let render useRef useState useEffect delayedFunc props =
     Element = None;
     Operations = [||];
     OperationIndex = -1;
-    ComponentState = {
-      Updated = false;
-      ComponentState = None;
-    };
+    ComponentState = None;
   })
 
   // trigger rerender by updating a state variable
@@ -241,6 +244,8 @@ let render useRef useState useEffect delayedFunc props =
       updateDisposer index disposer
       ()
     wrappedEffect
+
+  printf "---------------------\n"
 
   componentStateRef.current <- getFirstOperation delayedFunc componentStateRef.current
 

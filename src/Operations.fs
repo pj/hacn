@@ -142,35 +142,36 @@ let Render<'returnType> element props (captures: Captures<'returnType> list) (ch
 type StateContainer<'state> = 
   {
     Updated: bool;
-    ComponentState: 'state option;
+    ComponentState: 'state;
   }
 
-let Get<'state> (initialState: 'state option) =
+let Get<'state> (initialState: 'state) =
   Perform({ 
     OperationType = StateGet;
     PreProcess = fun operationState -> 
-      let castOperationState: StateContainer<'state> option = explicitConvert operationState
-      match castOperationState with 
+      match operationState with 
       | None -> 
         Some(
           {
-            Updated = false; 
+            Updated = true; 
             ComponentState = initialState;
           } :> obj
         )
       | Some(currentState) -> 
-        if currentState.Updated then
-          Some({currentState with Updated = false} :> obj)
+        let castCurrentState: StateContainer<'state> = explicitConvert currentState
+        if castCurrentState.Updated then
+          Some({castCurrentState with Updated = false} :> obj)
         else 
           None
     GetResult = fun _ operationState -> 
-      let stateCast: 'state option = operationState?State
-      match stateCast with
-      | Some(state) -> InvokeReturn(state)
+      match operationState with
+      | Some(state) -> 
+        let castCurrentState: StateContainer<'state> = explicitConvert state
+        InvokeReturn(castCurrentState.ComponentState)
       | None -> failwith "Please set state before calling Get()"
   })
 
-let Set<'state>(newState: 'state) =
+let Set<'state> (newState: 'state) : Operation<obj, unit> =
   Perform({
     OperationType = StateSet;
     PreProcess = fun _ -> None;
@@ -254,17 +255,23 @@ let Wait2 op1 op2 =
           pd2.GetResult capture opState2
         | _ -> failwith "Can only work with Perform operations"
       
+      printf "Underlying Result: %A %A\n" opResult1 opResult2
+      
       match opResult1, opResult2 with
-      // | InvokeRender(ren1), InvokeEffect(eff2) -> 
-      //   InvokeWait
-      // | InvokeEffect(eff1), InvokeRender(ren2) -> 
-      //   InvokeWait
+      | InvokeRender(ren1), InvokeEffect(eff2) -> 
+        InvokeBoth(ren1, createCombinedEffect None (Some(eff2)))
+      | InvokeEffect(eff1), InvokeRender(ren2) -> 
+        InvokeBoth(ren2, createCombinedEffect (Some(eff1)) None)
       | InvokeEffect(eff1), InvokeEffect(eff2) -> 
         InvokeEffect(createCombinedEffect (Some(eff1)) (Some(eff2)))
       | InvokeEffect(eff1), InvokeReturn(_) -> 
         InvokeEffect(createCombinedEffect (Some(eff1)) None)
       | InvokeReturn(_), InvokeEffect(eff2) -> 
         InvokeEffect(createCombinedEffect None (Some(eff2)))
+      // | InvokeRender(_), InvokeReturn(ret2) -> 
+      //   InvokeReturn((null, ret2))
+      // | InvokeReturn(ret1), InvokeRender(_) -> 
+      //   InvokeReturn((ret1, null))
       | InvokeWait, _ -> InvokeWait
       | _, InvokeWait -> InvokeWait
       | InvokeReturn(ret1), InvokeReturn(ret2) -> InvokeReturn((ret1, ret2))

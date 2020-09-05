@@ -103,13 +103,9 @@ let TestOperation<'returnType> (result: 'returnType) =
         InvokeReturn(castResult)
   })
 
-type DelayedStatus =
-  | Delayed
-  | Returned
-
 type DelayedOperationState = 
   {
-    Status: DelayedStatus
+    Status: bool
   }
 
 let TestDelayedOperation<'returnType> (result: 'returnType) = 
@@ -118,10 +114,10 @@ let TestDelayedOperation<'returnType> (result: 'returnType) =
     PreProcess = fun _ -> None
     GetResult = fun _ operationState ->
       let delayedFunc rerender =
-        rerender (fun _ -> Some({Status = Delayed} :> obj))
+        rerender (fun _ -> Some({Status = true} :> obj))
         None
       let returnedFunc rerender =
-        rerender (fun _ -> Some({Status = Returned} :> obj))
+        rerender (fun _ -> Some({Status = false} :> obj))
         None
       match operationState with
       | None -> 
@@ -129,8 +125,8 @@ let TestDelayedOperation<'returnType> (result: 'returnType) =
       | Some(status) -> 
         let castStatus: DelayedOperationState = explicitConvert status
         match castStatus with
-        | {Status = Delayed} -> InvokeEffect(delayedFunc)
-        | {Status = Returned} -> InvokeEffect(returnedFunc)
+        | {Status = true} -> InvokeEffect(returnedFunc)
+        | {Status = false} -> InvokeReturn(result)
   })
 
 let anyTest () = 
@@ -285,14 +281,79 @@ let waitSequentialTest () =
   | Node("div", _, [Text("Hello, World!")]) -> ()
   | _ -> failwith (sprintf "node does not match: %A" helloNode)
 
-let waitMultipleTest () = 
-  Tests.skiptest "Unimplemented"
+type TestState =
+  {
+    Current: int
+  }
+
+type TestStreamTrigger () = 
+  let mutable trigger = None
+  member this.Trigger with set value = trigger <- Some(value)
+  member this.Call value = 
+    match trigger with
+    | Some(underlying) -> underlying value
+    | None -> failwith "Should not happen"
+
+let TestStreamOperation<'returnType> (trigger: TestStreamTrigger) =
+  Perform({
+    OperationType = NotCore
+    PreProcess = fun _ -> None
+    GetResult = fun _ operationState ->
+      let effectFunc rerender =
+        let returnTrigger value = 
+          rerender (fun _ -> Some(value :> obj))
+        trigger.Trigger <- returnTrigger
+        None
+      match operationState with
+      | None -> 
+        InvokeEffect(effectFunc)
+      | Some(result) -> 
+        let castResult: 'returnType = explicitConvert result
+        InvokeReturn(castResult)
+  })
 
 let stateTest () = 
-  Tests.skiptest "Unimplemented"
+  let useFakeRef = generateFakeRefHook ()
+  let testTrigger = TestStreamTrigger ()
+  let hacnTest = HacnBuilder((render useFakeRef useFakeState useFakeEffect))
+  let element = hacnTest {
+    let! componentState = Get({Current = 1})
+    let! increment = (TestStreamOperation testTrigger)
+    if increment then
+      do! Render div [] [] [str (sprintf "%d!" componentState.Current)]
+      do! Set({Current = componentState.Current + 1})
+  }
 
-let contextTest () = 
-  Tests.skiptest "Unimplemented"
+  let oneElement = element [] []
+  let oneNode = convertElementToTestNode oneElement
+
+  match oneNode with 
+  | Node("div", _, [Text("1!")]) -> ()
+  | _ -> failwith (sprintf "node does not match: %A" oneNode)
+
+  testTrigger.Call true
+  let twoElement = element [] []
+  let twoNode = convertElementToTestNode twoElement
+
+  match twoNode with 
+  | Node("div", _, [Text("2!")]) -> ()
+  | _ -> failwith (sprintf "node does not match: %A" twoNode)
+
+  testTrigger.Call false
+  let sameElement = element [] []
+  let sameNode = convertElementToTestNode sameElement
+
+  match sameNode with 
+  | Node("div", _, [Text("2!")]) -> ()
+  | _ -> failwith (sprintf "node does not match: %A" sameNode)
+
+  testTrigger.Call true
+  let threeElement = element [] []
+  let threeNode = convertElementToTestNode threeElement
+
+  match threeNode with 
+  | Node("div", _, [Text("3!")]) -> ()
+  | _ -> failwith (sprintf "node does not match: %A" threeNode)
 
 let eventCaptureTest () =
   Tests.skiptest "Unimplemented"
@@ -300,17 +361,7 @@ let eventCaptureTest () =
 let callExternalTest () = 
   Tests.skiptest "Unimplemented"
 
-let refTest () = 
-  Tests.skiptest "Unimplemented"
-
 let backgroundTest () = 
-  Tests.skiptest "Unimplemented"
-
-
-let ifThenTest () = 
-  Tests.skiptest "Unimplemented"
-
-let matchTest () = 
   Tests.skiptest "Unimplemented"
 
 let errorHandlingTest () = 
@@ -319,28 +370,28 @@ let errorHandlingTest () =
 let compositionTest () = 
   Tests.skiptest "Unimplemented"
 
+let contextTest () = 
+  Tests.skiptest "Unimplemented"
+
+let refTest () = 
+  Tests.skiptest "Unimplemented"
+
 let allTests =
   testList "All tests" [
     testCase "Test changing props" propsTest;
     testCase "Test waiting any" anyTest;
     testCase "Test waiting single" waitSingleTest;
     testCase "Test waiting both at same time" waitBothTest;
-    ftestCase "Test waiting both one after another" waitSequentialTest;
+    testCase "Test waiting both one after another" waitSequentialTest;
     testCase "Test stream effect" streamTest;
-    testCase "Test setting state" stateTest;
-    testCase "Test context" contextTest;
+    ptestCase "Test setting state" stateTest;
     testCase "Test capturing variables" eventCaptureTest;
     testCase "Test calling external function" callExternalTest;
-    testCase "Test ref" refTest;
     testCase "Test background variable" backgroundTest;
-    testCase "Test multiple waiting" waitMultipleTest;
-    testCase "Test if/then" ifThenTest;
-    testCase "Test match" matchTest;
-    testCase "Test error handling" errorHandlingTest;
-
     testCase "Test composition" compositionTest;
-    // Maybe?
-    // testCase "Test workflow" propsTest;
+    testCase "Test error handling" errorHandlingTest;
+    testCase "Test context" contextTest;
+    testCase "Test ref" refTest;
   ]
 
 [<EntryPoint>]
