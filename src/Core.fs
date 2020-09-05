@@ -129,12 +129,9 @@ let execute resultCapture wrapEffect componentState props =
 
   while not stop do
     let currentOperation = nextOperations.[currentIndex]
-    printf "%A\n" nextOperations
-    printf "%A\n" currentIndex
     match currentOperation.Operation with
       | Control({RunOperation = runOperation}) ->
         let capture = resultCapture currentOperation.Index 
-        printf "%A\n" currentOperation.State
         let invokeResult = runOperation capture currentOperation.State 
         match invokeResult with
         | ControlWait -> 
@@ -155,10 +152,11 @@ let execute resultCapture wrapEffect componentState props =
           | Perform(_) -> failwith "Perform should not be passed here"
           | Control(nextOpData) ->
             if (currentIndex + 1) < componentState.Operations.Length then
+              let currentNextOp = nextOperations.[currentIndex+1]
               Array.set
                 nextOperations
                 (currentIndex + 1)
-                {currentOperation with Operation = Control(nextOpData)}
+                {currentNextOp with Operation = Control(nextOpData)}
             else
               let preProcessState = 
                 match nextOpData.OperationType with
@@ -247,8 +245,6 @@ let render useRef useState useEffect delayedFunc props =
   componentStateRef.current <- getFirstOperation delayedFunc componentStateRef.current
 
   componentStateRef.current <- preprocessOperations componentStateRef.current props
-
-  printf "-------------------\n"
 
   let nextState, wrappedEffectOpt = execute updateStateAt wrapEffect componentStateRef.current props
 

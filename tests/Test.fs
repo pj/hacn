@@ -321,11 +321,11 @@ let compositionTest () =
 
 let allTests =
   testList "All tests" [
-    ftestCase "Test changing props" propsTest;
+    testCase "Test changing props" propsTest;
     testCase "Test waiting any" anyTest;
     testCase "Test waiting single" waitSingleTest;
     testCase "Test waiting both at same time" waitBothTest;
-    ptestCase "Test waiting both one after another" waitSequentialTest;
+    ftestCase "Test waiting both one after another" waitSequentialTest;
     testCase "Test stream effect" streamTest;
     testCase "Test setting state" stateTest;
     testCase "Test context" contextTest;

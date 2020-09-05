@@ -190,28 +190,6 @@ let Set<'state>(newState: 'state) =
       )
   })
 
-let ContextCore<'returnType when 'returnType : equality> (useContext: IContext<'returnType> -> 'returnType) (context: IContext<'returnType>) =
-  Perform({ 
-    OperationType = NotCore;
-    PreProcess = fun operationState -> 
-      let currentContext = useContext(context)
-      let castOperationState: 'returnType option = explicitConvert operationState
-      match castOperationState with
-      | Some(existingContext) -> 
-        if existingContext <> currentContext then
-          Some(currentContext :> obj)
-        else 
-          None
-      | None -> Some(currentContext :> obj)
-    GetResult = fun _ operationState -> 
-      let castOperationState: 'returnType option = explicitConvert operationState
-      match castOperationState with
-      | Some(existingContext) -> InvokeReturn(existingContext)
-      | None -> failwith "should not happen"
-  })
-
-let Context context = ContextCore Hooks.useContext context
-
 let createCombinedEffect eff1Opt eff2Opt = 
   let combinedEffect render =
     let indexedRerender stateLength index stateUpdater = 
@@ -283,10 +261,14 @@ let Wait2 op1 op2 =
       //   InvokeWait
       | InvokeEffect(eff1), InvokeEffect(eff2) -> 
         InvokeEffect(createCombinedEffect (Some(eff1)) (Some(eff2)))
+      | InvokeEffect(eff1), InvokeReturn(_) -> 
+        InvokeEffect(createCombinedEffect (Some(eff1)) None)
+      | InvokeReturn(_), InvokeEffect(eff2) -> 
+        InvokeEffect(createCombinedEffect None (Some(eff2)))
       | InvokeWait, _ -> InvokeWait
       | _, InvokeWait -> InvokeWait
       | InvokeReturn(ret1), InvokeReturn(ret2) -> InvokeReturn((ret1, ret2))
-      | _ -> failwith "Incorrect lifecycle or non-waitable effect"
+      | _ -> failwith (sprintf "Incorrect lifecycle or non-waitable effect: %A %A\n" opResult1 opResult2)
   })
 
 let WaitAny2 op1 op2 = 
@@ -353,6 +335,28 @@ let Interval = End
 let Fetch = End
 
 // Core operations
+let ContextCore<'returnType when 'returnType : equality> (useContext: IContext<'returnType> -> 'returnType) (context: IContext<'returnType>) =
+  Perform({ 
+    OperationType = NotCore;
+    PreProcess = fun operationState -> 
+      let currentContext = useContext(context)
+      let castOperationState: 'returnType option = explicitConvert operationState
+      match castOperationState with
+      | Some(existingContext) -> 
+        if existingContext <> currentContext then
+          Some(currentContext :> obj)
+        else 
+          None
+      | None -> Some(currentContext :> obj)
+    GetResult = fun _ operationState -> 
+      let castOperationState: 'returnType option = explicitConvert operationState
+      match castOperationState with
+      | Some(existingContext) -> InvokeReturn(existingContext)
+      | None -> failwith "should not happen"
+  })
+
+let Context context = ContextCore Hooks.useContext context
+
 let Ref = End
 
 // Call a function passed in through props in an effect.
