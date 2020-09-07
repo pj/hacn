@@ -16,11 +16,12 @@ type Effect = ReRender -> Dispose
 type CaptureReturn = (obj option -> unit)
 
 type InvokeResult<'props, 'returnType> =
-  | InvokeBoth of ReactElement * Effect
-  | InvokeRender of ReactElement
-  | InvokeEffect of Effect
-  | InvokeReturn of 'returnType
-  | InvokeWait
+  // | InvokeBoth of ReactElement * Effect
+  // | InvokeRender of ReactElement
+  // | InvokeEffect of Effect
+  // | InvokeReturn of 'returnType
+  | InvokeWait of ReactElement option * Effect option
+  | InvokeContinue of ReactElement option * Effect option * 'returnType
 and PerformData<'props, 'returnType> =
   { 
     OperationType: CoreOperationTypes;
@@ -29,16 +30,18 @@ and PerformData<'props, 'returnType> =
   }
 
 and ControlResult<'props> =
-  | ControlBoth of ReactElement * Effect
-  | ControlRender of ReactElement
-  | ControlEffect of Effect
-  | ControlNextOperation of Operation<'props, unit>
-  | ControlWait
+//   | ControlBoth of ReactElement * Effect
+//   | ControlRender of ReactElement
+//   | ControlEffect of Effect
+//   | ControlNextOperation of Operation<'props, unit>
+//   | ControlWait
+  | ControlWait of ReactElement option * Effect option
+  | ControlNext of ReactElement option * Effect option * Operation<'props, unit>
 and ControlData<'props> =
   { 
     OperationType: CoreOperationTypes;
     PreProcess: obj option -> obj option;
-    RunOperation: CaptureReturn -> obj option -> ControlResult<'props>;
+    GetResult: CaptureReturn -> obj option -> ControlResult<'props>;
   }
 and Operation<'props, 'returnType> =
   | Perform of PerformData<'props, 'returnType>

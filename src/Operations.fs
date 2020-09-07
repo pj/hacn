@@ -33,7 +33,7 @@ let Props<'props when 'props: equality> =
       | None -> failwith "Should not happen"
       | Some(propsOpState) ->
         let props: 'props = propsOpState?Props
-        InvokeReturn(props)
+        InvokeContinue(None, None, props)
   })
 
 type Captures<'returnType> =
@@ -111,32 +111,33 @@ let Render<'returnType> element props (captures: Captures<'returnType> list) (ch
     OperationType = NotCore;
     PreProcess = fun _ -> None;
     GetResult = fun captureResult operationState -> 
+      let convertCaptureToProp capture =
+        let x = 
+          match capture with
+          | CaptureChange (changeFunc) ->
+            OnChange(
+              fun event -> 
+                let transformedEvent = changeFunc event
+                captureResult (Some(transformedEvent :> obj))
+                ()
+            )
+          | CaptureClick(clickFunc) ->
+            OnClick(
+              fun event -> 
+                let transformedEvent = clickFunc event
+                captureResult (Some(transformedEvent :> obj))
+                ()
+            )
+        x :> IHTMLProp
+
+      let captureProps = List.map convertCaptureToProp captures
+      let renderedElement = element (List.append props captureProps) children
       match operationState with
       | Some(result) -> 
         let castReturn: 'returnType = explicitConvert result
-        InvokeReturn(castReturn)
+        InvokeContinue(Some(renderedElement), None, castReturn)
       | _ ->
-        let convertCaptureToProp capture =
-          let x = 
-            match capture with
-            | CaptureChange (changeFunc) ->
-              OnChange(
-                fun event -> 
-                  let transformedEvent = changeFunc event
-                  captureResult (Some(transformedEvent :> obj))
-                  ()
-              )
-            | CaptureClick(clickFunc) ->
-              OnClick(
-                fun event -> 
-                  let transformedEvent = clickFunc event
-                  captureResult (Some(transformedEvent :> obj))
-                  ()
-              )
-          x :> IHTMLProp
-
-        let captureProps = List.map convertCaptureToProp captures
-        InvokeRender (element (List.append props captureProps) children)
+        InvokeWait(Some(renderedElement), None)
   })
 
 type StateContainer<'state> = 
@@ -167,7 +168,7 @@ let Get<'state> (initialState: 'state) =
       match operationState with
       | Some(state) -> 
         let castCurrentState: StateContainer<'state> = explicitConvert state
-        InvokeReturn(castCurrentState.ComponentState)
+        InvokeContinue(None, None, castCurrentState.ComponentState)
       | None -> failwith "Please set state before calling Get()"
   })
 
@@ -176,62 +177,70 @@ let Set<'state> (newState: 'state) : Operation<obj, unit> =
     OperationType = StateSet;
     PreProcess = fun _ -> None;
     GetResult = fun _ _ -> 
-      InvokeEffect(
-        fun rerender -> 
-          let updateState _ = 
-            Some(
-              {
-                Updated = true;
-                ComponentState = Some(newState)
-              } :> obj
-            )
+      let stateSetter rerender =
+        let updateState _ = 
+          Some(
+            {
+              Updated = true;
+              ComponentState = Some(newState)
+            } :> obj
+          )
 
-          rerender updateState
-          None
-      )
+        rerender updateState
+        None
+      InvokeWait(None, Some(stateSetter))
   })
 
 let createCombinedEffect eff1Opt eff2Opt = 
-  let combinedEffect render =
-    let indexedRerender stateLength index stateUpdater = 
-      let indexedStateUpdater underlyingState =
-        let currentState: (obj option) array = 
-          match underlyingState with 
-          | None -> Array.create stateLength None
-          | Some(x) -> explicitConvert x
-        let updatedState = stateUpdater (currentState.[index])
-        Array.set
-          currentState
-          index
-          updatedState
-        Some(currentState :> obj)
-      render indexedStateUpdater
+  match eff1Opt, eff2Opt with
+  | None, None -> None
+  | eff1Opt, eff2Opt ->
+    let combinedEffect render =
+      let indexedRerender stateLength index stateUpdater = 
+        let indexedStateUpdater underlyingState =
+          let currentState: (obj option) array = 
+            match underlyingState with 
+            | None -> Array.create stateLength None
+            | Some(x) -> explicitConvert x
+          let updatedState = stateUpdater (currentState.[index])
+          Array.set
+            currentState
+            index
+            updatedState
+          Some(currentState :> obj)
+        render indexedStateUpdater
 
-    let disposeOpt1 = 
-      match eff1Opt with
-        | Some(eff1) ->
-          eff1 (indexedRerender 2 0)
-        | _ -> None
-    
-    let disposeOpt2 = 
-      match eff2Opt with
-        | Some(eff2) ->
-          eff2 (indexedRerender 2 1)
-        | _ -> None
-
-    Some(
-      fun () -> 
-        match disposeOpt1 with 
-        | Some(dispose) -> dispose ()
-        | _ -> ()
-
-        match disposeOpt2 with
-        | Some(dispose) -> dispose ()
-        | _ -> ()
-        ()
-    )
-  combinedEffect
+      let disposeOpt1 = 
+        match eff1Opt with
+          | Some(eff1) ->
+            eff1 (indexedRerender 2 0)
+          | _ -> None
       
+      let disposeOpt2 = 
+        match eff2Opt with
+          | Some(eff2) ->
+            eff2 (indexedRerender 2 1)
+          | _ -> None
+
+      Some(
+        fun () -> 
+          match disposeOpt1 with 
+          | Some(dispose) -> dispose ()
+          | _ -> ()
+
+          match disposeOpt2 with
+          | Some(dispose) -> dispose ()
+          | _ -> ()
+          ()
+      )
+    Some(combinedEffect)
+
+let getElement elementOpt1 elementOpt2 =
+  match elementOpt1, elementOpt2 with
+  | Some(element1), Some(_) -> Some(element1)
+  | Some(element1), None -> Some(element1)
+  | None, Some(element2) -> Some(element2)
+  | None, None -> None
 
 let Wait2 op1 op2 = 
   Perform({ 
@@ -255,27 +264,18 @@ let Wait2 op1 op2 =
           pd2.GetResult capture opState2
         | _ -> failwith "Can only work with Perform operations"
       
-      printf "Underlying Result: %A %A\n" opResult1 opResult2
-      
       match opResult1, opResult2 with
-      | InvokeRender(ren1), InvokeEffect(eff2) -> 
-        InvokeBoth(ren1, createCombinedEffect None (Some(eff2)))
-      | InvokeEffect(eff1), InvokeRender(ren2) -> 
-        InvokeBoth(ren2, createCombinedEffect (Some(eff1)) None)
-      | InvokeEffect(eff1), InvokeEffect(eff2) -> 
-        InvokeEffect(createCombinedEffect (Some(eff1)) (Some(eff2)))
-      | InvokeEffect(eff1), InvokeReturn(_) -> 
-        InvokeEffect(createCombinedEffect (Some(eff1)) None)
-      | InvokeReturn(_), InvokeEffect(eff2) -> 
-        InvokeEffect(createCombinedEffect None (Some(eff2)))
-      // | InvokeRender(_), InvokeReturn(ret2) -> 
-      //   InvokeReturn((null, ret2))
-      // | InvokeReturn(ret1), InvokeRender(_) -> 
-      //   InvokeReturn((ret1, null))
-      | InvokeWait, _ -> InvokeWait
-      | _, InvokeWait -> InvokeWait
-      | InvokeReturn(ret1), InvokeReturn(ret2) -> InvokeReturn((ret1, ret2))
-      | _ -> failwith (sprintf "Incorrect lifecycle or non-waitable effect: %A %A\n" opResult1 opResult2)
+      | InvokeWait(element1, effect1), InvokeWait(element2, effect2) ->
+        InvokeWait((getElement element1 element2), (createCombinedEffect effect1 effect2))
+
+      | InvokeWait(element1, effect1), InvokeContinue(element2, effect2, _) ->
+        InvokeWait((getElement element1 element2), (createCombinedEffect effect1 effect2))
+
+      | InvokeContinue(element1, effect1, _), InvokeWait(element2, effect2) ->
+        InvokeWait((getElement element1 element2), (createCombinedEffect effect1 effect2))
+
+      | InvokeContinue(element1, effect1, ret1), InvokeContinue(element2, effect2, ret2) ->
+        InvokeContinue((getElement element1 element2), (createCombinedEffect effect1 effect2), (ret1, ret2))
   })
 
 let WaitAny2 op1 op2 = 
@@ -301,29 +301,17 @@ let WaitAny2 op1 op2 =
         | _ -> failwith "Can only work with Perform operations"
       
       match opResult1, opResult2 with
-      | InvokeRender(ren1), InvokeEffect(eff2) -> 
-        InvokeBoth(ren1, createCombinedEffect None (Some(eff2)))
-      | InvokeEffect(eff1), InvokeRender(ren2) -> 
-        InvokeBoth(ren2, createCombinedEffect (Some(eff1)) None)
-      | InvokeEffect(eff1), InvokeEffect(eff2) -> 
-        InvokeEffect(createCombinedEffect (Some(eff1)) (Some(eff2)))
-      | InvokeWait, InvokeWait -> 
-        InvokeWait
-      | InvokeReturn(ret1), InvokeWait -> 
-        InvokeReturn((Some(ret1), None))
-      | InvokeWait, InvokeReturn(ret2) -> 
-        InvokeReturn((None, Some(ret2)))
-      | InvokeReturn(ret1), InvokeReturn(ret2) -> 
-        InvokeReturn((Some(ret1), Some(ret2)))
-      | InvokeRender(_), InvokeReturn(ret2) -> 
-        InvokeReturn((None, Some(ret2)))
-      | InvokeReturn(ret1), InvokeRender(_) -> 
-        InvokeReturn((Some(ret1), None))
-      | InvokeRender(ren1), InvokeWait -> 
-        InvokeRender(ren1)
-      | InvokeWait, InvokeRender(ren2) -> 
-        InvokeRender(ren2)
-      | _ -> failwith "Incorrect lifecycle or non-waitable effect"
+      | InvokeWait(element1, effect1), InvokeWait(element2, effect2) ->
+        InvokeWait((getElement element1 element2), (createCombinedEffect effect1 effect2))
+
+      | InvokeWait(element1, effect1), InvokeContinue(element2, effect2, ret2) ->
+        InvokeContinue((getElement element1 element2), (createCombinedEffect effect1 effect2), (None, Some(ret2)))
+
+      | InvokeContinue(element1, effect1, ret1), InvokeWait(element2, effect2) ->
+        InvokeContinue((getElement element1 element2), (createCombinedEffect effect1 effect2), (Some(ret1), None))
+
+      | InvokeContinue(element1, effect1, ret1), InvokeContinue(element2, effect2, ret2) ->
+        InvokeContinue((getElement element1 element2), (createCombinedEffect effect1 effect2), (Some(ret1), Some(ret2)))
   })
 
 let WaitAny3 = End
@@ -358,7 +346,7 @@ let ContextCore<'returnType when 'returnType : equality> (useContext: IContext<'
     GetResult = fun _ operationState -> 
       let castOperationState: 'returnType option = explicitConvert operationState
       match castOperationState with
-      | Some(existingContext) -> InvokeReturn(existingContext)
+      | Some(existingContext) -> InvokeContinue(None, None, existingContext)
       | None -> failwith "should not happen"
   })
 

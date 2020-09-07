@@ -42,7 +42,7 @@ let bind underlyingOperation f =
           match underlyingOperation with
            | Perform(opData) -> opData.PreProcess(operationState)
            | _ -> failwith "Underlying must be perform Operation"
-      RunOperation = 
+      GetResult = 
         fun captureFunc operationState ->
           match underlyingOperation with
           | Perform(operationData) -> 
@@ -50,13 +50,10 @@ let bind underlyingOperation f =
             printf "Result: %A\n" operationResult
 
             match operationResult with
-            | InvokeReturn(result) -> 
+            | InvokeContinue(element, effect, result) ->
               let nextOperation = f(result)
-              ControlNextOperation(nextOperation)
-            | InvokeBoth(element, effect) -> ControlBoth(element, effect)
-            | InvokeEffect(effect) -> ControlEffect effect
-            | InvokeRender(element) -> ControlRender element
-            | InvokeWait -> ControlWait
+              ControlNext(element, effect, nextOperation)
+            | InvokeWait(element, effect) -> ControlWait(element, effect) 
           | Control(_) -> failwith "Control passed as operation"
           | End -> failwith "End passed as operation"
     }
@@ -102,10 +99,7 @@ let preprocessOperations refState props =
           | Control({PreProcess = preProcess; OperationType = operationType}) -> 
             let processOpState: obj option = getOperationState refState operationType opState props
 
-            // printf "------------------\n"
-            printf "Before preProcess %A\n" processOpState
             let result = preProcess processOpState
-            printf "%A\n" result
             match result with
               | Some(newOpState) -> 
                 if operationType = StateGet then
@@ -118,8 +112,8 @@ let preprocessOperations refState props =
                   nextState <- {refState with OperationIndex = index}
                   nextIndex <- index
               | None -> ()
-          | Perform(_) -> failwith "Should not happen"
           | End -> ()
+          | other -> failwith (sprintf "Should not happen %A\n" other)
 
   nextState
 
@@ -128,32 +122,38 @@ let execute resultCapture wrapEffect componentState props =
   let mutable stop = false
   let mutable renderedElement = None
   let mutable nextOperations = componentState.Operations
-  let mutable nextEffect = None
+  let mutable nextEffects = []
   let mutable updatedComponentState = componentState.ComponentState
 
   while not stop do
     let currentOperation = nextOperations.[currentIndex]
     match currentOperation.Operation with
-      | Control({RunOperation = runOperation}) ->
+      | Control({GetResult = getResult}) ->
         let capture = resultCapture currentOperation.Index 
-        let invokeResult = runOperation capture currentOperation.State 
+        let invokeResult = getResult capture currentOperation.State 
         match invokeResult with
-        | ControlWait -> 
+        | ControlWait(elementOpt, effectOpt) ->
+          match elementOpt with 
+          | Some(element) ->
+            renderedElement <- Some(element)
+          | _ -> ()
+          match effectOpt with 
+          | Some(effect) ->
+            nextEffects <- nextEffects @ [(wrapEffect currentOperation.Index effect)]
+          | _ -> ()
           stop <- true
-        | ControlRender(element) -> 
-          renderedElement <- Some(element)
-          stop <- true
-        | ControlEffect(effect) ->
-          nextEffect <- Some (wrapEffect currentOperation.Index effect)
-          stop <- true
-        | ControlBoth(element, effect) -> 
-          renderedElement <- Some(element)
-          nextEffect <- Some (wrapEffect currentOperation.Index effect)
-          stop <- true
-        | ControlNextOperation(nextOperation) ->
+        | ControlNext(elementOpt, effectOpt, nextOperation) ->
+          match elementOpt with 
+          | Some(element) ->
+            renderedElement <- Some(element)
+          | _ -> ()
+          match effectOpt with 
+          | Some(effect) ->
+            nextEffects <- nextEffects @ [(wrapEffect currentOperation.Index effect)]
+          | _ -> ()
           match nextOperation with
-          | End -> stop <- true
-          | Perform(_) -> failwith "Perform should not be passed here"
+          | End -> 
+            stop <- true
           | Control(nextOpData) ->
             if (currentIndex + 1) < componentState.Operations.Length then
               let currentNextOp = nextOperations.[currentIndex+1]
@@ -186,7 +186,8 @@ let execute resultCapture wrapEffect componentState props =
                     }
                   |]
             currentIndex <- currentIndex + 1
-      | _ -> failwith "Unknown "
+          | other -> failwith (sprintf "Unhandled operation %A" other)
+      | unknownOperation -> failwith (sprintf "Unknown operation %A" unknownOperation)
   
   (
     {
@@ -195,7 +196,7 @@ let execute resultCapture wrapEffect componentState props =
       Element = renderedElement;
       ComponentState = updatedComponentState
     },
-    nextEffect
+    nextEffects
   )
 
 let render useRef useState useEffect delayedFunc props = 
@@ -251,18 +252,16 @@ let render useRef useState useEffect delayedFunc props =
 
   componentStateRef.current <- preprocessOperations componentStateRef.current props
 
-  let nextState, wrappedEffectOpt = execute updateStateAt wrapEffect componentStateRef.current props
+  let nextState, wrappedNextEffects = execute updateStateAt wrapEffect componentStateRef.current props
 
   componentStateRef.current <- nextState
 
   // run any effects.
-  match wrappedEffectOpt with
-  | Some(wrappedEffect) -> 
-    useEffect (
-      fun () ->
-        wrappedEffect ()
-      )
-  | None -> ()
+  useEffect (
+    fun () ->
+      List.map (fun eff -> eff ()) wrappedNextEffects |> ignore
+      ()
+    )
 
   // Render current element
   match componentStateRef.current.Element with
