@@ -6,8 +6,10 @@ type OpTreeNode<'props> =
   {
     // State storage for the operation.
     State: obj option;
+
     // Operation at this index.
     Operation: Operation<'props, unit>;
+
     // Index of the operation.
     Index: int;
 
@@ -238,11 +240,21 @@ let render useRef useState useEffect delayedFunc props =
   let wrapEffect index effect =
     let wrapUpdateState index stateUpdater = 
       let op = componentStateRef.current.Operations.[index]
-      let updatedState = stateUpdater op.State
-      Array.set
-        componentStateRef.current.Operations
-        index
-        {op with State = updatedState}
+
+      let state =
+        match op.Operation with 
+        | Control({OperationType = StateSet}) -> 
+          componentStateRef.current.ComponentState
+        | _ -> op.State
+      let updatedState = stateUpdater state
+      match op.Operation with 
+      | Control({OperationType = StateSet}) -> 
+        componentStateRef.current <- {componentStateRef.current with ComponentState = updatedState}
+      | _ ->
+        Array.set
+          componentStateRef.current.Operations
+          index
+          {op with State = updatedState}
       rerender ()
     let updateState = wrapUpdateState index
     let wrappedEffect _ =

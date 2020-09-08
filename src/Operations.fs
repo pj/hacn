@@ -168,6 +168,7 @@ let Get<'state> (initialState: 'state) =
           } :> obj
         )
       | Some(currentState) -> 
+        printf "%A\n" currentState
         let castCurrentState: StateContainer<'state> = explicitConvert currentState
         if castCurrentState.Updated then
           Some({castCurrentState with Updated = false} :> obj)
@@ -192,7 +193,7 @@ let Set<'state> (newState: 'state) : Operation<obj, unit> =
           Some(
             {
               Updated = true;
-              ComponentState = Some(newState)
+              ComponentState = newState
             } :> obj
           )
 

@@ -307,6 +307,13 @@ let stateTest () =
   let threeNode = convertElementToTestNode threeElement
 
   match threeNode with 
+  | Node("div", _, [Text("1!")]) -> ()
+  | _ -> failwith (sprintf "node does not match: %A" threeNode)
+
+  let threeElement = element [] []
+  let threeNode = convertElementToTestNode threeElement
+
+  match threeNode with 
   | Node("div", _, [Text("2!")]) -> ()
   | _ -> failwith (sprintf "node does not match: %A" threeNode)
 
