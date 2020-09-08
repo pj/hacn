@@ -4,7 +4,8 @@
     "start:server": "webpack-dev-server",
     "jstest:pretest": "fable-splitter -c tests/splitter.config.js",
     "jstest": "jest",
-    "test": "dotnet run --project=tests/Test.fsproj"
+    "test": "dotnet run --project=tests/Test.fsproj",
+    "build:core:tests": "dotnet build tests/Test.fsproj"
   },
   "dependencies": {
     "@babel/core": "^7.8.4",

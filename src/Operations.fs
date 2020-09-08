@@ -140,6 +140,15 @@ let Render<'returnType> element props (captures: Captures<'returnType> list) (ch
         InvokeWait(Some(renderedElement), None)
   })
 
+let RenderContinue element props (children: ReactElement seq) =
+  Perform({ 
+    OperationType = NotCore;
+    PreProcess = fun _ -> None;
+    GetResult = fun captureResult operationState -> 
+      let renderedElement = element props children
+      InvokeContinue(Some(renderedElement), None, ())
+  })
+
 type StateContainer<'state> = 
   {
     Updated: bool;
@@ -179,6 +188,7 @@ let Set<'state> (newState: 'state) : Operation<obj, unit> =
     GetResult = fun _ _ -> 
       let stateSetter rerender =
         let updateState _ = 
+          printf "Setting state from effect: %A\n" newState
           Some(
             {
               Updated = true;

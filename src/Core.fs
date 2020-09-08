@@ -47,7 +47,7 @@ let bind underlyingOperation f =
           match underlyingOperation with
           | Perform(operationData) -> 
             let operationResult = operationData.GetResult captureFunc operationState
-            printf "Result: %A\n" operationResult
+            // printf "Result: %A\n" operationResult
 
             match operationResult with
             | InvokeContinue(element, effect, result) ->
@@ -85,6 +85,7 @@ let getOperationState refState operationType opState props =
       let propsState: Operations.PropsOperationState<obj> = {Props = props; PrevProps = Some(castPropsState.Props)}
       Some(propsState :> obj)
   | StateGet -> 
+    printf "Getting state during pre process: %A\n" refState.ComponentState
     Option.map (fun state -> state :> obj) refState.ComponentState
   | _ -> opState
 
@@ -103,6 +104,7 @@ let preprocessOperations refState props =
             match result with
               | Some(newOpState) -> 
                 if operationType = StateGet then
+                  printf "Setting state during pre process: %A\n" newOpState
                   nextState <- {refState with ComponentState = Some(newOpState)}
                 Array.set 
                   nextState.Operations 
@@ -169,9 +171,12 @@ let execute resultCapture wrapEffect componentState props =
                   nextOpData.PreProcess(Some(propsOperationState :> obj)) |> ignore
                   Some(propsOperationState :> obj)
                 | StateGet -> 
+                  printf "Getting state during execute: %A\n" componentState.ComponentState
                   let updatedStateGet = nextOpData.PreProcess(componentState.ComponentState) |> ignore
-                  updatedComponentState <- Some(updatedStateGet :> obj)
-                  Some(updatedStateGet :> obj)
+                  let updatedStateGetOpt = Some(updatedStateGet :> obj)
+                  updatedComponentState <- updatedStateGetOpt
+                  printf "After getting state during execute: %A\n" updatedStateGet
+                  updatedStateGetOpt
                 | _ ->
                   nextOpData.PreProcess(None)
               nextOperations <- 

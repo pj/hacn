@@ -241,8 +241,11 @@ type TestStreamTrigger () =
   let mutable trigger = None
   member this.Trigger with set value = trigger <- Some(value)
   member this.Call value = 
+    // printf "calling asdf\n"
     match trigger with
-    | Some(underlying) -> underlying value
+    | Some(underlying) -> 
+      // printf "calling underlying\n"
+      underlying value
     | None -> failwith "Should not happen"
 
 let TestStreamOperation<'returnType> (trigger: TestStreamTrigger) =
@@ -267,11 +270,12 @@ let stateTest () =
   let useFakeRef = generateFakeRefHook ()
   let testTrigger = TestStreamTrigger ()
   let hacnTest = HacnBuilder((render useFakeRef useFakeState useFakeEffect))
+
   let element = hacnTest {
-    let! componentState = Get({Current = 1})
+    let! componentState = Get({Current = 0})
+    do! RenderContinue div [] [str (sprintf "%d!" componentState.Current)]
     let! increment = (TestStreamOperation testTrigger)
     if increment then
-      do! Render div [] [] [str (sprintf "%d!" componentState.Current)]
       do! Set({Current = componentState.Current + 1})
   }
 
@@ -279,7 +283,7 @@ let stateTest () =
   let oneNode = convertElementToTestNode oneElement
 
   match oneNode with 
-  | Node("div", _, [Text("1!")]) -> ()
+  | Node("div", _, [Text("0!")]) -> ()
   | _ -> failwith (sprintf "node does not match: %A" oneNode)
 
   testTrigger.Call true
@@ -287,7 +291,7 @@ let stateTest () =
   let twoNode = convertElementToTestNode twoElement
 
   match twoNode with 
-  | Node("div", _, [Text("2!")]) -> ()
+  | Node("div", _, [Text("0!")]) -> ()
   | _ -> failwith (sprintf "node does not match: %A" twoNode)
 
   testTrigger.Call false
@@ -295,7 +299,7 @@ let stateTest () =
   let sameNode = convertElementToTestNode sameElement
 
   match sameNode with 
-  | Node("div", _, [Text("2!")]) -> ()
+  | Node("div", _, [Text("1!")]) -> ()
   | _ -> failwith (sprintf "node does not match: %A" sameNode)
 
   testTrigger.Call true
@@ -303,7 +307,7 @@ let stateTest () =
   let threeNode = convertElementToTestNode threeElement
 
   match threeNode with 
-  | Node("div", _, [Text("3!")]) -> ()
+  | Node("div", _, [Text("2!")]) -> ()
   | _ -> failwith (sprintf "node does not match: %A" threeNode)
 
 let eventCaptureTest () =
@@ -335,7 +339,7 @@ let allTests =
     testCase "Test waiting both at same time" waitBothTest;
     testCase "Test waiting both one after another" waitSequentialTest;
     // ptestCase "Test stream effect" streamTest;
-    // ptestCase "Test setting state" stateTest;
+    ftestCase "Test setting state" stateTest;
     // ptestCase "Test capturing variables" eventCaptureTest;
     // ptestCase "Test calling external function" callExternalTest;
     // ptestCase "Test background variable" backgroundTest;
