@@ -2,8 +2,8 @@
   "private": true,
   "scripts": {
     "start:server": "webpack-dev-server",
-    "jstest:pretest": "fable-splitter -c tests/splitter.config.js",
-    "jstest": "jest",
+    "prejstest": "fable-splitter jstests -o dist/jstests --commonjs",
+    "jstest": "mocha dist/jstests",
     "test": "dotnet run --project=tests/Test.fsproj",
     "build:core:tests": "dotnet build tests/Test.fsproj"
   },
@@ -25,6 +25,7 @@
     "@testing-library/user-event": "^12.1.1",
     "fable-splitter": "^2.2.1",
     "jest": "^26.2.2",
+    "mocha": "^8.1.3",
     "prettier": "^2.0.5"
   }
 }

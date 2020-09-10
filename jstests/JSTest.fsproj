@@ -8,7 +8,7 @@
     <TargetFramework>netstandard2.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="Test.test.fs" />
+    <Compile Include="Test.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../src/Hacn.fsproj">
@@ -18,8 +18,8 @@
   <ItemGroup>
     <PackageReference Include="Fable.Browser.Dom" Version="1.1.0" />
     <PackageReference Include="Fable.Core" Version="3.1.5" />
-    <PackageReference Include="Fable.Jester" Version="0.25.0" />
     <PackageReference Include="Fable.React" Version="6.2.0" />
     <PackageReference Include="Fable.ReactTestingLibrary" Version="0.25.0" />
+    <PackageReference Include="Fable.Mocha" Version="2.9.1" />
   </ItemGroup>
 </Project>
