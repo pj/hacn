@@ -1,20 +1,32 @@
 module Test
 open Fable.Mocha
+// open Hacn
+// open Hacn.Core
+open Fable.ReactTestingLibrary
+// open Hacn.Operations
+open Fable.React.Standard
+open Fable.React.Helpers
+open Fable.Core.JsInterop
+open Hacn.Utils
 
-let arithmeticTests =
-  testList "Arithmetic tests" [
-    testCase "plus works" <| fun () ->
-      Expect.equal (1 + 1) 2 "plus"
+type TestProps = { Hello: string}
 
-    testCase "Test for falsehood" <| fun () ->
-      Expect.isFalse (1 = 2) "false"
+let propsTest () =
+  let asdf = "asdfasdf" :> obj
 
-    testCaseAsync "Test async code" <|
-      async {
-          let! x = async { return 21 }
-          let answer = x * 2
-          Expect.equal 42 answer "async"
-      }
+  let x: string = castObj asdf
+  printf "%s" x
+  // let element = hacn {
+  //   let! x = Props
+  //   do! Render div [] [] [str x.Hello; str " World"]
+  // }
+
+  // RTL.render(element [] []) |> ignore
+  ()
+
+let hacnTests =
+  testList " tests" [
+    testCase "Props test" <| propsTest
   ]
 
-Mocha.runTests arithmeticTests |> ignore
+Mocha.runTests hacnTests |> ignore

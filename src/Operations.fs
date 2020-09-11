@@ -1,9 +1,13 @@
 module Hacn.Operations
 open Fable.React
 open Fable.React.Props
-open FSharp.Interop.Dynamic
-open FSharp.Interop.Dynamic.Dyn
 open Browser.Types
+open Utils
+#if FABLE_COMPILER
+open Fable.Core.JsInterop
+#else
+open FSharp.Interop.Dynamic
+#endif
 
 type PropsOperationState<'props> =
   {
@@ -18,12 +22,12 @@ let Props<'props when 'props: equality> =
       match operationState with 
       | None -> failwith "Should never happen"
       | Some(propsOpState) ->
-        let castPropsOpState: PropsOperationState<obj> = explicitConvert propsOpState
+        let castPropsOpState: PropsOperationState<obj> = castObj propsOpState
         match castPropsOpState.PrevProps with
         | None -> operationState
         | Some(prevProps) -> 
-          let castPrevProps: 'props = explicitConvert prevProps
-          let castProps: 'props = explicitConvert castPropsOpState.Props
+          let castPrevProps: 'props = castObj prevProps
+          let castProps: 'props = castObj castPropsOpState.Props
           if castProps <> castPrevProps then
             operationState
           else
@@ -134,7 +138,7 @@ let Render<'returnType> element props (captures: Captures<'returnType> list) (ch
       let renderedElement = element (List.append props captureProps) children
       match operationState with
       | Some(result) -> 
-        let castReturn: 'returnType = explicitConvert result
+        let castReturn: 'returnType = castObj result
         InvokeContinue(Some(renderedElement), None, castReturn)
       | _ ->
         InvokeWait(Some(renderedElement), None)
@@ -169,7 +173,7 @@ let Get<'state> (initialState: 'state) =
         )
       | Some(currentState) -> 
         printf "%A\n" currentState
-        let castCurrentState: StateContainer<'state> = explicitConvert currentState
+        let castCurrentState: StateContainer<'state> = castObj currentState
         if castCurrentState.Updated then
           Some({castCurrentState with Updated = false} :> obj)
         else 
@@ -177,7 +181,7 @@ let Get<'state> (initialState: 'state) =
     GetResult = fun _ operationState -> 
       match operationState with
       | Some(state) -> 
-        let castCurrentState: StateContainer<'state> = explicitConvert state
+        let castCurrentState: StateContainer<'state> = castObj state
         InvokeContinue(None, None, castCurrentState.ComponentState)
       | None -> failwith "Please set state before calling Get()"
   })
@@ -212,7 +216,7 @@ let createCombinedEffect eff1Opt eff2Opt =
           let currentState: (obj option) array = 
             match underlyingState with 
             | None -> Array.create stateLength None
-            | Some(x) -> explicitConvert x
+            | Some(x) -> castObj x
           let updatedState = stateUpdater (currentState.[index])
           Array.set
             currentState
@@ -260,7 +264,7 @@ let Wait2 op1 op2 =
     GetResult = fun capture operationState -> 
       let underlyingStateCast: (obj option) array = 
         match operationState with
-        | Some(x) -> explicitConvert x
+        | Some(x) -> castObj x
         | None -> [|None; None|]
       let opState1 = underlyingStateCast.[0]
       let opResult1 = 
@@ -296,7 +300,7 @@ let WaitAny2 op1 op2 =
     GetResult = fun capture operationState -> 
       let underlyingStateCast: (obj option) array = 
         match operationState with
-        | Some(x) -> explicitConvert x
+        | Some(x) -> castObj x
         | None -> [|None; None|]
       let opState1 = underlyingStateCast.[0]
       let opResult1 = 
@@ -346,7 +350,7 @@ let ContextCore<'returnType when 'returnType : equality> (useContext: IContext<'
     OperationType = NotCore;
     PreProcess = fun operationState -> 
       let currentContext = useContext(context)
-      let castOperationState: 'returnType option = explicitConvert operationState
+      let castOperationState: 'returnType option = castObj operationState
       match castOperationState with
       | Some(existingContext) -> 
         if existingContext <> currentContext then
@@ -355,7 +359,7 @@ let ContextCore<'returnType when 'returnType : equality> (useContext: IContext<'
           None
       | None -> Some(currentContext :> obj)
     GetResult = fun _ operationState -> 
-      let castOperationState: 'returnType option = explicitConvert operationState
+      let castOperationState: 'returnType option = castObj operationState
       match castOperationState with
       | Some(existingContext) -> InvokeContinue(None, None, existingContext)
       | None -> failwith "should not happen"

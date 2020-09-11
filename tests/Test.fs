@@ -159,7 +159,7 @@ let compositionTest () =
 
 let allTests =
   testList "All tests" [
-    ftestCase "Test changing props" propsTest;
+    testCase "Test changing props" propsTest;
     testCase "Test waiting any" anyTest;
     testCase "Test waiting single" waitSingleTest;
     testCase "Test waiting both at same time" waitBothTest;

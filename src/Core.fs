@@ -296,4 +296,4 @@ type HacnBuilder(render) =
         props
         children
 
-let hacn _ = HacnBuilder((render Hooks.useRef Hooks.useState Hooks.useEffect))
+let hacn = HacnBuilder((render Hooks.useRef Hooks.useState Hooks.useEffect))
