@@ -1,9 +1,9 @@
 const path = require("path");
-const testsDir = path.join(__dirname, "../dist/tests");
+const testsDir = path.join(__dirname, "../dist/jstests");
 
 module.exports = {
     allFiles: true,
-    entry: path.join(__dirname, "./Test.fsproj"),
+    entry: path.join(__dirname, "./JSTest.fsproj"),
     outDir: testsDir,
     babel: {
         plugins: [

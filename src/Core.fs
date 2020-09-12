@@ -1,6 +1,6 @@
 module Hacn.Core
 open Fable.React
-open FSharp.Interop.Dynamic.Dyn
+open Hacn.Utils
 
 type OpTreeNode<'props> =
   {
@@ -83,7 +83,7 @@ let getOperationState refState operationType opState props =
       let propsState: Operations.PropsOperationState<obj> = {Props = props; PrevProps = None}
       Some(propsState :> obj)
     | Some(existingPropsState) -> 
-      let castPropsState: Operations.PropsOperationState<obj> = explicitConvert existingPropsState
+      let castPropsState: Operations.PropsOperationState<obj> = castObj existingPropsState
       let propsState: Operations.PropsOperationState<obj> = {Props = props; PrevProps = Some(castPropsState.Props)}
       Some(propsState :> obj)
   | StateGet -> 

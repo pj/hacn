@@ -8,7 +8,7 @@
     <TargetFramework>netstandard2.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="Test.fs" />
+    <Compile Include="Test.test.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../src/Hacn.fsproj">
