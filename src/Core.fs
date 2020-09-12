@@ -87,7 +87,7 @@ let getOperationState refState operationType opState props =
       let propsState: Operations.PropsOperationState<obj> = {Props = props; PrevProps = Some(castPropsState.Props)}
       Some(propsState :> obj)
   | StateGet -> 
-    printf "Getting state during pre process: %A\n" refState.ComponentState
+    // printf "Getting state during pre process: %A\n" refState.ComponentState
     Option.map (fun state -> state :> obj) refState.ComponentState
   | _ -> opState
 
@@ -106,7 +106,7 @@ let preprocessOperations refState props =
             match result with
               | Some(newOpState) -> 
                 if operationType = StateGet then
-                  printf "Setting state during pre process: %A\n" newOpState
+                  // printf "Setting state during pre process: %A\n" newOpState
                   nextState <- {refState with ComponentState = Some(newOpState)}
                 Array.set 
                   nextState.Operations 
@@ -173,11 +173,11 @@ let execute resultCapture wrapEffect componentState props =
                   nextOpData.PreProcess(Some(propsOperationState :> obj)) |> ignore
                   Some(propsOperationState :> obj)
                 | StateGet -> 
-                  printf "Getting state during execute: %A\n" componentState.ComponentState
+                  // printf "Getting state during execute: %A\n" componentState.ComponentState
                   let updatedStateGet = nextOpData.PreProcess(componentState.ComponentState) |> ignore
                   let updatedStateGetOpt = Some(updatedStateGet :> obj)
                   updatedComponentState <- updatedStateGetOpt
-                  printf "After getting state during execute: %A\n" updatedStateGet
+                  // printf "After getting state during execute: %A\n" updatedStateGet
                   updatedStateGetOpt
                 | _ ->
                   nextOpData.PreProcess(None)
@@ -263,8 +263,6 @@ let render useRef useState useEffect delayedFunc props =
       ()
     wrappedEffect
 
-  printf "---------------------\n"
-
   componentStateRef.current <- getFirstOperation delayedFunc componentStateRef.current
 
   componentStateRef.current <- preprocessOperations componentStateRef.current props
@@ -282,7 +280,9 @@ let render useRef useState useEffect delayedFunc props =
 
   // Render current element
   match componentStateRef.current.Element with
-    | Some(element) -> element
+    | Some(element) -> 
+      printf "%A" element
+      element
     | None -> null
 
 type HacnBuilder(render) = 
