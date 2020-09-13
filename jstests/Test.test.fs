@@ -18,11 +18,11 @@ Jest.describe("Hacn Tests", fun () ->
     }
 
     let result = RTL.render(element {Hello = "Hello"} [])
-    let testElement = result.getByTestId("test", [])
+    let testElement = result.getByTestId "test"
     Jest.expect(testElement).toHaveTextContent("Hello World")
 
-    let result = RTL.render(element {Hello = "Goodbye"} [])
-    let testElement = result.getByTestId("test", [])
-    Jest.expect(testElement).toHaveTextContent("Goodbye World")
+    // let result = RTL.render(element {Hello = "Goodbye"} [])
+    // let testElement = result.getByTestId("test", [])
+    // Jest.expect(testElement).toHaveTextContent("Goodbye World")
   )
 )
