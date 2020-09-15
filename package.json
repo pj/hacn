@@ -3,9 +3,11 @@
   "scripts": {
     "start:server": "webpack-dev-server",
     "prejstest": "fable-splitter jstests -o dist/jstests --commonjs -c jstests/splitter.config.js",
-    "jstest": "jest",
+    "jstest": "jest ./dist/element_expressions_tests/**/*.test.js",
     "test": "dotnet run --project=tests/Test.fsproj",
-    "build:core:tests": "dotnet build tests/Test.fsproj"
+    "build:core:tests": "dotnet build tests/Test.fsproj",
+    "preelement_expressions_tests": "fable-splitter element_expressions_tests -o dist/element_expressions_tests --commonjs -c element_expressions_tests/splitter.config.js",
+    "element_expressions_tests": "jest --roots=./dist/element_expressions_tests/"
   },
   "dependencies": {
     "@babel/core": "^7.11.6",
