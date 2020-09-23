@@ -3,14 +3,15 @@ open Expecto
 open Hacn.Operations
 open Fable.React
 open Utils
+open Feliz
 
 type TestProps = { Hello: string}
 
 let propsTest () = 
   let element = hacnTest () {
     let! x = Props
-    let! y = Render div [] [CaptureClick(fun _ -> "asdfer")] [str x.Hello; str " World"]
-    do! Render div [] [] [str "Success!"; str y]
+    let! y = Render Html.div [prop.captureClick (); prop.text (sprintf "%s World" x.Hello)]
+    do! Render Html.div [prop.text (sprintf "Success!%s" y)]
   }
 
   let testData = [
@@ -22,12 +23,12 @@ let propsTest () =
 
 let anyTest () = 
   let element = hacnTest () {
-    let! _, testResponse = WaitAny2 (Render div [] [] [str "Hello"]) (TestOperation "Goodbye")
+    let! _, testResponse = WaitAny2 (Render Html.div [prop.text "Hello"]) (TestOperation "Goodbye")
     match testResponse with
     | Some(testValue) -> 
-      do! Render div [] [] [str testValue]
+      do! Render Html.div [prop.text testValue]
     | _ -> 
-      do! Render div [] [] [str "No value..."]
+      do! Render Html.div [prop.text "No value..."]
   }
 
   let testData = [
@@ -37,13 +38,13 @@ let anyTest () =
 
   runTestSequence element testData 
 
-let streamTest () = 
-  Tests.skiptest "Unimplemented"
+// let prop.texteamTest () = 
+//   Tests.skiptest "Unimplemented"
 
 let waitSingleTest () = 
   let element = hacnTest () {
     let! testResponse = TestOperation "Hello"
-    do! Render div [] [] [str testResponse]
+    do! Render Html.div [prop.text testResponse]
   }
   let testData = [
       ([], Empty); 
@@ -55,7 +56,7 @@ let waitSingleTest () =
 let waitBothTest () = 
   let element = hacnTest () {
     let! hello, world = Wait2 (TestOperation "Hello") (TestOperation "World")
-    do! Render div [] [] [str (sprintf "%s, %s!" hello world)]
+    do! Render Html.div [prop.text (sprintf "%s, %s!" hello world)]
   }
 
   let testData = [
@@ -68,7 +69,7 @@ let waitBothTest () =
 let waitSequentialTest () = 
   let element = hacnTest () {
     let! hello, world = Wait2 (TestOperation "Hello") (TestDelayedOperation "World")
-    do! Render div [] [] [str (sprintf "%s, %s!" hello world)]
+    do! Render Html.div [prop.text (sprintf "%s, %s!" hello world)]
   }
 
   let testData = [
@@ -87,9 +88,9 @@ type TestState =
 let stateTest () = 
   let testTrigger = TestStreamTrigger ()
   let element = hacnTest () {
-    let! componentState = Get({Current = 0})
-    do! RenderContinue div [] [str (sprintf "%d!" componentState.Current)]
-    let! increment = (TestStreamOperation testTrigger)
+    let! componentState = Get {Current = 0}
+    do! RenderContinue Html.div [prop.text (sprintf "%d!" componentState.Current)]
+    let! increment = TestStreamOperation testTrigger
     if increment then
       do! Set({Current = componentState.Current + 1})
   }
@@ -134,8 +135,8 @@ let stateTest () =
 
 let eventCaptureTest () =
   let element = hacnTest () {
-    let! y = Render div [] [CaptureClick(fun _ -> "World")] [str "Hello"]
-    do! Render div [] [] [str y]
+    do! Render Html.div [prop.captureClick (); prop.text "Hello"]
+    do! Render Html.div [prop.text "World"]
   }
 
   let testData = [
@@ -164,7 +165,7 @@ let allTests =
     testCase "Test waiting single" waitSingleTest;
     testCase "Test waiting both at same time" waitBothTest;
     testCase "Test waiting both one after another" waitSequentialTest;
-    // ptestCase "Test stream effect" streamTest;
+    // ptestCase "Test prop.texteam effect" prop.texteamTest;
     testCase "Test setting state" stateTest;
     // ptestCase "Test capturing variables" eventCaptureTest;
     // ptestCase "Test calling external function" callExternalTest;

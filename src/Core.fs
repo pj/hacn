@@ -1,6 +1,7 @@
 module Hacn.Core
 open Fable.React
 open Hacn.Utils
+open Feliz
 
 type OpTreeNode<'props> =
   {
@@ -281,19 +282,17 @@ let render useRef useState useEffect delayedFunc props =
   // Render current element
   match componentStateRef.current.Element with
     | Some(element) -> 
-      printf "%A" element
       element
     | None -> null
 
 type HacnBuilder(render) = 
   member _.Bind(operation, f) = bind operation f
+  // member _.Bind(element: ReactElement, f) = bind Hacn.Operations.Render(element) f
   member _.Zero() = zero()
   member _.Delay(f) = f
   member _.Run(delayedFunc) =
-    fun props children -> 
-      ofFunction 
-        (render delayedFunc)
-        props
-        children
+    React.functionComponent<'props>(
+      fun (props: 'props) -> render delayedFunc props
+    ) 
 
 let hacn = HacnBuilder((render Hooks.useRef Hooks.useState Hooks.useEffect))

@@ -3,6 +3,7 @@ open Fable.React
 open Fable.React.Props
 open Browser.Types
 open Utils
+open Feliz
 #if FABLE_COMPILER
 open Fable.Core.JsInterop
 #else
@@ -110,32 +111,37 @@ type Captures<'returnType> =
   // | CaptureAnimationIteration of (AnimationEvent -> 'returnType)
   // | CaptureTransitionEnd of (TransitionEvent -> 'returnType)
 
-let Render<'returnType> element props (captures: Captures<'returnType> list) (children: ReactElement seq) =
+type prop with
+  static member inline captureClick () = Interop.mkAttr "captureOnClick" None
+  static member inline captureChange () = Interop.mkAttr "captureOnChange" None
+
+let Render<'returnType> element (props: IReactProperty list) =
   Perform({ 
     OperationType = NotCore;
     PreProcess = fun _ -> None;
     GetResult = fun captureResult operationState -> 
-      let convertCaptureToProp capture =
-        let x = 
-          match capture with
-          | CaptureChange (changeFunc) ->
-            OnChange(
-              fun event -> 
-                let transformedEvent = changeFunc event
-                captureResult (Some(transformedEvent :> obj))
-                ()
-            )
-          | CaptureClick(clickFunc) ->
-            OnClick(
-              fun event -> 
-                let transformedEvent = clickFunc event
-                captureResult (Some(transformedEvent :> obj))
-                ()
-            )
-        x :> IHTMLProp
+      // let convertCaptureToProp capture =
+      //   let x = 
+      //     match capture with
+      //     | CaptureChange (changeFunc) ->
+      //       OnChange(
+      //         fun event -> 
+      //           let transformedEvent = changeFunc event
+      //           captureResult (Some(transformedEvent :> obj))
+      //           ()
+      //       )
+      //     | CaptureClick(clickFunc) ->
+      //       OnClick(
+      //         fun event -> 
+      //           let transformedEvent = clickFunc event
+      //           captureResult (Some(transformedEvent :> obj))
+      //           ()
+      //       )
+      //   x :> IHTMLProp
 
-      let captureProps = List.map convertCaptureToProp captures
-      let renderedElement = element (List.append props captureProps) children
+      // let captureProps = List.map convertCaptureToProp captures
+      // let renderedElement = element (List.append props captureProps) children
+      let renderedElement = element props
       match operationState with
       | Some(result) -> 
         let castReturn: 'returnType = castObj result
@@ -144,12 +150,12 @@ let Render<'returnType> element props (captures: Captures<'returnType> list) (ch
         InvokeWait(Some(renderedElement), None)
   })
 
-let RenderContinue element props (children: ReactElement seq) =
+let RenderContinue element (props: IReactProperty list) =
   Perform({ 
     OperationType = NotCore;
     PreProcess = fun _ -> None;
     GetResult = fun captureResult operationState -> 
-      let renderedElement = element props children
+      let renderedElement = element props
       InvokeContinue(Some(renderedElement), None, ())
   })
 
