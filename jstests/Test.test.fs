@@ -94,4 +94,24 @@ Jest.describe("Hacn Tests", fun () ->
       do! Jest.expect(result.findByTestId "test").resolves.toHaveTextContent("Goodbye World")
     }
   )
+
+  Jest.test("wait single", 
+    promise {
+      let rerenderTrigger, operation = testOperationWithTrigger ()
+      let element = hacn {
+        let! testResponse = operation
+        do! Render Html.div [prop.testId "test"; prop.text testResponse]
+      }
+
+      let result = RTL.render(element ())
+
+      do! Jest.expect(result.findByTestId "test").rejects.toThrow();
+
+      RTL.act(fun () -> 
+        rerenderTrigger "Hello World"
+      )
+
+      do! Jest.expect(result.findByTestId "test").resolves.toHaveTextContent("Hello World")
+    }
+  )
 )
