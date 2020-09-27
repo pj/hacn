@@ -218,7 +218,8 @@ let render useRef useState useEffect delayedFunc props =
   // trigger rerender by updating a state variable
   let state: IStateHook<string> = useState("asdf")
   let rerender _ =
-    state.update("blah")
+    let asdf = Fable.Core.JS.Math.random ()
+    state.update (sprintf "blah%f" asdf)
 
   // Capture a result to return to the flow.
   let updateStateAt index newOpState = 
@@ -292,7 +293,8 @@ type HacnBuilder(render) =
   member _.Delay(f) = f
   member _.Run(delayedFunc) =
     React.functionComponent<'props>(
-      fun (props: 'props) -> render delayedFunc props
+      fun (props: 'props) -> 
+        render delayedFunc props
     ) 
 
 let hacn = HacnBuilder((render Hooks.useRef Hooks.useState Hooks.useEffect))

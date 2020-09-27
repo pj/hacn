@@ -285,6 +285,8 @@ let Wait2 op1 op2 =
           pd2.GetResult capture opState2
         | _ -> failwith "Can only work with Perform operations"
       
+      // printf "----------------\n%A\n%A\n\n" opResult1 opResult2
+      
       match opResult1, opResult2 with
       | InvokeWait(element1, effect1), InvokeWait(element2, effect2) ->
         InvokeWait((getElement element1 element2), (createCombinedEffect effect1 effect2))
