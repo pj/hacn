@@ -11,7 +11,7 @@ open Hacn.Types
 
 type TestProps = { Message: string }
 
-let testOperationWithTrigger () =
+let testOperationWithTrigger<'result> () =
   let mutable internalRerender = None
   let operation = Perform({
     OperationType = NotCore
@@ -24,17 +24,21 @@ let testOperationWithTrigger () =
       | None -> 
         InvokeWait(None, Some(effectFunc))
       | Some(result) -> 
-        let castResult: string = unbox result
+        let castResult: 'result = unbox result
         InvokeContinue(None, None, castResult)
   })
 
-  let rerenderTrigger value =
+  let rerenderTrigger (value: 'result) =
     match internalRerender with
     | Some(rerender) -> rerender(fun _ -> Some(value :> obj))
     | None -> failwith "Should not happen"
   
   rerenderTrigger, operation
 
+type TestState =
+  {
+    Current: int
+  }
 
 Jest.describe("Hacn Tests", fun () ->
   Jest.test("props", fun () ->
@@ -70,7 +74,7 @@ Jest.describe("Hacn Tests", fun () ->
 
   Jest.test("any", 
     promise {
-      let rerenderTrigger, operation = testOperationWithTrigger ()
+      let rerenderTrigger, operation = testOperationWithTrigger<string> ()
       let element = hacn {
         let! _, testResponse = 
           WaitAny2 
@@ -97,7 +101,7 @@ Jest.describe("Hacn Tests", fun () ->
 
   Jest.test("wait single", 
     promise {
-      let rerenderTrigger, operation = testOperationWithTrigger ()
+      let rerenderTrigger, operation = testOperationWithTrigger<string> ()
       let element = hacn {
         let! testResponse = operation
         do! Render Html.div [prop.testId "test"; prop.text testResponse]
@@ -147,4 +151,45 @@ Jest.describe("Hacn Tests", fun () ->
       do! Jest.expect(result.findByTestId "test").resolves.toHaveTextContent("Hello, World!")
     }
   )
+
+  // Jest.test("state", 
+  //   promise {
+  //     let rerenderTrigger, operation = testOperationWithTrigger ()
+  //     let element = hacn {
+  //       let! componentState = Get {Current = 0}
+  //       do! 
+  //         RenderContinue 
+  //           Html.div 
+  //           [
+  //             prop.testId "test"
+  //             prop.text (sprintf "%d!" componentState.Current)
+  //           ]
+  //       let! increment = operation
+  //       if increment then
+  //         do! Set({Current = componentState.Current + 1})
+  //     }
+
+  //     let result = RTL.render(element ())
+
+  //     do! Jest.expect(result.findByTestId "test").resolves.toHaveTextContent("0")
+
+  //     RTL.act(fun () -> 
+  //       rerenderTrigger true
+  //     )
+
+  //     do! Jest.expect(result.findByTestId "test").resolves.toHaveTextContent("1")
+
+  //     RTL.act(fun () -> 
+  //       rerenderTrigger false
+  //     )
+
+  //     do! Jest.expect(result.findByTestId "test").resolves.toHaveTextContent("1")
+
+  //     RTL.act(fun () -> 
+  //       rerenderTrigger true
+  //     )
+
+  //     do! Jest.expect(result.findByTestId "test").resolves.toHaveTextContent("2")
+  //   }
+  // )
 )
