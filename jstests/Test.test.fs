@@ -154,6 +154,7 @@ Jest.describe("Hacn Tests", fun () ->
 
   // Jest.test("state", 
   //   promise {
+  //     printf "=============="
   //     let rerenderTrigger, operation = testOperationWithTrigger ()
   //     let element = hacn {
   //       let! componentState = Get {Current = 0}
@@ -167,29 +168,34 @@ Jest.describe("Hacn Tests", fun () ->
   //       let! increment = operation
   //       if increment then
   //         do! Set({Current = componentState.Current + 1})
+  //       else
+  //         do! Render Html.div [prop.text "in else"]
   //     }
 
   //     let result = RTL.render(element ())
+  //     result.debug ()
 
-  //     do! Jest.expect(result.findByTestId "test").resolves.toHaveTextContent("0")
+  //     // result
 
-  //     RTL.act(fun () -> 
-  //       rerenderTrigger true
-  //     )
-
-  //     do! Jest.expect(result.findByTestId "test").resolves.toHaveTextContent("1")
-
-  //     RTL.act(fun () -> 
-  //       rerenderTrigger false
-  //     )
-
-  //     do! Jest.expect(result.findByTestId "test").resolves.toHaveTextContent("1")
+  //     // do! Jest.expect(result.findByTestId "test").resolves.toHaveTextContent("0")
 
   //     RTL.act(fun () -> 
   //       rerenderTrigger true
   //     )
 
-  //     do! Jest.expect(result.findByTestId "test").resolves.toHaveTextContent("2")
+  //     // do! Jest.expect(result.findByTestId "test").resolves.toHaveTextContent("1")
+
+  //     // RTL.act(fun () -> 
+  //     //   rerenderTrigger false
+  //     // )
+
+  //     // do! Jest.expect(result.findByTestId "test").resolves.toHaveTextContent("1")
+
+  //     // RTL.act(fun () -> 
+  //     //   rerenderTrigger true
+  //     // )
+
+  //     // do! Jest.expect(result.findByTestId "test").resolves.toHaveTextContent("2")
   //   }
   // )
 )

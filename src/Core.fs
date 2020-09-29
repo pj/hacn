@@ -287,9 +287,11 @@ let render useRef useState useEffect delayedFunc props =
     | None -> null
 
 type HacnBuilder(render) = 
-  member _.Bind(operation, f) = bind operation f
+  member _.Bind(operation, f) = 
+    bind operation f
   // member _.Bind(element: ReactElement, f) = bind Hacn.Operations.Render(element) f
-  member _.Zero() = zero()
+  member _.Zero() = 
+    zero()
   member _.Delay(f) = f
   member _.Run(delayedFunc) =
     React.functionComponent<'props>(

@@ -178,7 +178,7 @@ let Get<'state> (initialState: 'state) =
           } :> obj
         )
       | Some(currentState) -> 
-        printf "%A\n" currentState
+        // printf "%A\n" currentState
         let castCurrentState: StateContainer<'state> = castObj currentState
         if castCurrentState.Updated then
           Some({castCurrentState with Updated = false} :> obj)
@@ -199,7 +199,6 @@ let Set<'state> (newState: 'state) : Operation<obj, unit> =
     GetResult = fun _ _ -> 
       let stateSetter rerender =
         let updateState _ = 
-          printf "Setting state from effect: %A\n" newState
           Some(
             {
               Updated = true;
