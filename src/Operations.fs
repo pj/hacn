@@ -41,76 +41,6 @@ let Props<'props when 'props: equality> =
         InvokeContinue(None, None, props)
   })
 
-type Captures<'returnType> =
-  // | CaptureCut of (ClipboardEvent -> 'returnType)
-  // | CapturePaste of (ClipboardEvent -> 'returnType)
-  // | CaptureCompositionEnd of (CompositionEvent -> 'returnType)
-  // | CaptureCompositionStart of (CompositionEvent -> 'returnType)
-  // | CaptureCopy of (ClipboardEvent -> 'returnType)
-  // | CaptureCompositionUpdate of (CompositionEvent -> 'returnType)
-  // | CaptureFocus of (FocusEvent -> 'returnType)
-  // | CaptureBlur of (FocusEvent -> 'returnType)
-  | CaptureChange of (Event -> 'returnType)
-  // | CaptureInput of (Event -> 'returnType)
-  // | CaptureSubmit of (Event -> 'returnType)
-  // | CaptureReset of (Event -> 'returnType)
-  // | CaptureLoad of (Event -> 'returnType)
-  // | CaptureError of (Event -> 'returnType)
-  // | CaptureKeyDown of (KeyboardEvent -> 'returnType)
-  // | CaptureKeyPress of (KeyboardEvent -> 'returnType)
-  // | CaptureKeyUp of (KeyboardEvent -> 'returnType)
-  // | CaptureAbort of (Event -> 'returnType)
-  // | CaptureCanPlay of (Event -> 'returnType)
-  // | CaptureCanPlayThrough of (Event -> 'returnType)
-  // | CaptureDurationChange of (Event -> 'returnType)
-  // | CaptureEmptied of (Event -> 'returnType)
-  // | CaptureEncrypted of (Event -> 'returnType)
-  // | CaptureEnded of (Event -> 'returnType)
-  // | CaptureLoadedData of (Event -> 'returnType)
-  // | CaptureLoadedMetadata of (Event -> 'returnType)
-  // | CaptureLoadStart of (Event -> 'returnType)
-  // | CapturePause of (Event -> 'returnType)
-  // | CapturePlay of (Event -> 'returnType)
-  // | CapturePlaying of (Event -> 'returnType)
-  // | CaptureProgress of (Event -> 'returnType)
-  // | CaptureRateChange of (Event -> 'returnType)
-  // | CaptureSeeked of (Event -> 'returnType)
-  // | CaptureSeeking of (Event -> 'returnType)
-  // | CaptureStalled of (Event -> 'returnType)
-  // | CaptureSuspend of (Event -> 'returnType)
-  // | CaptureTimeUpdate of (Event -> 'returnType)
-  // | CaptureVolumeChange of (Event -> 'returnType)
-  // | CaptureWaiting of (Event -> 'returnType)
-  | CaptureClick of (MouseEvent -> 'returnType)
-  // | CaptureContextMenu of (MouseEvent -> 'returnType)
-  // | CaptureDoubleClick of (MouseEvent -> 'returnType)
-  // | CaptureDrag of (DragEvent -> 'returnType)
-  // | CaptureDragEnd of (DragEvent -> 'returnType)
-  // | CaptureDragEnter of (DragEvent -> 'returnType)
-  // | CaptureDragExit of (DragEvent -> 'returnType)
-  // | CaptureDragLeave of (DragEvent -> 'returnType)
-  // | CaptureDragOver of (DragEvent -> 'returnType)
-  // | CaptureDragStart of (DragEvent -> 'returnType)
-  // | CaptureDrop of (DragEvent -> 'returnType)
-  // | CaptureMouseDown of (MouseEvent -> 'returnType)
-  // | CaptureMouseEnter of (MouseEvent -> 'returnType)
-  // | CaptureMouseLeave of (MouseEvent -> 'returnType)
-  // | CaptureMouseMove of (MouseEvent -> 'returnType)
-  // | CaptureMouseOut of (MouseEvent -> 'returnType)
-  // | CaptureMouseOver of (MouseEvent -> 'returnType)
-  // | CaptureMouseUp of (MouseEvent -> 'returnType)
-  // | CaptureSelect of (Event -> 'returnType)
-  // | CaptureTouchCancel of (TouchEvent -> 'returnType)
-  // | CaptureTouchEnd of (TouchEvent -> 'returnType)
-  // | CaptureTouchMove of (TouchEvent -> 'returnType)
-  // | CaptureTouchStart of (TouchEvent -> 'returnType)
-  // | CaptureScroll of (UIEvent -> 'returnType)
-  // | CaptureWheel of (WheelEvent -> 'returnType)
-  // | CaptureAnimationStart of (AnimationEvent -> 'returnType)
-  // | CaptureAnimationEnd of (AnimationEvent -> 'returnType)
-  // | CaptureAnimationIteration of (AnimationEvent -> 'returnType)
-  // | CaptureTransitionEnd of (TransitionEvent -> 'returnType)
-
 type prop with
   static member inline captureClick () = Interop.mkAttr "captureOnClick" None
   static member inline captureChange () = Interop.mkAttr "captureOnChange" None
@@ -120,28 +50,16 @@ let Render<'returnType> element (props: IReactProperty list) =
     OperationType = NotCore;
     PreProcess = fun _ -> None;
     GetResult = fun captureResult operationState -> 
-      // let convertCaptureToProp capture =
-      //   let x = 
-      //     match capture with
-      //     | CaptureChange (changeFunc) ->
-      //       OnChange(
-      //         fun event -> 
-      //           let transformedEvent = changeFunc event
-      //           captureResult (Some(transformedEvent :> obj))
-      //           ()
-      //       )
-      //     | CaptureClick(clickFunc) ->
-      //       OnClick(
-      //         fun event -> 
-      //           let transformedEvent = clickFunc event
-      //           captureResult (Some(transformedEvent :> obj))
-      //           ()
-      //       )
-      //   x :> IHTMLProp
-
-      // let captureProps = List.map convertCaptureToProp captures
-      // let renderedElement = element (List.append props captureProps) children
-      let renderedElement = element props
+      let convertProp p = 
+        let name, _ = unbox p 
+        match name with 
+        | "captureOnClick" ->
+          prop.onClick (fun event -> captureResult (Some(event :> obj)))
+        | "captureOnChange" ->
+          prop.onChange (fun (event: Event) -> captureResult (Some(event :> obj)))
+        | _ -> p
+      let processedProps = [ for a in props do yield convertProp a ]
+      let renderedElement = element processedProps
       match operationState with
       | Some(result) -> 
         let castReturn: 'returnType = castObj result
@@ -173,13 +91,13 @@ let Get<'state> (initialState: 'state) =
       | None -> 
         Some(
           {
-            Updated = true; 
+            Updated = false; 
             ComponentState = initialState;
           } :> obj
         )
       | Some(currentState) -> 
-        // printf "%A\n" currentState
         let castCurrentState: StateContainer<'state> = castObj currentState
+        // printf "Getting castCurrentState %A\n" castCurrentState
         if castCurrentState.Updated then
           Some({castCurrentState with Updated = false} :> obj)
         else 
@@ -211,11 +129,41 @@ let Set<'state> (newState: 'state) : Operation<obj, unit> =
       InvokeWait(None, Some(stateSetter))
   })
 
+let createCombinedDispose disposeOpt1 disposeOpt2 =
+  let combinedDisposer underlyingState =
+    let currentState: (obj option) array = 
+      match underlyingState with 
+      | None -> Array.create 2 None
+      | Some(x) -> castObj x
+    match disposeOpt1 with 
+    | Some(dispose) -> 
+      let disposeResult = dispose currentState.[0]
+      Array.set
+        currentState
+        0
+        disposeResult
+    | _ -> ()
+
+    match disposeOpt2 with
+    | Some(dispose) -> 
+      let disposeResult = dispose currentState.[0]
+      Array.set
+        currentState
+        1
+        disposeResult
+    | _ -> ()
+
+    Some(currentState :> obj)
+      
+  match disposeOpt1, disposeOpt2 with
+  | None, None -> None
+  | _ -> Some(combinedDisposer)
+
 let createCombinedEffect eff1Opt eff2Opt = 
   match eff1Opt, eff2Opt with
   | None, None -> None
   | eff1Opt, eff2Opt ->
-    let combinedEffect render =
+    let combinedEffect rerender =
       let indexedRerender stateLength index stateUpdater = 
         let indexedStateUpdater underlyingState =
           let currentState: (obj option) array = 
@@ -228,7 +176,7 @@ let createCombinedEffect eff1Opt eff2Opt =
             index
             updatedState
           Some(currentState :> obj)
-        render indexedStateUpdater
+        rerender indexedStateUpdater
 
       let disposeOpt1 = 
         match eff1Opt with
@@ -242,17 +190,7 @@ let createCombinedEffect eff1Opt eff2Opt =
             eff2 (indexedRerender 2 1)
           | _ -> None
 
-      Some(
-        fun () -> 
-          match disposeOpt1 with 
-          | Some(dispose) -> dispose ()
-          | _ -> ()
-
-          match disposeOpt2 with
-          | Some(dispose) -> dispose ()
-          | _ -> ()
-          ()
-      )
+      createCombinedDispose disposeOpt1 disposeOpt2
     Some(combinedEffect)
 
 let getElement elementOpt1 elementOpt2 =

@@ -10,7 +10,7 @@ type CoreOperationTypes =
   | NotCore
 
 type ReRender = (obj option -> obj option) -> unit
-type Dispose = (unit -> unit) option
+type Dispose = (obj option -> obj option) option
 type Effect = ReRender -> Dispose
 
 type CaptureReturn = (obj option -> unit)

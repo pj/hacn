@@ -65,6 +65,18 @@ let bind underlyingOperation f =
 let zero() =
   End
 
+let runDisposers (componentStateRef: IRefValue<RefState<'props, 'state>>) =
+  for i in (componentStateRef.current.OperationIndex+1) .. (componentStateRef.current.Operations.Length-1) do
+    let op = componentStateRef.current.Operations.[i]
+    match op.Disposer with
+    | Some(dispose) ->
+      let updatedState = dispose op.State
+      Array.set
+        componentStateRef.current.Operations
+        i
+        ({op with State = updatedState})
+    | _ -> ()
+
 let getFirstOperation delayedFunc componentState =
   if componentState.OperationIndex = -1 then
     let firstOperation = delayedFunc()
@@ -107,25 +119,26 @@ let preprocessOperations refState props =
             match result with
               | Some(newOpState) -> 
                 if operationType = StateGet then
-                  // printf "Setting state during pre process: %A\n" newOpState
-                  nextState <- {refState with ComponentState = Some(newOpState)}
+                  // printf "Setting component state during pre process: %A\n" newOpState
+                  nextState <- {nextState with ComponentState = Some(newOpState)}
                 Array.set 
                   nextState.Operations 
                   index 
                   {State = Some(newOpState); Operation = op; Index = index; Disposer = None}
                 if index < nextIndex then
-                  nextState <- {refState with OperationIndex = index}
+                  nextState <- {nextState with OperationIndex = index}
                   nextIndex <- index
               | None -> ()
           | End -> ()
           | other -> failwith (sprintf "Should not happen %A\n" other)
 
+  // printf "Next state %A" nextState.ComponentState 
   nextState
 
 let execute resultCapture wrapEffect componentState props =
   let mutable currentIndex = componentState.OperationIndex
   let mutable stop = false
-  let mutable renderedElement = None
+  let mutable renderedElement = componentState.Element
   let mutable nextOperations = componentState.Operations
   let mutable nextEffects = []
   let mutable updatedComponentState = componentState.ComponentState
@@ -208,6 +221,7 @@ let execute resultCapture wrapEffect componentState props =
   )
 
 let render useRef useState useEffect delayedFunc props = 
+  printf "-------------"
   let componentStateRef: IRefValue<RefState<'props, 'state>> = useRef({
     Element = None;
     Operations = [||];
@@ -217,19 +231,26 @@ let render useRef useState useEffect delayedFunc props =
 
   // trigger rerender by updating a state variable
   let state: IStateHook<string> = useState("asdf")
-  let rerender _ =
+  let rerender () =
     let asdf = Fable.Core.JS.Math.random ()
     state.update (sprintf "blah%f" asdf)
 
   // Capture a result to return to the flow.
   let updateStateAt index newOpState = 
-    let op = componentStateRef.current.Operations.[index]
-    let updatedOp = {op with State = newOpState}
-    Array.set
-      componentStateRef.current.Operations
-      index
-      updatedOp
-    rerender ()
+    // Ignore captures that occur when the operation index is less than the 
+    // capture, since we might be rerendering something different.
+    if index <= componentStateRef.current.OperationIndex then
+      let op = componentStateRef.current.Operations.[index]
+      let updatedOp = {op with State = newOpState}
+      Array.set
+        componentStateRef.current.Operations
+        index
+        updatedOp
+      componentStateRef.current <- {componentStateRef.current with OperationIndex = index}
+
+      runDisposers componentStateRef
+
+      rerender ()
 
   let updateDisposer index disposer = 
     let op = componentStateRef.current.Operations.[index]
@@ -241,23 +262,26 @@ let render useRef useState useEffect delayedFunc props =
 
   let wrapEffect index effect =
     let wrapUpdateState index stateUpdater = 
-      let op = componentStateRef.current.Operations.[index]
+      if index <= componentStateRef.current.OperationIndex then
+        let op = componentStateRef.current.Operations.[index]
 
-      let state =
+        let state =
+          match op.Operation with 
+          | Control({OperationType = StateSet}) -> 
+            componentStateRef.current.ComponentState
+          | _ -> op.State
+        let updatedState = stateUpdater state
         match op.Operation with 
         | Control({OperationType = StateSet}) -> 
-          componentStateRef.current.ComponentState
-        | _ -> op.State
-      let updatedState = stateUpdater state
-      match op.Operation with 
-      | Control({OperationType = StateSet}) -> 
-        componentStateRef.current <- {componentStateRef.current with ComponentState = updatedState}
-      | _ ->
-        Array.set
-          componentStateRef.current.Operations
-          index
-          {op with State = updatedState}
-      rerender ()
+          componentStateRef.current <- {componentStateRef.current with ComponentState = updatedState}
+        | _ ->
+          Array.set
+            componentStateRef.current.Operations
+            index
+            {op with State = updatedState}
+          componentStateRef.current <- {componentStateRef.current with OperationIndex = index}
+          runDisposers componentStateRef
+        rerender ()
     let updateState = wrapUpdateState index
     let wrappedEffect _ =
       let disposer = effect updateState
@@ -268,6 +292,8 @@ let render useRef useState useEffect delayedFunc props =
   componentStateRef.current <- getFirstOperation delayedFunc componentStateRef.current
 
   componentStateRef.current <- preprocessOperations componentStateRef.current props
+  printf "Current component state: %A" componentStateRef.current.ComponentState
+  runDisposers componentStateRef
 
   let nextState, wrappedNextEffects = execute updateStateAt wrapEffect componentStateRef.current props
 
@@ -281,6 +307,7 @@ let render useRef useState useEffect delayedFunc props =
     )
 
   // Render current element
+  printf "Rendering element: %A" componentStateRef.current.Element
   match componentStateRef.current.Element with
     | Some(element) -> 
       element
