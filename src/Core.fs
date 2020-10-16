@@ -50,7 +50,6 @@ let bind underlyingOperation f =
           match underlyingOperation with
           | Perform(operationData) -> 
             let operationResult = operationData.GetResult captureFunc operationState
-            // printf "Result: %A\n" operationResult
 
             match operationResult with
             | InvokeContinue(element, effect, result) ->
@@ -100,7 +99,6 @@ let getOperationState refState operationType opState props =
       let propsState: Operations.PropsOperationState<obj> = {Props = props; PrevProps = Some(castPropsState.Props)}
       Some(propsState :> obj)
   | StateGet -> 
-    // printf "Getting state during pre process: %A\n" refState.ComponentState
     Option.map (fun state -> state :> obj) refState.ComponentState
   | _ -> opState
 
@@ -119,7 +117,6 @@ let preprocessOperations refState props =
             match result with
               | Some(newOpState) -> 
                 if operationType = StateGet then
-                  // printf "Setting component state during pre process: %A\n" newOpState
                   nextState <- {nextState with ComponentState = Some(newOpState)}
                 Array.set 
                   nextState.Operations 
@@ -132,7 +129,6 @@ let preprocessOperations refState props =
           | End -> ()
           | other -> failwith (sprintf "Should not happen %A\n" other)
 
-  // printf "Next state %A" nextState.ComponentState 
   nextState
 
 let execute resultCapture wrapEffect componentState props =
@@ -187,11 +183,9 @@ let execute resultCapture wrapEffect componentState props =
                   nextOpData.PreProcess(Some(propsOperationState :> obj)) |> ignore
                   Some(propsOperationState :> obj)
                 | StateGet -> 
-                  // printf "Getting state during execute: %A\n" componentState.ComponentState
                   let updatedStateGet = nextOpData.PreProcess(componentState.ComponentState) |> ignore
                   let updatedStateGetOpt = Some(updatedStateGet :> obj)
                   updatedComponentState <- updatedStateGetOpt
-                  // printf "After getting state during execute: %A\n" updatedStateGet
                   updatedStateGetOpt
                 | _ ->
                   nextOpData.PreProcess(None)
@@ -221,7 +215,6 @@ let execute resultCapture wrapEffect componentState props =
   )
 
 let render useRef useState useEffect delayedFunc props = 
-  printf "-------------"
   let componentStateRef: IRefValue<RefState<'props, 'state>> = useRef({
     Element = None;
     Operations = [||];
@@ -292,7 +285,6 @@ let render useRef useState useEffect delayedFunc props =
   componentStateRef.current <- getFirstOperation delayedFunc componentStateRef.current
 
   componentStateRef.current <- preprocessOperations componentStateRef.current props
-  printf "Current component state: %A" componentStateRef.current.ComponentState
   runDisposers componentStateRef
 
   let nextState, wrappedNextEffects = execute updateStateAt wrapEffect componentStateRef.current props
@@ -307,7 +299,6 @@ let render useRef useState useEffect delayedFunc props =
     )
 
   // Render current element
-  printf "Rendering element: %A" componentStateRef.current.Element
   match componentStateRef.current.Element with
     | Some(element) -> 
       element
@@ -326,4 +317,4 @@ type HacnBuilder(render) =
         render delayedFunc props
     ) 
 
-let hacn = HacnBuilder((render Hooks.useRef Hooks.useState Hooks.useEffect))
+let react = HacnBuilder((render Hooks.useRef Hooks.useState Hooks.useEffect))

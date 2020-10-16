@@ -91,7 +91,6 @@ let TestOperation<'returnType> (result: 'returnType) =
     PreProcess = fun _ -> None
     GetResult = fun _ operationState ->
       let effectFunc rerender =
-        printf "Calling effect func\n"
         rerender (fun _ -> Some(result :> obj))
         None
       match operationState with
@@ -132,10 +131,8 @@ type TestStreamTrigger () =
   let mutable trigger = None
   member this.Trigger with set value = trigger <- Some(value)
   member this.Call value = 
-    // printf "calling asdf\n"
     match trigger with
     | Some(underlying) -> 
-      // printf "calling underlying\n"
       underlying value
     | None -> failwith "Should not happen"
 

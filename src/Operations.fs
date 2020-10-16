@@ -42,8 +42,8 @@ let Props<'props when 'props: equality> =
   })
 
 type prop with
-  static member inline captureClick () = Interop.mkAttr "captureOnClick" None
-  static member inline captureChange () = Interop.mkAttr "captureOnChange" None
+  static member inline captureClick = Interop.mkAttr "captureOnClick" None
+  static member inline captureChange = Interop.mkAttr "captureOnChange" None
 
 let Render<'returnType> element (props: IReactProperty list) =
   Perform({ 
@@ -56,7 +56,7 @@ let Render<'returnType> element (props: IReactProperty list) =
         | "captureOnClick" ->
           prop.onClick (fun event -> captureResult (Some(event :> obj)))
         | "captureOnChange" ->
-          prop.onChange (fun (event: Event) -> captureResult (Some(event :> obj)))
+          prop.onChange (fun (value: string) -> captureResult (Some(value :> obj)))
         | _ -> p
       let processedProps = [ for a in props do yield convertProp a ]
       let renderedElement = element processedProps
@@ -97,7 +97,6 @@ let Get<'state> (initialState: 'state) =
         )
       | Some(currentState) -> 
         let castCurrentState: StateContainer<'state> = castObj currentState
-        // printf "Getting castCurrentState %A\n" castCurrentState
         if castCurrentState.Updated then
           Some({castCurrentState with Updated = false} :> obj)
         else 
@@ -221,8 +220,6 @@ let Wait2 op1 op2 =
         | Perform(pd2) -> 
           pd2.GetResult capture opState2
         | _ -> failwith "Can only work with Perform operations"
-      
-      // printf "----------------\n%A\n%A\n\n" opResult1 opResult2
       
       match opResult1, opResult2 with
       | InvokeWait(element1, effect1), InvokeWait(element2, effect2) ->

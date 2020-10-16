@@ -30,7 +30,6 @@ let testOperationWithTrigger<'result> () =
   })
 
   let rerenderTrigger (value: 'result) =
-    printf "Setting value %A" value
     match internalRerender with
     | Some(rerender) -> rerender(fun _ -> Some(value :> obj))
     | None -> failwith "Should not happen"
@@ -44,7 +43,7 @@ type TestState =
 
 Jest.describe("Hacn Tests", fun () ->
   Jest.test("props", fun () ->
-    let element = hacn {
+    let element = react {
       let! x = Props
       do! Render Html.div [prop.testId "test"; prop.text (sprintf "%s World" x.Message)]
     }
@@ -77,7 +76,7 @@ Jest.describe("Hacn Tests", fun () ->
   Jest.test("any", 
     promise {
       let rerenderTrigger, operation = testOperationWithTrigger<string> ()
-      let element = hacn {
+      let element = react {
         let! _, testResponse = 
           WaitAny2 
             (Render Html.div [prop.testId "test"; prop.text "Hello World"]) 
@@ -104,7 +103,7 @@ Jest.describe("Hacn Tests", fun () ->
   Jest.test("wait single", 
     promise {
       let rerenderTrigger, operation = testOperationWithTrigger<string> ()
-      let element = hacn {
+      let element = react {
         let! testResponse = operation
         do! Render Html.div [prop.testId "test"; prop.text testResponse]
       }
@@ -125,7 +124,7 @@ Jest.describe("Hacn Tests", fun () ->
     promise {
       let rerenderTrigger1, operation1 = testOperationWithTrigger ()
       let rerenderTrigger2, operation2 = testOperationWithTrigger ()
-      let element = hacn {
+      let element = react {
         let! hello, world = Wait2 operation1 operation2
         do! 
           Render 
@@ -157,7 +156,7 @@ Jest.describe("Hacn Tests", fun () ->
   Jest.test("state", 
     promise {
       let rerenderTrigger, operation = testOperationWithTrigger ()
-      let element = hacn {
+      let element = react {
         let! componentState = Get {Current = 0}
         do! 
           RenderContinue 
@@ -197,28 +196,44 @@ Jest.describe("Hacn Tests", fun () ->
 
   Jest.test("capturing", 
     promise {
-      let rerenderTrigger, operation = testOperationWithTrigger ()
-      let element = hacn {
-        let! componentState = Get {Current = 0}
-        do! 
-          RenderContinue 
+      let element = react {
+        let! changedValue = 
+          Render 
             Html.div 
             [
               prop.testId "test"
-              prop.text (sprintf "%d!" componentState.Current)
+              prop.text "Say hello!"
+              prop.children [
+                Html.input
+                  [
+                    prop.type' "text"
+                    prop.testId "input"
+                    prop.captureChange
+                  ]
+              ]
             ]
-        let! increment = operation
-        if increment then
-          do! Set({Current = componentState.Current + 1})
+        printf "%s" changedValue
+        if changedValue = "Hello" then
+          do! Render Html.div [
+              prop.testId "test"
+              prop.text "Hi there!"
+            ]
       }
 
       let result = RTL.render(element ())
+      do! Jest.expect(result.findByTestId "test").resolves.toHaveTextContent("Say hello!")
+      let! inputElement = result.findByTestId "input"
 
-      do! Jest.expect(result.findByTestId "test").resolves.toHaveTextContent("0!")
+      RTL.fireEvent.change(inputElement, [event.target [prop.value "No"]])
+      do! Jest.expect(result.findByTestId "test").resolves.toHaveTextContent("Say hello!")
 
-      RTL.act(fun () -> 
-        rerenderTrigger true
-      )
+      let! inputElement = result.findByTestId "input"
+      RTL.fireEvent.change(inputElement, [event.target [prop.value "Okay"]])
+      do! Jest.expect(result.findByTestId "test").resolves.toHaveTextContent("Say hello!")
+
+      let! inputElement = result.findByTestId "input"
+      RTL.fireEvent.change(inputElement, [event.target [prop.value "Hello"]])
+      do! Jest.expect(result.findByTestId "test").resolves.toHaveTextContent("Hi there!")
     }
   )
 )
