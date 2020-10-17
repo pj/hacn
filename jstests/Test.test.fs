@@ -1,11 +1,8 @@
 module Test
 open Hacn.Core
 open Hacn.Operations
-open Fable.React.Standard
-open Fable.React.Helpers
 open Fable.Jester
 open Fable.ReactTestingLibrary
-open Fable.React.Props
 open Feliz
 open Hacn.Types
 
