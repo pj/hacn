@@ -2,7 +2,7 @@
   "private": true,
   "scripts": {
     "test:e2e:server": "webpack-dev-server --config ./e2etests/webpack.config.js",
-    "test:e2e:cypress": "cypress open",
+    "test:e2e:cypress": "cypress open -C e2etests/cypress.json",
     "prejstest": "fable-splitter jstests -o dist/jstests --commonjs -c jstests/splitter.config.js",
     "jstest": "jest",
     "test": "dotnet run --project=tests/Test.fsproj",

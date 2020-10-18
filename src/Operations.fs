@@ -1,14 +1,9 @@
 module Hacn.Operations
 open Fable.React
-open Fable.React.Props
-open Browser.Types
 open Utils
 open Feliz
-#if FABLE_COMPILER
 open Fable.Core.JsInterop
-#else
-open FSharp.Interop.Dynamic
-#endif
+open FSharp.Core
 
 type PropsOperationState<'props> =
   {
@@ -280,7 +275,30 @@ let Next = End
 let NextAny = End
 
 // time operations
-let Timeout = End
+let Timeout time = 
+  Perform({ 
+    OperationType = NotCore;
+    PreProcess = fun _ -> None;
+    GetResult = fun _ operationState -> 
+      match operationState with
+      | Some(_) -> InvokeContinue(None, None, ())
+      | None -> 
+        let timeoutEffect rerender =
+          let timeoutCallback () =
+            let updateState _ = 
+              Some(() :> obj)
+            rerender updateState
+          let timeoutID = Fable.Core.JS.setTimeout timeoutCallback time
+
+          Some(fun _ -> 
+            Fable.Core.JS.clearTimeout timeoutID
+            None
+          )
+          
+        InvokeWait(None, Some(timeoutEffect))
+
+  })
+
 let Interval = End
 
 // fetch data.
