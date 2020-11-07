@@ -1,6 +1,6 @@
 module Hacn.Operations
 open Fable.React
-open Utils
+// open Utils
 open Feliz
 open Fable.Core.JsInterop
 open FSharp.Core
@@ -18,12 +18,12 @@ let Props<'props when 'props: equality> =
       match operationState with 
       | None -> failwith "Should never happen"
       | Some(propsOpState) ->
-        let castPropsOpState: PropsOperationState<obj> = castObj propsOpState
+        let castPropsOpState: PropsOperationState<obj> = unbox propsOpState
         match castPropsOpState.PrevProps with
         | None -> operationState
         | Some(prevProps) -> 
-          let castPrevProps: 'props = castObj prevProps
-          let castProps: 'props = castObj castPropsOpState.Props
+          let castPrevProps: 'props = unbox prevProps
+          let castProps: 'props = unbox castPropsOpState.Props
           if castProps <> castPrevProps then
             operationState
           else
@@ -36,31 +36,31 @@ let Props<'props when 'props: equality> =
         InvokeContinue(None, None, props)
   })
 
-type prop with
-  static member inline captureClick = Interop.mkAttr "captureOnClick" None
-  static member inline captureChange = Interop.mkAttr "captureOnChange" None
+// type prop with
+//   static member inline captureClick = Interop.mkAttr "captureOnClick" None
+//   static member inline captureChange = Interop.mkAttr "captureOnChange" None
 
-let Render<'returnType> element (props: IReactProperty list) =
+let Render (element: IReactProperty list -> ReactElement) (props: IReactProperty list) =
+  Perform({ 
+    OperationType = NotCore;
+    PreProcess = fun _ -> None;
+    GetResult = fun _ __ -> 
+      InvokeWait(Some(element props), None)
+  })
+
+let RenderCapture<'returnType> captureElement =
   Perform({ 
     OperationType = NotCore;
     PreProcess = fun _ -> None;
     GetResult = fun captureResult operationState -> 
-      let convertProp p = 
-        let name, _ = unbox p 
-        match name with 
-        | "captureOnClick" ->
-          prop.onClick (fun event -> captureResult (Some(event :> obj)))
-        | "captureOnChange" ->
-          prop.onChange (fun (value: string) -> captureResult (Some(value :> obj)))
-        | _ -> p
-      let processedProps = [ for a in props do yield convertProp a ]
-      let renderedElement = element processedProps
+      let captureResultInternal v =
+        captureResult (Some(v))
       match operationState with
       | Some(result) -> 
-        let castReturn: 'returnType = castObj result
-        InvokeContinue(Some(renderedElement), None, castReturn)
+        let castReturn: 'returnType = unbox result
+        InvokeContinue(Some(captureElement captureResultInternal), None, castReturn)
       | _ ->
-        InvokeWait(Some(renderedElement), None)
+        InvokeWait(Some(captureElement captureResultInternal), None)
   })
 
 let RenderContinue element (props: IReactProperty list) =
@@ -91,7 +91,7 @@ let Get<'state> (initialState: 'state) =
           } :> obj
         )
       | Some(currentState) -> 
-        let castCurrentState: StateContainer<'state> = castObj currentState
+        let castCurrentState: StateContainer<'state> = unbox currentState
         if castCurrentState.Updated then
           Some({castCurrentState with Updated = false} :> obj)
         else 
@@ -99,7 +99,7 @@ let Get<'state> (initialState: 'state) =
     GetResult = fun _ operationState -> 
       match operationState with
       | Some(state) -> 
-        let castCurrentState: StateContainer<'state> = castObj state
+        let castCurrentState: StateContainer<'state> = unbox state
         InvokeContinue(None, None, castCurrentState.ComponentState)
       | None -> failwith "Please set state before calling Get()"
   })
@@ -128,7 +128,7 @@ let createCombinedDispose disposeOpt1 disposeOpt2 =
     let currentState: (obj option) array = 
       match underlyingState with 
       | None -> Array.create 2 None
-      | Some(x) -> castObj x
+      | Some(x) -> unbox x
     match disposeOpt1 with 
     | Some(dispose) -> 
       let disposeResult = dispose currentState.[0]
@@ -140,7 +140,7 @@ let createCombinedDispose disposeOpt1 disposeOpt2 =
 
     match disposeOpt2 with
     | Some(dispose) -> 
-      let disposeResult = dispose currentState.[0]
+      let disposeResult = dispose currentState.[1]
       Array.set
         currentState
         1
@@ -163,7 +163,7 @@ let createCombinedEffect eff1Opt eff2Opt =
           let currentState: (obj option) array = 
             match underlyingState with 
             | None -> Array.create stateLength None
-            | Some(x) -> castObj x
+            | Some(x) -> unbox x
           let updatedState = stateUpdater (currentState.[index])
           Array.set
             currentState
@@ -201,7 +201,7 @@ let Wait2 op1 op2 =
     GetResult = fun capture operationState -> 
       let underlyingStateCast: (obj option) array = 
         match operationState with
-        | Some(x) -> castObj x
+        | Some(x) -> unbox x
         | None -> [|None; None|]
       let opState1 = underlyingStateCast.[0]
       let opResult1 = 
@@ -237,7 +237,7 @@ let WaitAny2 op1 op2 =
     GetResult = fun capture operationState -> 
       let underlyingStateCast: (obj option) array = 
         match operationState with
-        | Some(x) -> castObj x
+        | Some(x) -> unbox x
         | None -> [|None; None|]
       let opState1 = underlyingStateCast.[0]
       let opResult1 = 
@@ -299,7 +299,29 @@ let Timeout time =
 
   })
 
-let Interval = End
+let Interval interval = 
+  Perform({ 
+    OperationType = NotCore;
+    PreProcess = fun _ -> None;
+    GetResult = fun _ operationState -> 
+      match operationState with
+      | Some(_) -> InvokeContinue(None, None, ())
+      | None -> 
+        let timeoutEffect rerender =
+          let timeoutCallback () =
+            let updateState _ = 
+              Some(() :> obj)
+            rerender updateState
+          let timeoutID = Fable.Core.JS.setInterval timeoutCallback interval
+
+          Some(fun _ -> 
+            Fable.Core.JS.clearInterval timeoutID
+            None
+          )
+          
+        InvokeWait(None, Some(timeoutEffect))
+
+  })
 
 // fetch data.
 let Fetch = End
@@ -310,7 +332,7 @@ let ContextCore<'returnType when 'returnType : equality> (useContext: IContext<'
     OperationType = NotCore;
     PreProcess = fun operationState -> 
       let currentContext = useContext(context)
-      let castOperationState: 'returnType option = castObj operationState
+      let castOperationState: 'returnType option = unbox operationState
       match castOperationState with
       | Some(existingContext) -> 
         if existingContext <> currentContext then
@@ -319,7 +341,7 @@ let ContextCore<'returnType when 'returnType : equality> (useContext: IContext<'
           None
       | None -> Some(currentContext :> obj)
     GetResult = fun _ operationState -> 
-      let castOperationState: 'returnType option = castObj operationState
+      let castOperationState: 'returnType option = unbox operationState
       match castOperationState with
       | Some(existingContext) -> InvokeContinue(None, None, existingContext)
       | None -> failwith "should not happen"
@@ -327,10 +349,33 @@ let ContextCore<'returnType when 'returnType : equality> (useContext: IContext<'
 
 let Context context = ContextCore Hooks.useContext context
 
-let Ref = End
+let Ref (initialValue: 'returnType option) =
+  Perform({ 
+    OperationType = NotCore;
+    PreProcess = fun operationState -> 
+      let currentRef = Hooks.useRef(initialValue)
+      let castOperationState: 'returnType option = unbox operationState
+      match castOperationState with
+      | Some(_) -> None
+      | None -> Some(currentRef :> obj)
+    GetResult = fun _ operationState -> 
+      let castOperationState: (('returnType option) IRefValue) option = unbox operationState
+      match castOperationState with
+      | Some(existingRef) -> InvokeContinue(None, None, existingRef)
+      | None -> failwith "should not happen"
+  })
 
 // Call a function passed in through props in an effect.
-let Call = End
+let Call callable = 
+  Perform({ 
+    OperationType = NotCore;
+    PreProcess = fun _ -> None
+    GetResult = fun _ __ -> 
+      let callCallable _ =
+        callable ()
+        None
+      InvokeContinue(None, Some(callCallable), ())
+  })
 
 // Don't auto-dispose an element?
 let Background = End
