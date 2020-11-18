@@ -1,7 +1,7 @@
 module Hacn.Core
 open Fable.React
-open Hacn.Utils
 open Feliz
+open Fable.Core.JS
 
 type OpTreeNode<'props> =
   {
@@ -70,7 +70,7 @@ let runDisposers (componentStateRef: IRefValue<RefState<'props, 'state>>) =
     match op.Disposer with
     | Some(dispose) ->
       let updatedState = dispose op.State
-      Array.set
+      FSharp.Collections.Array.set
         componentStateRef.current.Operations
         i
         ({op with State = updatedState})
@@ -95,11 +95,11 @@ let getOperationState refState operationType opState props =
       let propsState: Operations.PropsOperationState<obj> = {Props = props; PrevProps = None}
       Some(propsState :> obj)
     | Some(existingPropsState) -> 
-      let castPropsState: Operations.PropsOperationState<obj> = castObj existingPropsState
+      let castPropsState: Operations.PropsOperationState<obj> = unbox existingPropsState
       let propsState: Operations.PropsOperationState<obj> = {Props = props; PrevProps = Some(castPropsState.Props)}
       Some(propsState :> obj)
-  | StateGet -> 
-    Option.map (fun state -> state :> obj) refState.ComponentState
+  // | StateGet -> 
+  //   Option.map (fun state -> state :> obj) refState.ComponentState
   | _ -> opState
 
 // Preprocess operations e.g. props, context, refs
@@ -116,9 +116,9 @@ let preprocessOperations refState props =
             let result = preProcess processOpState
             match result with
               | Some(newOpState) -> 
-                if operationType = StateGet then
-                  nextState <- {nextState with ComponentState = Some(newOpState)}
-                Array.set 
+                // if operationType = StateGet then
+                //   nextState <- {nextState with ComponentState = Some(newOpState)}
+                FSharp.Collections.Array.set 
                   nextState.Operations 
                   index 
                   {State = Some(newOpState); Operation = op; Index = index; Disposer = None}
@@ -167,11 +167,30 @@ let execute resultCapture wrapEffect componentState props =
           | _ -> ()
           match nextOperation with
           | End -> 
+            if (currentIndex + 1) < componentState.Operations.Length then
+              let currentNextOp = nextOperations.[currentIndex+1]
+              FSharp.Collections.Array.set
+                nextOperations
+                (currentIndex + 1)
+                {currentNextOp with Operation = End}
+            else
+              nextOperations <- 
+                FSharp.Collections.Array.append 
+                  nextOperations 
+                  [|
+                    {
+                      State = None; 
+                      Operation = End; 
+                      Index = currentIndex + 1;
+                      Disposer = None;
+                    }
+                  |]
+            currentIndex <- currentIndex + 1
             stop <- true
           | Control(nextOpData) ->
             if (currentIndex + 1) < componentState.Operations.Length then
               let currentNextOp = nextOperations.[currentIndex+1]
-              Array.set
+              FSharp.Collections.Array.set
                 nextOperations
                 (currentIndex + 1)
                 {currentNextOp with Operation = Control(nextOpData)}
@@ -182,15 +201,15 @@ let execute resultCapture wrapEffect componentState props =
                   let propsOperationState: Operations.PropsOperationState<obj> = {Props = props; PrevProps = None}
                   nextOpData.PreProcess(Some(propsOperationState :> obj)) |> ignore
                   Some(propsOperationState :> obj)
-                | StateGet -> 
-                  let updatedStateGet = nextOpData.PreProcess(componentState.ComponentState) |> ignore
-                  let updatedStateGetOpt = Some(updatedStateGet :> obj)
-                  updatedComponentState <- updatedStateGetOpt
-                  updatedStateGetOpt
+                // | StateGet -> 
+                //   let updatedStateGet = nextOpData.PreProcess(componentState.ComponentState) |> ignore
+                //   let updatedStateGetOpt = Some(updatedStateGet :> obj)
+                //   updatedComponentState <- updatedStateGetOpt
+                //   updatedStateGetOpt
                 | _ ->
                   nextOpData.PreProcess(None)
               nextOperations <- 
-                Array.append 
+                FSharp.Collections.Array.append 
                   nextOperations 
                   [|
                     {
@@ -202,7 +221,8 @@ let execute resultCapture wrapEffect componentState props =
                   |]
             currentIndex <- currentIndex + 1
           | other -> failwith (sprintf "Unhandled operation %A" other)
-      | unknownOperation -> failwith (sprintf "Unknown operation %A" unknownOperation)
+      | End -> 
+        stop <- true
   
   (
     {
@@ -235,7 +255,7 @@ let render useRef useState useEffect delayedFunc props =
     if index <= componentStateRef.current.OperationIndex then
       let op = componentStateRef.current.Operations.[index]
       let updatedOp = {op with State = newOpState}
-      Array.set
+      FSharp.Collections.Array.set
         componentStateRef.current.Operations
         index
         updatedOp
@@ -248,7 +268,7 @@ let render useRef useState useEffect delayedFunc props =
   let updateDisposer index disposer = 
     let op = componentStateRef.current.Operations.[index]
     let updatedOp = {op with Disposer = disposer}
-    Array.set
+    FSharp.Collections.Array.set
       componentStateRef.current.Operations
       index
       updatedOp
@@ -258,22 +278,22 @@ let render useRef useState useEffect delayedFunc props =
       if index <= componentStateRef.current.OperationIndex then
         let op = componentStateRef.current.Operations.[index]
 
-        let state =
-          match op.Operation with 
-          | Control({OperationType = StateSet}) -> 
-            componentStateRef.current.ComponentState
-          | _ -> op.State
-        let updatedState = stateUpdater state
-        match op.Operation with 
-        | Control({OperationType = StateSet}) -> 
-          componentStateRef.current <- {componentStateRef.current with ComponentState = updatedState}
-        | _ ->
-          Array.set
-            componentStateRef.current.Operations
-            index
-            {op with State = updatedState}
-          componentStateRef.current <- {componentStateRef.current with OperationIndex = index}
-          runDisposers componentStateRef
+        // let state =
+        //   match op.Operation with 
+        //   | Control({OperationType = StateSet}) -> 
+        //     componentStateRef.current.ComponentState
+        //   | _ -> op.State
+        let updatedState = stateUpdater op.State
+        // match op.Operation with 
+        // | Control({OperationType = StateSet}) -> 
+        //   componentStateRef.current <- {componentStateRef.current with ComponentState = updatedState}
+        // | _ ->
+        FSharp.Collections.Array.set
+          componentStateRef.current.Operations
+          index
+          {op with State = updatedState}
+        componentStateRef.current <- {componentStateRef.current with OperationIndex = index}
+        runDisposers componentStateRef
         rerender ()
     let updateState = wrapUpdateState index
     let wrappedEffect _ =

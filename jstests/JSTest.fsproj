@@ -9,6 +9,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Test.test.fs" />
+    <Compile Include="Props.test.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../src/Hacn.fsproj">

@@ -24,7 +24,8 @@ let App =
       | Some("#/completed") -> Completed
       | _ -> All 
 
-    let! state = Get {Todos = []}
+    let! (state, setState) = Get {Todos = []}
+    console.log "Before Rendering Main"
 
     let activeTodoCount = List.sumBy (fun item -> if not item.Completed then 1 else 0) state.Todos
     let completedTodoCount = List.sumBy (fun item -> if item.Completed then 1 else 0) state.Todos
@@ -36,23 +37,24 @@ let App =
             AddTodo = fun result -> capture result 
           }
 
-          if state.Todos.Length > 0 then
-            Main {
-              MarkCompleted = fun result -> capture result
-              Todos = state.Todos
-              ActiveTodoCount = activeTodoCount
-            }
+          // if state.Todos.Length > 0 then
+          //   Main {
+          //     MarkCompleted = fun result -> capture result
+          //     Todos = state.Todos
+          //     ActiveTodoCount = activeTodoCount
+          //   }
 
-          if activeTodoCount > 0 || completedTodoCount > 0 then
-            Footer {
-              ActiveTodos = activeTodoCount
-              CompletedTodos = completedTodoCount
-              CurrentFilter = currentFilter
-              ClearCompleted = fun _ -> capture ClearCompleted
-            }
+          // if activeTodoCount > 0 || completedTodoCount > 0 then
+          //   Footer {
+          //     ActiveTodos = activeTodoCount
+          //     CompletedTodos = completedTodoCount
+          //     CurrentFilter = currentFilter
+          //     ClearCompleted = fun _ -> capture ClearCompleted
+          //   }
         ]
       )
     
+    console.log "Before Updating State"
     let updatedState =
       match result with 
       | ClearCompleted -> List.filter (fun todo -> todo.Completed) state.Todos
@@ -70,9 +72,9 @@ let App =
           (fun todo -> if todo.Id = id then {todo with Title = name} else todo)
           state.Todos
     
-    do! Set({Todos = updatedState})
+    do! setState {Todos = updatedState}
   }
 
 ReactDom.render(
     App (),
-    document.getElementById("app"))
+    document.getElementsByClassName("todoapp").[0])

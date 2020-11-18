@@ -5,8 +5,8 @@ open Fable.React
 
 type CoreOperationTypes =
   | PropsOperation
-  | StateGet
-  | StateSet
+  // | StateGet
+  // | StateSet
   | NotCore
 
 type ReRender = (obj option -> obj option) -> unit

@@ -2,7 +2,6 @@ module Router
 
 open Browser.Dom
 open Hacn.Types
-open Hacn.Utils
 
 let HashRouter () = 
   Perform({ 
@@ -11,7 +10,7 @@ let HashRouter () =
     GetResult = fun _ operationState -> 
       match operationState with
       | Some(value) -> 
-        let castVal: string = castObj value
+        let castVal: string = unbox value
         InvokeContinue(None, None, Some(castVal))
       | None -> 
         let hashChangeEffect rerender =

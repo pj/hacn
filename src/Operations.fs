@@ -4,6 +4,13 @@ open Fable.React
 open Feliz
 open Fable.Core.JsInterop
 open FSharp.Core
+open Fable.Core.JS
+open Fable.Core.Util
+open Fable.Core
+open Fable.Core.JsInterop
+
+[<ImportMember("./propsCompare.js")>]
+let shallowEqualObjects (x: obj) (y: obj): bool = jsNative
 
 type PropsOperationState<'props> =
   {
@@ -24,7 +31,18 @@ let Props<'props when 'props: equality> =
         | Some(prevProps) -> 
           let castPrevProps: 'props = unbox prevProps
           let castProps: 'props = unbox castPropsOpState.Props
-          if castProps <> castPrevProps then
+          let asdf = JSON.stringify castProps
+          let qwer = JSON.stringify castPrevProps
+          // console.log (
+          //   sprintf 
+          //     "castProps: %A, castPrevProps %A, different %b, shallow equal %b" 
+          //     asdf 
+          //     qwer 
+          //     (castProps <> castPrevProps)
+          //     (not (shallowEqualObjects castProps castPrevProps))
+          //   )
+          if not (shallowEqualObjects castProps castPrevProps) then
+          // if (castProps <> castPrevProps) then
             operationState
           else
             None
@@ -54,11 +72,15 @@ let RenderCapture<'returnType> captureElement =
     PreProcess = fun _ -> None;
     GetResult = fun captureResult operationState -> 
       let captureResultInternal v =
+        console.log "In internal capture"
         captureResult (Some(v))
+      let eraseCapturedResult _ =
+        Some(fun _ -> None)
       match operationState with
       | Some(result) -> 
         let castReturn: 'returnType = unbox result
-        InvokeContinue(Some(captureElement captureResultInternal), None, castReturn)
+        console.log "Invoked Continue"
+        InvokeContinue(Some(captureElement captureResultInternal), Some(eraseCapturedResult), castReturn)
       | _ ->
         InvokeWait(Some(captureElement captureResultInternal), None)
   })
@@ -78,61 +100,97 @@ type StateContainer<'state> =
     ComponentState: 'state;
   }
 
-let Get<'state> (initialState: 'state) =
-  Perform({ 
-    OperationType = StateGet;
+// let Get<'state> (initialState: 'state) =
+//   Perform({ 
+//     OperationType = StateGet;
+//     PreProcess = fun operationState -> 
+//       match operationState with 
+//       | None -> 
+//         Some(
+//           {
+//             Updated = false; 
+//             ComponentState = initialState;
+//           } :> obj
+//         )
+//       | Some(currentState) -> 
+//         let castCurrentState: StateContainer<'state> = unbox currentState
+//         if castCurrentState.Updated then
+//           Some({castCurrentState with Updated = false} :> obj)
+//         else 
+//           None
+//     GetResult = fun _ operationState -> 
+//       match operationState with
+//       | Some(state) -> 
+//         let castCurrentState: StateContainer<'state> = unbox state
+//         InvokeContinue(None, None, castCurrentState.ComponentState)
+//       | None -> failwith "Please set state before calling Get()"
+//   })
+
+let Get<'state> (initialState: 'state) = 
+  Perform({
+    OperationType = NotCore;
     PreProcess = fun operationState -> 
-      match operationState with 
-      | None -> 
-        Some(
-          {
-            Updated = false; 
-            ComponentState = initialState;
-          } :> obj
-        )
+      match operationState with
+      | None -> Some({
+          ComponentState = initialState
+          Updated = false
+        } :> obj)
       | Some(currentState) -> 
         let castCurrentState: StateContainer<'state> = unbox currentState
         if castCurrentState.Updated then
           Some({castCurrentState with Updated = false} :> obj)
         else 
           None
-    GetResult = fun _ operationState -> 
+    GetResult = fun captureResult operationState -> 
+      let StateSetOperation (newState: 'state) : Operation<obj, unit> = 
+        Perform({
+          OperationType = NotCore;
+          PreProcess = fun _ -> None;
+          GetResult = fun _ _ -> 
+            let stateSetEffect rerender =
+              let updateState _ =
+                captureResult (Some({Updated = true; ComponentState = newState} :> obj))
+                None
+              rerender updateState
+              None
+            InvokeWait(None, Some(stateSetEffect))
+        })
       match operationState with
-      | Some(state) -> 
-        let castCurrentState: StateContainer<'state> = unbox state
-        InvokeContinue(None, None, castCurrentState.ComponentState)
-      | None -> failwith "Please set state before calling Get()"
+      | Some(currentState) -> 
+        let castCurrentState: StateContainer<'state> = unbox currentState
+        InvokeContinue(None, None, (castCurrentState.ComponentState, StateSetOperation))
+      | None -> failwith "Should not happen"
   })
 
-let Set<'state> (newState: 'state) : Operation<obj, unit> =
-  Perform({
-    OperationType = StateSet;
-    PreProcess = fun _ -> None;
-    GetResult = fun _ _ -> 
-      let stateSetter rerender =
-        let updateState _ = 
-          Some(
-            {
-              Updated = true;
-              ComponentState = newState
-            } :> obj
-          )
+// let Set<'state> (newState: 'state) : Operation<obj, unit> =
+//   Perform({
+//     OperationType = StateSet;
+//     PreProcess = fun _ -> None;
+//     GetResult = fun _ _ -> 
+//       let stateSetter rerender =
+//         let updateState _ = 
+//           Some(
+//             {
+//               Updated = true;
+//               ComponentState = newState
+//             } :> obj
+//           )
 
-        rerender updateState
-        None
-      InvokeWait(None, Some(stateSetter))
-  })
+//         rerender updateState
+//         None
+//       InvokeWait(None, Some(stateSetter))
+//   })
 
 let createCombinedDispose disposeOpt1 disposeOpt2 =
   let combinedDisposer underlyingState =
     let currentState: (obj option) array = 
       match underlyingState with 
-      | None -> Array.create 2 None
+      | None -> FSharp.Collections.Array.create 2 None
       | Some(x) -> unbox x
     match disposeOpt1 with 
     | Some(dispose) -> 
       let disposeResult = dispose currentState.[0]
-      Array.set
+      FSharp.Collections.Array.set
         currentState
         0
         disposeResult
@@ -141,7 +199,7 @@ let createCombinedDispose disposeOpt1 disposeOpt2 =
     match disposeOpt2 with
     | Some(dispose) -> 
       let disposeResult = dispose currentState.[1]
-      Array.set
+      FSharp.Collections.Array.set
         currentState
         1
         disposeResult
@@ -162,10 +220,10 @@ let createCombinedEffect eff1Opt eff2Opt =
         let indexedStateUpdater underlyingState =
           let currentState: (obj option) array = 
             match underlyingState with 
-            | None -> Array.create stateLength None
+            | None -> FSharp.Collections.Array.create stateLength None
             | Some(x) -> unbox x
           let updatedState = stateUpdater (currentState.[index])
-          Array.set
+          FSharp.Collections.Array.set
             currentState
             index
             updatedState
@@ -372,6 +430,7 @@ let Call callable =
     PreProcess = fun _ -> None
     GetResult = fun _ __ -> 
       let callCallable _ =
+        console.log "Calling callable"
         callable ()
         None
       InvokeContinue(None, Some(callCallable), ())
