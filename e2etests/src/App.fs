@@ -37,12 +37,12 @@ let App =
             AddTodo = fun result -> capture result 
           }
 
-          // if state.Todos.Length > 0 then
-          //   Main {
-          //     MarkCompleted = fun result -> capture result
-          //     Todos = state.Todos
-          //     ActiveTodoCount = activeTodoCount
-          //   }
+          if state.Todos.Length > 0 then
+            Main {
+              MarkCompleted = fun result -> capture result
+              Todos = state.Todos
+              ActiveTodoCount = activeTodoCount
+            }
 
           // if activeTodoCount > 0 || completedTodoCount > 0 then
           //   Footer {
