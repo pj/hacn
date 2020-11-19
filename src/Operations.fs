@@ -71,7 +71,6 @@ let RenderCapture<'returnType> captureElement =
     OperationType = NotCore;
     PreProcess = fun _ -> None;
     GetResult = fun captureResult operationState -> 
-      console.log "In render"
       let captureResultInternal v =
         captureResult (Some(v))
       let eraseCapturedResult _ =
@@ -272,9 +271,6 @@ let Wait2 op1 op2 =
         | Perform(pd2) -> 
           pd2.GetResult capture opState2
         | _ -> failwith "Can only work with Perform operations"
-      
-      console.log opResult1
-      console.log opResult2
       
       match opResult1, opResult2 with
       | InvokeWait(element1, effect1, layoutEffect1), InvokeWait(element2, effect2, layoutEffect2) ->

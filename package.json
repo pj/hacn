@@ -3,10 +3,8 @@
   "scripts": {
     "test:e2e:server": "webpack-dev-server --config ./e2etests/webpack.config.js",
     "test:e2e:cypress": "cypress open -C e2etests/cypress.json",
-    "prejstest": "fable-splitter jstests -o dist/jstests --commonjs -c jstests/splitter.config.js",
-    "jstest": "mocha --require jsdom-global/register dist/jstests/Item.test.js",
-    "test": "dotnet run --project=tests/Test.fsproj",
-    "build:core:tests": "dotnet build tests/Test.fsproj"
+    "pretest": "fable-splitter tests -o dist/tests --commonjs -c tests/splitter.config.js",
+    "test": "mocha --require jsdom-global/register dist/tests/*.test.js"
   },
   "dependencies": {
     "@babel/core": "^7.11.6",

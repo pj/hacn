@@ -38,9 +38,7 @@ let Header : HeaderProps -> ReactElement =
       match ref.current with
       | Some(element) -> 
         let inputElement = box element :?> HTMLInputElement
-        console.log (sprintf "before call %s" inputElement.value)
         do! Call (fun () -> 
-          console.log (sprintf "before add todo %s" inputElement.value)
           props.AddTodo (AddTodo(inputElement.value))
           inputElement.value <- ""
         )

@@ -1,24 +1,29 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
+  <!-- <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>netcoreapp3.1</TargetFramework>
+    <GenerateProgramFile>false</GenerateProgramFile>
+  </PropertyGroup> -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
   </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Test.test.fs" />
+    <Compile Include="Props.test.fs" />
+    <Compile Include="Item.test.fs" />
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../src/Hacn.fsproj">
       <Name>Hacn.fsproj</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Utils.fs" />
-    <Compile Include="Test.fs" />
-  </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="Expecto" Version="9.0.2" />
-    <PackageReference Include="Fable.Mocha" Version="2.9.1" />
     <PackageReference Include="Fable.Browser.Dom" Version="1.1.0" />
     <PackageReference Include="Fable.Core" Version="3.1.5" />
+    <PackageReference Include="Fable.Jester" Version="0.27.1" />
     <PackageReference Include="Fable.React" Version="6.2.0" />
+    <PackageReference Include="Fable.ReactTestingLibrary" Version="0.25.0" />
+    <PackageReference Include="Fable.Mocha" Version="2.9.1" />
     <PackageReference Include="Feliz" Version="1.17.0" />
-    <PackageReference Include="FSharp.Interop.Dynamic" Version="5.0.1.268" />
   </ItemGroup>
 </Project>
