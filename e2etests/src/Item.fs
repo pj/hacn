@@ -27,6 +27,14 @@ let Item =
     let! props = Props
     let! ref = Ref None
     let! editState, setEditState = Get {Editing = false; EditText = props.Todo.Title}
+    if editState.Editing then
+      do! CallLayout (fun () -> 
+        console.log "Focusing element"
+        let inputElement = box ref.current :?> HTMLInputElement
+        inputElement.setSelectionRange (0, inputElement.value.Length)
+        inputElement.focus ()
+      )
+
     let! rowEvent = RenderCapture (
       fun capture -> 
         Html.li [
@@ -76,17 +84,7 @@ let Item =
     | Toggled -> 
       do! Call (fun () -> props.SendEvent (ToggleTodo props.Todo.Id))
     | StartEdit ->
-      match ref.current with
-      | Some(element) -> 
-        let inputElement = box element :?> HTMLInputElement
-        do! Call (fun () -> 
-          console.log "Focusing element"
-          inputElement.setSelectionRange (0, inputElement.value.Length)
-          inputElement.focus ()
-        )
-        // do! Focus ref
-        do! setEditState {Editing = true; EditText = props.Todo.Title}
-      | None -> failwith "Ref not set"
+      do! setEditState {Editing = true; EditText = props.Todo.Title}
     | Delete ->
       do! Call (fun () -> 
         props.SendEvent (ClearTodo props.Todo.Id)

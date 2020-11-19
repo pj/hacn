@@ -2,6 +2,7 @@ module Hacn.Core
 open Fable.React
 open Feliz
 open Fable.Core.JS
+open Hacn.Operations
 
 type OpTreeNode<'props> =
   {
@@ -61,6 +62,74 @@ let bind underlyingOperation f =
     }
   )
 
+let Combine op1 op2 = 
+  let checkNotCore underlyingOperation = 
+    match underlyingOperation with
+    | End -> ()
+    | Control({OperationType = NotCore}) -> ()
+    | _ -> failwith "Underlying operations must be a Control NotCore operation"
+  checkNotCore op1
+  checkNotCore op2
+  Control({ 
+    OperationType = NotCore;
+    PreProcess = fun _ -> None
+    GetResult = fun capture operationState -> 
+      console.log "Calling combine"
+      let underlyingStateCast: (obj option) array = 
+        match operationState with
+        | Some(x) -> unbox x
+        | None -> [|None; None|]
+      let opState1 = underlyingStateCast.[0]
+      let opResult1 = 
+        match op1 with
+        | End -> ControlNext(None, None, None, End)
+        | Control(pd1) -> 
+          pd1.GetResult capture opState1
+        | _ -> failwith "Can only work with Perform operations"
+      let opState2 = underlyingStateCast.[1]
+      let opResult2 = 
+        match op2 with
+        | End -> ControlNext(None, None, None, End)
+        | Control(pd2) -> 
+          pd2.GetResult capture opState2
+        | _ -> failwith "Can only work with Perform operations"
+      
+      match opResult1, opResult2 with
+      | ControlWait(element1, effect1, layoutEffect1), ControlWait(element2, effect2, layoutEffect2) ->
+        ControlWait(
+          (getElement element1 element2), 
+          (createCombinedEffect effect1 effect2), 
+          (createCombinedEffect layoutEffect1 layoutEffect2)
+        )
+
+      | ControlWait(element1, effect1, layoutEffect1), ControlNext(element2, effect2, layoutEffect2, _) ->
+        ControlWait(
+          (getElement element1 element2), 
+          (createCombinedEffect effect1 effect2), 
+          (createCombinedEffect layoutEffect1 layoutEffect2)
+        )
+
+      | ControlNext(element1, effect1, layoutEffect1, _), ControlWait(element2, effect2, layoutEffect2) ->
+        ControlWait(
+          (getElement element1 element2), 
+          (createCombinedEffect effect1 effect2),
+          (createCombinedEffect layoutEffect1 layoutEffect2)
+        )
+
+      | ControlNext(element1, effect1, layoutEffect1, _), ControlNext(element2, effect2, layoutEffect2, ret2) ->
+        ControlNext(
+          (getElement element1 element2), 
+          (createCombinedEffect effect1 effect2),
+          (createCombinedEffect layoutEffect1 layoutEffect2),
+          ret2
+        )
+  })
+
+let combine left right = 
+    match left, right with
+    | (End, End) -> End 
+    | _ -> Combine left right
+
 let zero() =
   End
 
@@ -76,9 +145,8 @@ let runDisposers (componentStateRef: IRefValue<RefState<'props, 'state>>) =
         ({op with State = updatedState})
     | _ -> ()
 
-let getFirstOperation delayedFunc componentState =
+let getFirstOperation firstOperation componentState =
   if componentState.OperationIndex = -1 then
-    let firstOperation = delayedFunc()
     {
       componentState with 
         OperationIndex = 0
@@ -98,8 +166,6 @@ let getOperationState refState operationType opState props =
       let castPropsState: Operations.PropsOperationState<obj> = unbox existingPropsState
       let propsState: Operations.PropsOperationState<obj> = {Props = props; PrevProps = Some(castPropsState.Props)}
       Some(propsState :> obj)
-  // | StateGet -> 
-  //   Option.map (fun state -> state :> obj) refState.ComponentState
   | _ -> opState
 
 // Preprocess operations e.g. props, context, refs
@@ -116,8 +182,6 @@ let preprocessOperations refState props =
             let result = preProcess processOpState
             match result with
               | Some(newOpState) -> 
-                // if operationType = StateGet then
-                //   nextState <- {nextState with ComponentState = Some(newOpState)}
                 FSharp.Collections.Array.set 
                   nextState.Operations 
                   index 
@@ -132,6 +196,7 @@ let preprocessOperations refState props =
   nextState
 
 let execute resultCapture wrapEffect componentState props =
+  console.log "Executing"
   let mutable currentIndex = componentState.OperationIndex
   let mutable stop = false
   let mutable renderedElement = componentState.Element
@@ -142,10 +207,12 @@ let execute resultCapture wrapEffect componentState props =
 
   while not stop do
     let currentOperation = nextOperations.[currentIndex]
+    console.log (sprintf "Current index %d" currentIndex)
     match currentOperation.Operation with
       | Control({GetResult = getResult}) ->
         let capture = resultCapture currentOperation.Index 
         let invokeResult = getResult capture currentOperation.State 
+        console.log (sprintf "Invoke resutl %A" invokeResult)
         match invokeResult with
         | ControlWait(elementOpt, effectOpt, layoutEffectOpt) ->
           match elementOpt with 
@@ -210,11 +277,6 @@ let execute resultCapture wrapEffect componentState props =
                   let propsOperationState: Operations.PropsOperationState<obj> = {Props = props; PrevProps = None}
                   nextOpData.PreProcess(Some(propsOperationState :> obj)) |> ignore
                   Some(propsOperationState :> obj)
-                // | StateGet -> 
-                //   let updatedStateGet = nextOpData.PreProcess(componentState.ComponentState) |> ignore
-                //   let updatedStateGetOpt = Some(updatedStateGet :> obj)
-                //   updatedComponentState <- updatedStateGetOpt
-                //   updatedStateGetOpt
                 | _ ->
                   nextOpData.PreProcess(None)
               nextOperations <- 
@@ -244,8 +306,8 @@ let execute resultCapture wrapEffect componentState props =
     nextLayoutEffects
   )
 
-let render useRef useState useEffect useLayoutEffect delayedFunc props = 
-  let componentStateRef: IRefValue<RefState<'props, 'state>> = useRef({
+let render firstOperation props = 
+  let componentStateRef: IRefValue<RefState<'props, 'state>> = Hooks.useRef({
     Element = None;
     Operations = [||];
     OperationIndex = -1;
@@ -253,13 +315,16 @@ let render useRef useState useEffect useLayoutEffect delayedFunc props =
   })
 
   // trigger rerender by updating a state variable
-  let state: IStateHook<string> = useState("asdf")
+  let state: IStateHook<string> = Hooks.useState("asdf")
   let rerender () =
+    console.log "triggering rerender"
     let asdf = Fable.Core.JS.Math.random ()
     state.update (sprintf "blah%f" asdf)
 
   // Capture a result to return to the flow.
   let updateStateAt index newOpState = 
+    console.log index
+    console.log newOpState
     // Ignore captures that occur when the operation index is less than the 
     // capture, since we might be rerendering something different.
     if index <= componentStateRef.current.OperationIndex then
@@ -288,16 +353,7 @@ let render useRef useState useEffect useLayoutEffect delayedFunc props =
       if index <= componentStateRef.current.OperationIndex then
         let op = componentStateRef.current.Operations.[index]
 
-        // let state =
-        //   match op.Operation with 
-        //   | Control({OperationType = StateSet}) -> 
-        //     componentStateRef.current.ComponentState
-        //   | _ -> op.State
         let updatedState = stateUpdater op.State
-        // match op.Operation with 
-        // | Control({OperationType = StateSet}) -> 
-        //   componentStateRef.current <- {componentStateRef.current with ComponentState = updatedState}
-        // | _ ->
         FSharp.Collections.Array.set
           componentStateRef.current.Operations
           index
@@ -312,7 +368,7 @@ let render useRef useState useEffect useLayoutEffect delayedFunc props =
       ()
     wrappedEffect
 
-  componentStateRef.current <- getFirstOperation delayedFunc componentStateRef.current
+  componentStateRef.current <- getFirstOperation firstOperation componentStateRef.current
 
   componentStateRef.current <- preprocessOperations componentStateRef.current props
   runDisposers componentStateRef
@@ -322,16 +378,16 @@ let render useRef useState useEffect useLayoutEffect delayedFunc props =
   componentStateRef.current <- nextState
 
   // run any effects.
-  useEffect (
+  Hooks.useEffect (
     fun () ->
       List.map (fun eff -> eff ()) wrappedNextEffects |> ignore
       ()
     )
 
   // run any layout effect.
-  useLayoutEffect (
+  React.useLayoutEffect (
     fun () ->
-      List.map (fun eff -> eff ()) wrappedNextEffects |> ignore
+      List.map (fun eff -> eff ()) wrappedNextLayoutEffects |> ignore
       ()
     )
 
@@ -341,17 +397,18 @@ let render useRef useState useEffect useLayoutEffect delayedFunc props =
       element
     | None -> null
 
-type HacnBuilder(render) = 
+type HacnBuilder() = 
   member _.Bind(operation, f) = 
     bind operation f
-  // member _.Bind(element: ReactElement, f) = bind Hacn.Operations.Render(element) f
+  member _.Combine(left, right) =
+    combine left right
   member _.Zero() = 
     zero()
-  member _.Delay(f) = f
-  member _.Run(delayedFunc) =
+  member _.Delay(f) = f ()
+  member _.Run(firstOperation) =
     React.functionComponent<'props>(
       fun (props: 'props) -> 
-        render delayedFunc props
+        render firstOperation props
     ) 
 
-let react = HacnBuilder((render Hooks.useRef Hooks.useState Hooks.useEffect Feliz.React.useLayoutEffect))
+let react = HacnBuilder ()

@@ -63,6 +63,7 @@ let App =
       | SetAllNotCompleted -> List.map (fun todo -> {todo with Completed = false}) state.Todos
       | AddTodo(name) -> 
         let id = System.Random().Next ()
+        console.log(name)
         List.append state.Todos [{Id = id.ToString (); Completed = false; Title = name}]
       | ToggleTodo(id) -> 
         List.map 
