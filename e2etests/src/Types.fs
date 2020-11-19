@@ -13,5 +13,14 @@ type Action =
   | SetAllNotCompleted
   | AddTodo of string
   | ToggleTodo of string
+  | ClearTodo of string
   | SaveTodo of string * string
+
+[<CustomEquality; NoComparison>]
+type ItemProps = { 
+  SendEvent: Action -> unit 
+  Todo: Todo
+} with 
+    override _.Equals __ = false
+    override _.GetHashCode() = 1
 

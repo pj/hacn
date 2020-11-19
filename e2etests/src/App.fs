@@ -19,13 +19,14 @@ let App =
   react {
     let! rawRoute = HashRouter ()
     let currentFilter = 
-      match rawRoute with
-      | Some("#/active") -> NotCompleted
-      | Some("#/completed") -> Completed
-      | _ -> All 
+      if rawRoute.EndsWith "active" then
+        NotCompleted
+      else if rawRoute.EndsWith "completed" then
+        Completed
+      else
+        All
 
     let! (state, setState) = Get {Todos = []}
-    console.log "Before Rendering Main"
 
     let activeTodoCount = List.sumBy (fun item -> if not item.Completed then 1 else 0) state.Todos
     let completedTodoCount = List.sumBy (fun item -> if item.Completed then 1 else 0) state.Todos
@@ -39,25 +40,25 @@ let App =
 
           if state.Todos.Length > 0 then
             Main {
-              MarkCompleted = fun result -> capture result
+              SendEvent = fun result -> capture result
               Todos = state.Todos
+              CurrentFilter = currentFilter
               ActiveTodoCount = activeTodoCount
             }
 
-          // if activeTodoCount > 0 || completedTodoCount > 0 then
-          //   Footer {
-          //     ActiveTodos = activeTodoCount
-          //     CompletedTodos = completedTodoCount
-          //     CurrentFilter = currentFilter
-          //     ClearCompleted = fun _ -> capture ClearCompleted
-          //   }
+          if activeTodoCount > 0 || completedTodoCount > 0 then
+            Footer {
+              ActiveTodos = activeTodoCount
+              CompletedTodos = completedTodoCount
+              CurrentFilter = currentFilter
+              ClearCompleted = fun _ -> capture ClearCompleted
+            }
         ]
       )
     
-    console.log "Before Updating State"
     let updatedState =
       match result with 
-      | ClearCompleted -> List.filter (fun todo -> todo.Completed) state.Todos
+      | ClearCompleted -> List.filter (fun todo -> not todo.Completed) state.Todos
       | SetAllCompleted -> List.map (fun todo -> {todo with Completed = true}) state.Todos
       | SetAllNotCompleted -> List.map (fun todo -> {todo with Completed = false}) state.Todos
       | AddTodo(name) -> 
@@ -71,7 +72,13 @@ let App =
         List.map 
           (fun todo -> if todo.Id = id then {todo with Title = name} else todo)
           state.Todos
+      | ClearTodo(id) -> 
+        List.filter 
+          (fun todo -> todo.Id <> id) 
+          state.Todos
     
+    console.log "--------- Updating state"
+    [for item in updatedState do console.log item] |> ignore
     do! setState {Todos = updatedState}
   }
 

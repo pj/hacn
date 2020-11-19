@@ -6,16 +6,33 @@ open Feliz
 open Fable.React
 open Hacn.Core
 open Hacn.Operations
+open Browser.Types
+
+type ItemEvent = 
+| Toggled
+| StartEdit
+| Delete
+| EditBlured
+| EditKey of string
+| EditChange of string
+
+type ItemState = {
+  Editing:  bool
+  EditText: string
+}
 
 let Item = 
   react {
     let! props = Props
-    let editing = false
-    let editText = props.Title
-    do! Render Html.li [
-        if props.Completed then
+    let! ref = Ref None
+    let! editState, setEditState = Get {Editing = false; EditText = props.Todo.Title}
+    console.log (sprintf "====== rerendering %A" editState)
+    let! rowEvent = RenderCapture (
+      fun capture -> 
+        Html.li [
+        if props.Todo.Completed then
           prop.className "completed"
-        if editing then
+        if editState.Editing then
           prop.className "editing"
         prop.children [
           Html.div [
@@ -24,27 +41,78 @@ let Item =
               Html.input [
                 prop.className "toggle"
                 prop.type' "checkbox"
-                prop.defaultChecked props.Completed
-                // prop.onChange (fun _ -> ())
+                prop.defaultChecked false
+                prop.isChecked props.Todo.Completed
+                prop.onChange (fun (_: bool) -> capture Toggled)
               ]
               Html.label [
-                prop.onDoubleClick (fun _ -> ())
-                prop.text props.Title
+                prop.onDoubleClick (fun _ -> capture StartEdit)
+                prop.text props.Todo.Title
               ]
               Html.button [
                 prop.className "destroy"
-                prop.onClick (fun _ -> ())
+                prop.onClick (fun _ -> capture Delete)
               ]
             ]
           ]
           Html.input [
-            // prop.ref "editField"
+            prop.ref ref
             prop.className "edit"
-            prop.value editText
-            prop.onBlur (fun _ -> ())
-            // prop.onChange (fun _ -> ())
-            prop.onKeyDown (fun _ -> ())
+            prop.value editState.EditText
+            prop.type' "text"
+            prop.onBlur (fun _ -> capture EditBlured)
+            prop.onKeyDown (fun keyEvent -> capture (EditKey keyEvent.key))
+            prop.onChange (
+              fun (keyEvent: Browser.Types.Event) -> 
+                let inputElement = box keyEvent.target :?> HTMLInputElement
+                capture (EditChange inputElement.value)
+              )
           ]
         ]
       ]
+    )
+
+    match rowEvent with 
+    | Toggled -> 
+      do! Call (fun () -> props.SendEvent (ToggleTodo props.Todo.Id))
+    | StartEdit ->
+      match ref.current with
+      | Some(element) -> 
+        let inputElement = box element :?> HTMLInputElement
+        do! Call (fun () -> 
+          console.log "Focusing element"
+          inputElement.setSelectionRange (0, inputElement.value.Length)
+          inputElement.focus ()
+        )
+        do! setEditState {Editing = true; EditText = props.Todo.Title}
+      | None -> failwith "Ref not set"
+    | Delete ->
+      do! Call (fun () -> 
+        props.SendEvent (ClearTodo props.Todo.Id)
+      )
+    | EditBlured ->
+      match ref.current with
+      | Some(element) -> 
+        let inputElement = box element :?> HTMLInputElement
+        do! Call (fun () -> 
+          props.SendEvent (SaveTodo(props.Todo.Id, inputElement.value))
+        )
+        do! setEditState {editState with Editing = false}
+      | None -> failwith "Ref not set"
+    | EditKey(key) ->
+      match key with 
+      | "Enter" -> 
+        match ref.current with
+        | Some(element) -> 
+          let inputElement = box element :?> HTMLInputElement
+          do! Call (fun () -> 
+            props.SendEvent (SaveTodo(props.Todo.Id, inputElement.value))
+          )
+          do! setEditState {editState with Editing = false}
+        | None -> failwith "Ref not set"
+      | "Escape" ->
+        do! setEditState {Editing = false; EditText = props.Todo.Title}
+      | _ -> ()
+    | EditChange(value) ->
+        do! setEditState {editState with EditText = value}
   }

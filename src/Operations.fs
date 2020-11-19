@@ -72,14 +72,12 @@ let RenderCapture<'returnType> captureElement =
     PreProcess = fun _ -> None;
     GetResult = fun captureResult operationState -> 
       let captureResultInternal v =
-        console.log "In internal capture"
         captureResult (Some(v))
       let eraseCapturedResult _ =
         Some(fun _ -> None)
       match operationState with
       | Some(result) -> 
         let castReturn: 'returnType = unbox result
-        console.log "Invoked Continue"
         InvokeContinue(Some(captureElement captureResultInternal), Some(eraseCapturedResult), castReturn)
       | _ ->
         InvokeWait(Some(captureElement captureResultInternal), None)
@@ -430,7 +428,6 @@ let Call callable =
     PreProcess = fun _ -> None
     GetResult = fun _ __ -> 
       let callCallable _ =
-        console.log "Calling callable"
         callable ()
         None
       InvokeContinue(None, Some(callCallable), ())

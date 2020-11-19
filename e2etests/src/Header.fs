@@ -16,9 +16,7 @@ type HeaderProps = { AddTodo: Action -> unit }
 let Header = 
   react {
     let! props = Props
-    console.log "After Props Header"
     let! ref = Ref None
-    console.log "Before Rendering Header"
     let! key = RenderCapture (
       fun capture ->
         Html.header [
@@ -36,12 +34,13 @@ let Header =
           ]
         ]
     )
-    console.log "After Rendering Header"
     if key = "Enter" then
-      console.log ref.current
       match ref.current with
       | Some(element) -> 
         let inputElement = box element :?> HTMLInputElement
-        do! Call (fun () -> (props.AddTodo (AddTodo(inputElement.value))) )
+        do! Call (fun () -> 
+          props.AddTodo (AddTodo(inputElement.value))
+          inputElement.value <- ""
+        )
       | None -> failwith "Ref not set"
   }

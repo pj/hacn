@@ -5,8 +5,9 @@ open Item
 open Types
 
 type MainProps = {
-  MarkCompleted: Action -> unit
+  SendEvent: Action -> unit
   Todos: Todo list
+  CurrentFilter: Filter
   ActiveTodoCount: int
 }
 
@@ -21,8 +22,8 @@ let Main =
             prop.className "toggle-all"
             prop.type' "checkbox"
             prop.onChange (
-              fun isChecked -> props.MarkCompleted (
-                if isChecked then SetAllCompleted else SetAllCompleted
+              fun isChecked -> props.SendEvent (
+                if isChecked then SetAllCompleted else SetAllNotCompleted
               )
             )
             prop.isChecked (props.ActiveTodoCount = 0)
@@ -34,7 +35,11 @@ let Main =
           Html.ul [
             prop.className "todo-list"
             prop.children [
-              for todo in props.Todos do Item todo
+              for todo in props.Todos 
+                do if props.CurrentFilter = All 
+                  || (props.CurrentFilter = Completed && todo.Completed) 
+                  || (props.CurrentFilter = NotCompleted && not todo.Completed) then
+                  Item {SendEvent = props.SendEvent; Todo = todo}
             ]
           ]
         ]

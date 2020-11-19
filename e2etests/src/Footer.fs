@@ -8,8 +8,8 @@ open Hacn.Core
 open Hacn.Operations
 
 type FooterProps = {
-  ActiveTodos: int; 
-  CompletedTodos: int; 
+  ActiveTodos: int
+  CompletedTodos: int
   CurrentFilter: Filter
   ClearCompleted: Browser.Types.MouseEvent -> unit
   }
