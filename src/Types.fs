@@ -20,8 +20,8 @@ type InvokeResult<'props, 'returnType> =
   // | InvokeRender of ReactElement
   // | InvokeEffect of Effect
   // | InvokeReturn of 'returnType
-  | InvokeWait of ReactElement option * Effect option
-  | InvokeContinue of ReactElement option * Effect option * 'returnType
+  | InvokeWait of ReactElement option * Effect option * Effect option
+  | InvokeContinue of ReactElement option * Effect option * Effect option * 'returnType
 and PerformData<'props, 'returnType> =
   { 
     OperationType: CoreOperationTypes;
@@ -35,8 +35,8 @@ and ControlResult<'props> =
 //   | ControlEffect of Effect
 //   | ControlNextOperation of Operation<'props, unit>
 //   | ControlWait
-  | ControlWait of ReactElement option * Effect option
-  | ControlNext of ReactElement option * Effect option * Operation<'props, unit>
+  | ControlWait of ReactElement option * Effect option * Effect option
+  | ControlNext of ReactElement option * Effect option * Effect option * Operation<'props, unit>
 and ControlData<'props> =
   { 
     OperationType: CoreOperationTypes;

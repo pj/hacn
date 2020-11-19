@@ -95,10 +95,10 @@ let TestOperation<'returnType> (result: 'returnType) =
         None
       match operationState with
       | None -> 
-        InvokeWait(None, Some(effectFunc))
+        InvokeWait(None, Some(effectFunc), None)
       | Some(result) -> 
         let castResult: 'returnType = explicitConvert result
-        InvokeContinue(None, None, castResult)
+        InvokeContinue(None, None, None, castResult)
   })
 
 type DelayedOperationState = 
@@ -119,12 +119,12 @@ let TestDelayedOperation<'returnType> (result: 'returnType) =
         None
       match operationState with
       | None -> 
-        InvokeWait(None, Some(delayedFunc))
+        InvokeWait(None, Some(delayedFunc), None)
       | Some(status) -> 
         let castStatus: DelayedOperationState = explicitConvert status
         match castStatus with
-        | {Status = true} -> InvokeWait(None, Some(returnedFunc))
-        | {Status = false} -> InvokeContinue(None, None, result)
+        | {Status = true} -> InvokeWait(None, Some(returnedFunc), None)
+        | {Status = false} -> InvokeContinue(None, None, None, result)
   })
 
 type TestStreamTrigger () = 
@@ -148,8 +148,8 @@ let TestStreamOperation<'returnType> (trigger: TestStreamTrigger) =
         None
       match operationState with
       | None -> 
-        InvokeWait(None, Some(effectFunc))
+        InvokeWait(None, Some(effectFunc), None)
       | Some(result) -> 
         let castResult: 'returnType = explicitConvert result
-        InvokeContinue(None, None, castResult)
+        InvokeContinue(None, None, None, castResult)
   })

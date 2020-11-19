@@ -52,10 +52,10 @@ let bind underlyingOperation f =
             let operationResult = operationData.GetResult captureFunc operationState
 
             match operationResult with
-            | InvokeContinue(element, effect, result) ->
+            | InvokeContinue(element, effect, layoutEffect, result) ->
               let nextOperation = f(result)
-              ControlNext(element, effect, nextOperation)
-            | InvokeWait(element, effect) -> ControlWait(element, effect) 
+              ControlNext(element, effect, layoutEffect, nextOperation)
+            | InvokeWait(element, effect, layoutEffect) -> ControlWait(element, effect, layoutEffect) 
           | Control(_) -> failwith "Control passed as operation"
           | End -> failwith "End passed as operation"
     }
@@ -137,6 +137,7 @@ let execute resultCapture wrapEffect componentState props =
   let mutable renderedElement = componentState.Element
   let mutable nextOperations = componentState.Operations
   let mutable nextEffects = []
+  let mutable nextLayoutEffects = []
   let mutable updatedComponentState = componentState.ComponentState
 
   while not stop do
@@ -146,7 +147,7 @@ let execute resultCapture wrapEffect componentState props =
         let capture = resultCapture currentOperation.Index 
         let invokeResult = getResult capture currentOperation.State 
         match invokeResult with
-        | ControlWait(elementOpt, effectOpt) ->
+        | ControlWait(elementOpt, effectOpt, layoutEffectOpt) ->
           match elementOpt with 
           | Some(element) ->
             renderedElement <- Some(element)
@@ -154,9 +155,13 @@ let execute resultCapture wrapEffect componentState props =
           match effectOpt with 
           | Some(effect) ->
             nextEffects <- nextEffects @ [(wrapEffect currentOperation.Index effect)]
+          | _ -> ()
+          match layoutEffectOpt with 
+          | Some(effect) ->
+            nextLayoutEffects <- nextLayoutEffects @ [(wrapEffect currentOperation.Index effect)]
           | _ -> ()
           stop <- true
-        | ControlNext(elementOpt, effectOpt, nextOperation) ->
+        | ControlNext(elementOpt, effectOpt, layoutEffectOpt, nextOperation) ->
           match elementOpt with 
           | Some(element) ->
             renderedElement <- Some(element)
@@ -164,6 +169,10 @@ let execute resultCapture wrapEffect componentState props =
           match effectOpt with 
           | Some(effect) ->
             nextEffects <- nextEffects @ [(wrapEffect currentOperation.Index effect)]
+          | _ -> ()
+          match layoutEffectOpt with 
+          | Some(effect) ->
+            nextLayoutEffects <- nextLayoutEffects @ [(wrapEffect currentOperation.Index effect)]
           | _ -> ()
           match nextOperation with
           | End -> 
@@ -231,10 +240,11 @@ let execute resultCapture wrapEffect componentState props =
       Element = renderedElement;
       ComponentState = updatedComponentState
     },
-    nextEffects
+    nextEffects,
+    nextLayoutEffects
   )
 
-let render useRef useState useEffect delayedFunc props = 
+let render useRef useState useEffect useLayoutEffect delayedFunc props = 
   let componentStateRef: IRefValue<RefState<'props, 'state>> = useRef({
     Element = None;
     Operations = [||];
@@ -307,12 +317,19 @@ let render useRef useState useEffect delayedFunc props =
   componentStateRef.current <- preprocessOperations componentStateRef.current props
   runDisposers componentStateRef
 
-  let nextState, wrappedNextEffects = execute updateStateAt wrapEffect componentStateRef.current props
+  let nextState, wrappedNextEffects, wrappedNextLayoutEffects = execute updateStateAt wrapEffect componentStateRef.current props
 
   componentStateRef.current <- nextState
 
   // run any effects.
   useEffect (
+    fun () ->
+      List.map (fun eff -> eff ()) wrappedNextEffects |> ignore
+      ()
+    )
+
+  // run any layout effect.
+  useLayoutEffect (
     fun () ->
       List.map (fun eff -> eff ()) wrappedNextEffects |> ignore
       ()
@@ -337,4 +354,4 @@ type HacnBuilder(render) =
         render delayedFunc props
     ) 
 
-let react = HacnBuilder((render Hooks.useRef Hooks.useState Hooks.useEffect))
+let react = HacnBuilder((render Hooks.useRef Hooks.useState Hooks.useEffect Feliz.React.useLayoutEffect))

@@ -11,12 +11,11 @@ let HashRouter () =
       match operationState with
       | Some(value) -> 
         let castVal: string = unbox value
-        InvokeContinue(None, None, castVal)
+        InvokeContinue(None, None, None, castVal)
       | None -> 
         let hashChangeEffect rerender =
           let hashChangeListener (event: Browser.Types.Event) =
             let hce: Browser.Types.HashChangeEvent = unbox event
-            console.log hce
             rerender (fun _ -> Some(hce.newURL :> obj))
 
           window.addEventListener("hashchange", hashChangeListener, false)
@@ -26,5 +25,5 @@ let HashRouter () =
             None
           )
           
-        InvokeContinue(None, Some(hashChangeEffect), "")
+        InvokeContinue(None, Some(hashChangeEffect), None, "")
   })

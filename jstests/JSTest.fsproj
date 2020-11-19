@@ -23,5 +23,6 @@
     <PackageReference Include="Fable.React" Version="6.2.0" />
     <PackageReference Include="Fable.ReactTestingLibrary" Version="0.25.0" />
     <PackageReference Include="Fable.Mocha" Version="2.9.1" />
+    <PackageReference Include="Feliz" Version="1.17.0" />
   </ItemGroup>
 </Project>

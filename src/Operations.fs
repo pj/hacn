@@ -51,7 +51,7 @@ let Props<'props when 'props: equality> =
       | None -> failwith "Should not happen"
       | Some(propsOpState) ->
         let props: 'props = propsOpState?Props
-        InvokeContinue(None, None, props)
+        InvokeContinue(None, None, None, props)
   })
 
 // type prop with
@@ -63,7 +63,7 @@ let Render (element: IReactProperty list -> ReactElement) (props: IReactProperty
     OperationType = NotCore;
     PreProcess = fun _ -> None;
     GetResult = fun _ __ -> 
-      InvokeWait(Some(element props), None)
+      InvokeWait(Some(element props), None, None)
   })
 
 let RenderCapture<'returnType> captureElement =
@@ -78,9 +78,9 @@ let RenderCapture<'returnType> captureElement =
       match operationState with
       | Some(result) -> 
         let castReturn: 'returnType = unbox result
-        InvokeContinue(Some(captureElement captureResultInternal), Some(eraseCapturedResult), castReturn)
+        InvokeContinue(Some(captureElement captureResultInternal), Some(eraseCapturedResult), None, castReturn)
       | _ ->
-        InvokeWait(Some(captureElement captureResultInternal), None)
+        InvokeWait(Some(captureElement captureResultInternal), None, None)
   })
 
 let RenderContinue element (props: IReactProperty list) =
@@ -89,7 +89,7 @@ let RenderContinue element (props: IReactProperty list) =
     PreProcess = fun _ -> None;
     GetResult = fun captureResult operationState -> 
       let renderedElement = element props
-      InvokeContinue(Some(renderedElement), None, ())
+      InvokeContinue(Some(renderedElement), None, None, ())
   })
 
 type StateContainer<'state> = 
@@ -151,12 +151,12 @@ let Get<'state> (initialState: 'state) =
                 None
               rerender updateState
               None
-            InvokeWait(None, Some(stateSetEffect))
+            InvokeWait(None, Some(stateSetEffect), None)
         })
       match operationState with
       | Some(currentState) -> 
         let castCurrentState: StateContainer<'state> = unbox currentState
-        InvokeContinue(None, None, (castCurrentState.ComponentState, StateSetOperation))
+        InvokeContinue(None, None, None, (castCurrentState.ComponentState, StateSetOperation))
       | None -> failwith "Should not happen"
   })
 
@@ -273,17 +273,34 @@ let Wait2 op1 op2 =
         | _ -> failwith "Can only work with Perform operations"
       
       match opResult1, opResult2 with
-      | InvokeWait(element1, effect1), InvokeWait(element2, effect2) ->
-        InvokeWait((getElement element1 element2), (createCombinedEffect effect1 effect2))
+      | InvokeWait(element1, effect1, layoutEffect1), InvokeWait(element2, effect2, layoutEffect2) ->
+        InvokeWait(
+          (getElement element1 element2), 
+          (createCombinedEffect effect1 effect2), 
+          (createCombinedEffect layoutEffect1 layoutEffect2)
+        )
 
-      | InvokeWait(element1, effect1), InvokeContinue(element2, effect2, _) ->
-        InvokeWait((getElement element1 element2), (createCombinedEffect effect1 effect2))
+      | InvokeWait(element1, effect1, layoutEffect1), InvokeContinue(element2, effect2, layoutEffect2, _) ->
+        InvokeWait(
+          (getElement element1 element2), 
+          (createCombinedEffect effect1 effect2), 
+          (createCombinedEffect layoutEffect1 layoutEffect2)
+        )
 
-      | InvokeContinue(element1, effect1, _), InvokeWait(element2, effect2) ->
-        InvokeWait((getElement element1 element2), (createCombinedEffect effect1 effect2))
+      | InvokeContinue(element1, effect1, layoutEffect1, _), InvokeWait(element2, effect2, layoutEffect2) ->
+        InvokeWait(
+          (getElement element1 element2), 
+          (createCombinedEffect effect1 effect2),
+          (createCombinedEffect layoutEffect1 layoutEffect2)
+        )
 
-      | InvokeContinue(element1, effect1, ret1), InvokeContinue(element2, effect2, ret2) ->
-        InvokeContinue((getElement element1 element2), (createCombinedEffect effect1 effect2), (ret1, ret2))
+      | InvokeContinue(element1, effect1, layoutEffect1, ret1), InvokeContinue(element2, effect2, layoutEffect2, ret2) ->
+        InvokeContinue(
+          (getElement element1 element2), 
+          (createCombinedEffect effect1 effect2),
+          (createCombinedEffect layoutEffect1 layoutEffect2),
+          (ret1, ret2)
+        )
   })
 
 let WaitAny2 op1 op2 = 
@@ -309,17 +326,36 @@ let WaitAny2 op1 op2 =
         | _ -> failwith "Can only work with Perform operations"
       
       match opResult1, opResult2 with
-      | InvokeWait(element1, effect1), InvokeWait(element2, effect2) ->
-        InvokeWait((getElement element1 element2), (createCombinedEffect effect1 effect2))
+      | InvokeWait(element1, effect1, layoutEffect1), InvokeWait(element2, effect2, layoutEffect2) ->
+        InvokeWait(
+          (getElement element1 element2), 
+          (createCombinedEffect effect1 effect2),
+          (createCombinedEffect layoutEffect1 layoutEffect2)
+        )
 
-      | InvokeWait(element1, effect1), InvokeContinue(element2, effect2, ret2) ->
-        InvokeContinue((getElement element1 element2), (createCombinedEffect effect1 effect2), (None, Some(ret2)))
+      | InvokeWait(element1, effect1, layoutEffect1), InvokeContinue(element2, effect2, layoutEffect2, ret2) ->
+        InvokeContinue(
+          (getElement element1 element2), 
+          (createCombinedEffect effect1 effect2), 
+          (createCombinedEffect layoutEffect1 layoutEffect2),
+          (None, Some(ret2))
+        )
 
-      | InvokeContinue(element1, effect1, ret1), InvokeWait(element2, effect2) ->
-        InvokeContinue((getElement element1 element2), (createCombinedEffect effect1 effect2), (Some(ret1), None))
+      | InvokeContinue(element1, effect1, layoutEffect1, ret1), InvokeWait(element2, effect2, layoutEffect2) ->
+        InvokeContinue(
+          (getElement element1 element2), 
+          (createCombinedEffect effect1 effect2), 
+          (createCombinedEffect layoutEffect1 layoutEffect2),
+          (Some(ret1), None)
+        )
 
-      | InvokeContinue(element1, effect1, ret1), InvokeContinue(element2, effect2, ret2) ->
-        InvokeContinue((getElement element1 element2), (createCombinedEffect effect1 effect2), (Some(ret1), Some(ret2)))
+      | InvokeContinue(element1, effect1, layoutEffect1, ret1), InvokeContinue(element2, effect2, layoutEffect2, ret2) ->
+        InvokeContinue(
+          (getElement element1 element2), 
+          (createCombinedEffect effect1 effect2), 
+          (createCombinedEffect layoutEffect1 layoutEffect2),
+          (Some(ret1), Some(ret2))
+        )
   })
 
 let WaitAny3 = End
@@ -337,7 +373,7 @@ let Timeout time =
     PreProcess = fun _ -> None;
     GetResult = fun _ operationState -> 
       match operationState with
-      | Some(_) -> InvokeContinue(None, None, ())
+      | Some(_) -> InvokeContinue(None, None, None, ())
       | None -> 
         let timeoutEffect rerender =
           let timeoutCallback () =
@@ -351,7 +387,7 @@ let Timeout time =
             None
           )
           
-        InvokeWait(None, Some(timeoutEffect))
+        InvokeWait(None, Some(timeoutEffect), None)
 
   })
 
@@ -361,7 +397,7 @@ let Interval interval =
     PreProcess = fun _ -> None;
     GetResult = fun _ operationState -> 
       match operationState with
-      | Some(_) -> InvokeContinue(None, None, ())
+      | Some(_) -> InvokeContinue(None, None, None, ())
       | None -> 
         let timeoutEffect rerender =
           let timeoutCallback () =
@@ -375,7 +411,7 @@ let Interval interval =
             None
           )
           
-        InvokeWait(None, Some(timeoutEffect))
+        InvokeWait(None, Some(timeoutEffect), None)
 
   })
 
@@ -399,7 +435,7 @@ let ContextCore<'returnType when 'returnType : equality> (useContext: IContext<'
     GetResult = fun _ operationState -> 
       let castOperationState: 'returnType option = unbox operationState
       match castOperationState with
-      | Some(existingContext) -> InvokeContinue(None, None, existingContext)
+      | Some(existingContext) -> InvokeContinue(None, None, None, existingContext)
       | None -> failwith "should not happen"
   })
 
@@ -417,7 +453,7 @@ let Ref (initialValue: 'returnType option) =
     GetResult = fun _ operationState -> 
       let castOperationState: (('returnType option) IRefValue) option = unbox operationState
       match castOperationState with
-      | Some(existingRef) -> InvokeContinue(None, None, existingRef)
+      | Some(existingRef) -> InvokeContinue(None, None, None, existingRef)
       | None -> failwith "should not happen"
   })
 
@@ -430,7 +466,7 @@ let Call callable =
       let callCallable _ =
         callable ()
         None
-      InvokeContinue(None, Some(callCallable), ())
+      InvokeContinue(None, Some(callCallable), None, ())
   })
 
 // Don't auto-dispose an element?

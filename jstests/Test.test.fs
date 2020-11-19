@@ -23,10 +23,10 @@ let testOperationWithTrigger<'result> () =
           None)
       match operationState with
       | None -> 
-        InvokeWait(None, Some(effectFunc))
+        InvokeWait(None, Some(effectFunc), None)
       | Some(result) -> 
         let castResult: 'result = unbox result
-        InvokeContinue(None, None, castResult)
+        InvokeContinue(None, None, None, castResult)
   })
 
   let rerenderTrigger (value: 'result) =

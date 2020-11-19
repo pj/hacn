@@ -7,6 +7,7 @@ open Fable.React
 open Hacn.Core
 open Hacn.Operations
 open Browser.Types
+// open Focus
 
 type ItemEvent = 
 | Toggled
@@ -26,50 +27,49 @@ let Item =
     let! props = Props
     let! ref = Ref None
     let! editState, setEditState = Get {Editing = false; EditText = props.Todo.Title}
-    console.log (sprintf "====== rerendering %A" editState)
     let! rowEvent = RenderCapture (
       fun capture -> 
         Html.li [
-        if props.Todo.Completed then
-          prop.className "completed"
-        if editState.Editing then
-          prop.className "editing"
-        prop.children [
-          Html.div [
-            prop.className "view"
-            prop.children [
-              Html.input [
-                prop.className "toggle"
-                prop.type' "checkbox"
-                prop.defaultChecked false
-                prop.isChecked props.Todo.Completed
-                prop.onChange (fun (_: bool) -> capture Toggled)
-              ]
-              Html.label [
-                prop.onDoubleClick (fun _ -> capture StartEdit)
-                prop.text props.Todo.Title
-              ]
-              Html.button [
-                prop.className "destroy"
-                prop.onClick (fun _ -> capture Delete)
+          if props.Todo.Completed then
+            prop.className "completed"
+          if editState.Editing then
+            prop.className "editing"
+          prop.children [
+            Html.div [
+              prop.className "view"
+              prop.children [
+                Html.input [
+                  prop.className "toggle"
+                  prop.type' "checkbox"
+                  prop.defaultChecked false
+                  prop.isChecked props.Todo.Completed
+                  prop.onChange (fun (_: bool) -> capture Toggled)
+                ]
+                Html.label [
+                  prop.onDoubleClick (fun _ -> capture StartEdit)
+                  prop.text props.Todo.Title
+                ]
+                Html.button [
+                  prop.className "destroy"
+                  prop.onClick (fun _ -> capture Delete)
+                ]
               ]
             ]
-          ]
-          Html.input [
-            prop.ref ref
-            prop.className "edit"
-            prop.value editState.EditText
-            prop.type' "text"
-            prop.onBlur (fun _ -> capture EditBlured)
-            prop.onKeyDown (fun keyEvent -> capture (EditKey keyEvent.key))
-            prop.onChange (
-              fun (keyEvent: Browser.Types.Event) -> 
-                let inputElement = box keyEvent.target :?> HTMLInputElement
-                capture (EditChange inputElement.value)
-              )
+            Html.input [
+              prop.ref ref
+              prop.className "edit"
+              prop.value editState.EditText
+              prop.type' "text"
+              prop.onBlur (fun _ -> capture EditBlured)
+              prop.onKeyDown (fun keyEvent -> capture (EditKey keyEvent.key))
+              prop.onChange (
+                fun (keyEvent: Browser.Types.Event) -> 
+                  let inputElement = box keyEvent.target :?> HTMLInputElement
+                  capture (EditChange inputElement.value)
+                )
+            ]
           ]
         ]
-      ]
     )
 
     match rowEvent with 
@@ -84,6 +84,7 @@ let Item =
           inputElement.setSelectionRange (0, inputElement.value.Length)
           inputElement.focus ()
         )
+        // do! Focus ref
         do! setEditState {Editing = true; EditText = props.Todo.Title}
       | None -> failwith "Ref not set"
     | Delete ->
