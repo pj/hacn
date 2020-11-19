@@ -13,7 +13,7 @@ type HeaderProps = { AddTodo: Action -> unit }
     override _.Equals __ = false
     override _.GetHashCode() = 1
 
-let Header = 
+let Header : HeaderProps -> ReactElement = 
   react {
     let! props = Props
     let! ref = Ref None

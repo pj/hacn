@@ -18,22 +18,27 @@ type ItemEvent =
 | EditChange of string
 
 type ItemState = {
-  Editing:  bool
+  Editing: bool
+  StartFocus: bool
   EditText: string
 }
 
-let Item = 
+let Item : ItemProps -> ReactElement =
   react {
     let! props = Props
     let! ref = Ref None
-    let! editState, setEditState = Get {Editing = false; EditText = props.Todo.Title}
-    if editState.Editing then
-      do! CallLayout (fun () -> 
+    let! editState, setEditState = Get {
+      Editing = false
+      StartFocus = false
+      EditText = props.Todo.Title
+    }
+    do! Call (fun () -> 
+      if editState.Editing && editState.StartFocus then
         console.log "Focusing element"
         let inputElement = box ref.current :?> HTMLInputElement
         inputElement.setSelectionRange (0, inputElement.value.Length)
         inputElement.focus ()
-      )
+    )
 
     let! rowEvent = RenderCapture (
       fun capture -> 
@@ -84,7 +89,11 @@ let Item =
     | Toggled -> 
       do! Call (fun () -> props.SendEvent (ToggleTodo props.Todo.Id))
     | StartEdit ->
-      do! setEditState {Editing = true; EditText = props.Todo.Title}
+      do! setEditState {
+        Editing = true
+        EditText = props.Todo.Title
+        StartFocus = true
+      }
     | Delete ->
       do! Call (fun () -> 
         props.SendEvent (ClearTodo props.Todo.Id)
@@ -107,11 +116,15 @@ let Item =
           do! Call (fun () -> 
             props.SendEvent (SaveTodo(props.Todo.Id, inputElement.value))
           )
-          do! setEditState {editState with Editing = false}
+          do! setEditState {editState with Editing = false; StartFocus = false}
         | None -> failwith "Ref not set"
       | "Escape" ->
-        do! setEditState {Editing = false; EditText = props.Todo.Title}
+        do! setEditState {
+          Editing = false
+          EditText = props.Todo.Title
+          StartFocus = false
+        }
       | _ -> ()
     | EditChange(value) ->
-        do! setEditState {editState with EditText = value}
+        do! setEditState {editState with EditText = value; StartFocus = false}
   }

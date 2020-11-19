@@ -65,4 +65,4 @@ let itemTests =
             RTL.cleanup ()
     ]
 
-Mocha.runTests itemTests |> ignore
+// Mocha.runTests itemTests |> ignore
