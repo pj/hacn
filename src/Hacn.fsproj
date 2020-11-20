@@ -1,7 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
+    <PackageId>Hacn</PackageId>
+    <Version>0.0.6</Version>
+    <Authors>Paul Johnson</Authors>
+    <!-- <Description>DSL for creating React components using Fable and F# computation expressions</Description>
+    <RepositoryUrl>https://github.com/pj/hacn</RepositoryUrl>
+    <PackageIconUrl></PackageIconUrl>
+    <PackageTags>fsharp;fable;react;feliz</PackageTags> -->
   </PropertyGroup>
+  <ItemGroup>
+    <Content Include="*.fsproj; *.fs; *.js" PackagePath="fable\" />
+  </ItemGroup>
   <ItemGroup>
     <Compile Include="Types.fs" />
     <Compile Include="Operations.fs" />
