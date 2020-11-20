@@ -74,7 +74,6 @@ let Combine op1 op2 =
     OperationType = NotCore;
     PreProcess = fun _ -> None
     GetResult = fun capture operationState -> 
-      console.log "Calling combine"
       let underlyingStateCast: (obj option) array = 
         match operationState with
         | Some(x) -> unbox x
@@ -196,7 +195,6 @@ let preprocessOperations refState props =
   nextState
 
 let execute resultCapture wrapEffect componentState props =
-  console.log "Executing"
   let mutable currentIndex = componentState.OperationIndex
   let mutable stop = false
   let mutable renderedElement = componentState.Element
@@ -207,12 +205,10 @@ let execute resultCapture wrapEffect componentState props =
 
   while not stop do
     let currentOperation = nextOperations.[currentIndex]
-    console.log (sprintf "Current index %d" currentIndex)
     match currentOperation.Operation with
       | Control({GetResult = getResult}) ->
         let capture = resultCapture currentOperation.Index 
         let invokeResult = getResult capture currentOperation.State 
-        console.log (sprintf "Invoke resutl %A" invokeResult)
         match invokeResult with
         | ControlWait(elementOpt, effectOpt, layoutEffectOpt) ->
           match elementOpt with 
@@ -317,14 +313,11 @@ let render firstOperation props =
   // trigger rerender by updating a state variable
   let state: IStateHook<string> = Hooks.useState("asdf")
   let rerender () =
-    console.log "triggering rerender"
     let asdf = Fable.Core.JS.Math.random ()
     state.update (sprintf "blah%f" asdf)
 
   // Capture a result to return to the flow.
   let updateStateAt index newOpState = 
-    console.log index
-    console.log newOpState
     // Ignore captures that occur when the operation index is less than the 
     // capture, since we might be rerendering something different.
     if index <= componentStateRef.current.OperationIndex then

@@ -34,7 +34,6 @@ let Item : ItemProps -> ReactElement =
     }
     do! Call (fun () -> 
       if editState.Editing && editState.StartFocus then
-        console.log "Focusing element"
         let inputElement = box ref.current :?> HTMLInputElement
         inputElement.setSelectionRange (0, inputElement.value.Length)
         inputElement.focus ()
