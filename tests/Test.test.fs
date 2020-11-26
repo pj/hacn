@@ -5,8 +5,6 @@ open Fable.ReactTestingLibrary
 open Feliz
 open Hacn.Types
 open Fable.Mocha
-open Fable.Core
-open Browser.Dom
 open Browser.Types
 
 type TestProps = { Message: string }
@@ -14,7 +12,6 @@ type TestProps = { Message: string }
 let testOperationWithTrigger<'result> () =
   let mutable internalRerender = None
   let operation = Perform({
-    OperationType = NotCore
     PreProcess = fun _ -> None
     GetResult = fun _ operationState ->
       let effectFunc rerender =
@@ -23,10 +20,23 @@ let testOperationWithTrigger<'result> () =
           None)
       match operationState with
       | None -> 
-        InvokeWait(None, Some(effectFunc), None)
+        PerformWait(
+          {
+            Element = None
+            Effect = Some(effectFunc)
+            LayoutEffect = None
+          }
+        )
       | Some(result) -> 
         let castResult: 'result = unbox result
-        InvokeContinue(None, None, None, castResult)
+        PerformContinue(
+          {
+            Element = None
+            Effect = None
+            LayoutEffect = None
+          },
+          castResult
+        )
   })
 
   let rerenderTrigger (value: 'result) =

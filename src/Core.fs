@@ -4,7 +4,7 @@ open Feliz
 open Fable.Core.JS
 open Hacn.Operations
 
-type OpTreeNode<'props> =
+type OpTreeNode<'props when 'props: equality> =
   {
     // State storage for the operation.
     State: obj option;
@@ -18,7 +18,7 @@ type OpTreeNode<'props> =
     Disposer: Dispose;
   }
 
-type RefState<'props, 'state> =
+type RefState<'props, 'state when 'props: equality> =
   {
     // Last element rendered.
     Element: ReactElement option;
@@ -32,102 +32,104 @@ type RefState<'props, 'state> =
 
     // Component state object
     ComponentState: obj option;
+
+    PrevProps: 'props option
   }
 
-let bind underlyingOperation f = 
-  Control(
-    {
-      OperationType = 
-        match underlyingOperation with
-         | Perform(opData) -> opData.OperationType; 
-         | _ -> failwith "Underlying must be perform Operation"
-      PreProcess = 
-        fun operationState -> 
-          match underlyingOperation with
-           | Perform(opData) -> opData.PreProcess(operationState)
-           | _ -> failwith "Underlying must be perform Operation"
-      GetResult = 
-        fun captureFunc operationState ->
-          match underlyingOperation with
-          | Perform(operationData) -> 
-            let operationResult = operationData.GetResult captureFunc operationState
+let bind<'props, 'resultType, 'x, 'y when 'props: equality and 'x: equality> (underlyingOperation: Operation<'props, 'resultType>) (f: 'resultType -> Operation<'x, unit>) : Operation<'x, 'y> = 
+// let bind underlyingOperation f = 
+  match underlyingOperation with
+  | PerformProps({Changed = changed}) ->
+    ControlProps(
+      {
+        Changed =  fun a b -> changed (unbox a) (unbox b)
+        Execute = fun props ->
+          let nextOperation = f(unbox props)
+          ControlNext({Element = None; Effect = None; LayoutEffect = None}, nextOperation)
+      }
+    )
+  | Perform(underlyingOperationData) ->
+    Control(
+      {
+        PreProcess = fun operationState -> underlyingOperationData.PreProcess(operationState)
+        GetResult = 
+          fun captureFunc operationState ->
+            let operationResult = underlyingOperationData.GetResult captureFunc operationState
 
             match operationResult with
-            | InvokeContinue(element, effect, layoutEffect, result) ->
+            | PerformContinue(operationData, result) ->
               let nextOperation = f(result)
-              ControlNext(element, effect, layoutEffect, nextOperation)
-            | InvokeWait(element, effect, layoutEffect) -> ControlWait(element, effect, layoutEffect) 
-          | Control(_) -> failwith "Control passed as operation"
-          | End -> failwith "End passed as operation"
-    }
-  )
+              ControlNext(operationData, nextOperation)
+            | PerformWait(asdf) -> ControlWait(asdf)
+      }
+    )
+  | _ -> failwith (sprintf "Can't bind operation %A" underlyingOperation)
 
-let Combine op1 op2 = 
-  let checkNotCore underlyingOperation = 
-    match underlyingOperation with
-    | End -> ()
-    | Control({OperationType = NotCore}) -> ()
-    | _ -> failwith "Underlying operations must be a Control NotCore operation"
-  checkNotCore op1
-  checkNotCore op2
-  Control({ 
-    OperationType = NotCore;
-    PreProcess = fun _ -> None
-    GetResult = fun capture operationState -> 
-      let underlyingStateCast: (obj option) array = 
-        match operationState with
-        | Some(x) -> unbox x
-        | None -> [|None; None|]
-      let opState1 = underlyingStateCast.[0]
-      let opResult1 = 
-        match op1 with
-        | End -> ControlNext(None, None, None, End)
-        | Control(pd1) -> 
-          pd1.GetResult capture opState1
-        | _ -> failwith "Can only work with Perform operations"
-      let opState2 = underlyingStateCast.[1]
-      let opResult2 = 
-        match op2 with
-        | End -> ControlNext(None, None, None, End)
-        | Control(pd2) -> 
-          pd2.GetResult capture opState2
-        | _ -> failwith "Can only work with Perform operations"
+// let Combine op1 op2 = 
+//   // let checkNotCore underlyingOperation = 
+//   //   match underlyingOperation with
+//   //   | End -> ()
+//   //   | Control({OperationType = NotCore}) -> ()
+//   //   | _ -> failwith "Underlying operations must be a Control NotCore operation"
+//   // checkNotCore op1
+//   // checkNotCore op2
+//   Perform({ 
+//     PreProcess = fun _ -> None
+//     GetResult = fun capture operationState -> 
+//       let underlyingStateCast: (obj option) array = 
+//         match operationState with
+//         | Some(x) -> unbox x
+//         | None -> [|None; None|]
+//       let opState1 = underlyingStateCast.[0]
+//       let opResult1 = 
+//         match op1 with
+//         | End -> Next(operationData, End)
+//         | Control(pd1) -> 
+//           pd1.GetResult capture opState1
+//         | _ -> failwith "Can only work with Perform operations"
+//       let opState2 = underlyingStateCast.[1]
+//       let opResult2 = 
+//         match op2 with
+//         | End -> ControlNext(None, None, None, End)
+//         | Control(pd2) -> 
+//           pd2.GetResult capture opState2
+//         | _ -> failwith "Can only work with Perform operations"
       
-      match opResult1, opResult2 with
-      | ControlWait(element1, effect1, layoutEffect1), ControlWait(element2, effect2, layoutEffect2) ->
-        ControlWait(
-          (getElement element1 element2), 
-          (createCombinedEffect effect1 effect2), 
-          (createCombinedEffect layoutEffect1 layoutEffect2)
-        )
+//       match opResult1, opResult2 with
+//       | ControlWait(element1, effect1, layoutEffect1), ControlWait(element2, effect2, layoutEffect2) ->
+//         ControlWait(
+//           (getElement element1 element2), 
+//           (createCombinedEffect effect1 effect2), 
+//           (createCombinedEffect layoutEffect1 layoutEffect2)
+//         )
 
-      | ControlWait(element1, effect1, layoutEffect1), ControlNext(element2, effect2, layoutEffect2, _) ->
-        ControlWait(
-          (getElement element1 element2), 
-          (createCombinedEffect effect1 effect2), 
-          (createCombinedEffect layoutEffect1 layoutEffect2)
-        )
+//       | ControlWait(element1, effect1, layoutEffect1), ControlNext(element2, effect2, layoutEffect2, _) ->
+//         ControlWait(
+//           (getElement element1 element2), 
+//           (createCombinedEffect effect1 effect2), 
+//           (createCombinedEffect layoutEffect1 layoutEffect2)
+//         )
 
-      | ControlNext(element1, effect1, layoutEffect1, _), ControlWait(element2, effect2, layoutEffect2) ->
-        ControlWait(
-          (getElement element1 element2), 
-          (createCombinedEffect effect1 effect2),
-          (createCombinedEffect layoutEffect1 layoutEffect2)
-        )
+//       | ControlNext(element1, effect1, layoutEffect1, _), ControlWait(element2, effect2, layoutEffect2) ->
+//         ControlWait(
+//           (getElement element1 element2), 
+//           (createCombinedEffect effect1 effect2),
+//           (createCombinedEffect layoutEffect1 layoutEffect2)
+//         )
 
-      | ControlNext(element1, effect1, layoutEffect1, _), ControlNext(element2, effect2, layoutEffect2, ret2) ->
-        ControlNext(
-          (getElement element1 element2), 
-          (createCombinedEffect effect1 effect2),
-          (createCombinedEffect layoutEffect1 layoutEffect2),
-          ret2
-        )
-  })
+//       | ControlNext(element1, effect1, layoutEffect1, _), ControlNext(element2, effect2, layoutEffect2, ret2) ->
+//         ControlNext(
+//           (getElement element1 element2), 
+//           (createCombinedEffect effect1 effect2),
+//           (createCombinedEffect layoutEffect1 layoutEffect2),
+//           ret2
+//         )
+//   })
 
-let combine left right = 
-    match left, right with
-    | (End, End) -> End 
-    | _ -> Combine left right
+// let combine left right = 
+//     match left, right with
+//     | (End, End) -> End 
+//     | _ -> Combine left right
 
 let zero() =
   End
@@ -154,19 +156,6 @@ let getFirstOperation firstOperation componentState =
   else
     componentState
 
-let getOperationState refState operationType opState props =
-  match operationType with
-  | PropsOperation -> 
-    match opState with
-    | None -> 
-      let propsState: Operations.PropsOperationState<obj> = {Props = props; PrevProps = None}
-      Some(propsState :> obj)
-    | Some(existingPropsState) -> 
-      let castPropsState: Operations.PropsOperationState<obj> = unbox existingPropsState
-      let propsState: Operations.PropsOperationState<obj> = {Props = props; PrevProps = Some(castPropsState.Props)}
-      Some(propsState :> obj)
-  | _ -> opState
-
 // Preprocess operations e.g. props, context, refs
 let preprocessOperations refState props =
   let mutable nextIndex = refState.OperationIndex
@@ -175,10 +164,10 @@ let preprocessOperations refState props =
     match item with
       | {State = opState; Operation = op; Index = index} ->
         match op with 
-          | Control({PreProcess = preProcess; OperationType = operationType}) -> 
-            let processOpState: obj option = getOperationState refState operationType opState props
+          | Control({PreProcess = preProcess}) -> 
+            // let processOpState: obj option = getOperationState refState operationType opState props
 
-            let result = preProcess processOpState
+            let result = preProcess opState
             match result with
               | Some(newOpState) -> 
                 FSharp.Collections.Array.set 
@@ -189,8 +178,12 @@ let preprocessOperations refState props =
                   nextState <- {nextState with OperationIndex = index}
                   nextIndex <- index
               | None -> ()
+          | ControlProps({Changed = changed}) ->
+            if changed refState.PrevProps props && index < nextIndex then
+              nextState <- {nextState with OperationIndex = index}
+              nextIndex <- index
           | End -> ()
-          | other -> failwith (sprintf "Should not happen %A\n" other)
+          | _ -> failwith (sprintf "Unknown op %A" op)
 
   nextState
 
@@ -205,91 +198,83 @@ let execute resultCapture wrapEffect componentState props =
 
   while not stop do
     let currentOperation = nextOperations.[currentIndex]
-    match currentOperation.Operation with
-      | Control({GetResult = getResult}) ->
-        let capture = resultCapture currentOperation.Index 
-        let invokeResult = getResult capture currentOperation.State 
-        match invokeResult with
-        | ControlWait(elementOpt, effectOpt, layoutEffectOpt) ->
-          match elementOpt with 
-          | Some(element) ->
-            renderedElement <- Some(element)
-          | _ -> ()
-          match effectOpt with 
-          | Some(effect) ->
-            nextEffects <- nextEffects @ [(wrapEffect currentOperation.Index effect)]
-          | _ -> ()
-          match layoutEffectOpt with 
-          | Some(effect) ->
-            nextLayoutEffects <- nextLayoutEffects @ [(wrapEffect currentOperation.Index effect)]
-          | _ -> ()
-          stop <- true
-        | ControlNext(elementOpt, effectOpt, layoutEffectOpt, nextOperation) ->
-          match elementOpt with 
-          | Some(element) ->
-            renderedElement <- Some(element)
-          | _ -> ()
-          match effectOpt with 
-          | Some(effect) ->
-            nextEffects <- nextEffects @ [(wrapEffect currentOperation.Index effect)]
-          | _ -> ()
-          match layoutEffectOpt with 
-          | Some(effect) ->
-            nextLayoutEffects <- nextLayoutEffects @ [(wrapEffect currentOperation.Index effect)]
-          | _ -> ()
-          match nextOperation with
-          | End -> 
-            if (currentIndex + 1) < componentState.Operations.Length then
-              let currentNextOp = nextOperations.[currentIndex+1]
-              FSharp.Collections.Array.set
-                nextOperations
-                (currentIndex + 1)
-                {currentNextOp with Operation = End}
-            else
-              nextOperations <- 
-                FSharp.Collections.Array.append 
-                  nextOperations 
-                  [|
-                    {
-                      State = None; 
-                      Operation = End; 
-                      Index = currentIndex + 1;
-                      Disposer = None;
-                    }
-                  |]
-            currentIndex <- currentIndex + 1
-            stop <- true
-          | Control(nextOpData) ->
-            if (currentIndex + 1) < componentState.Operations.Length then
-              let currentNextOp = nextOperations.[currentIndex+1]
-              FSharp.Collections.Array.set
-                nextOperations
-                (currentIndex + 1)
-                {currentNextOp with Operation = Control(nextOpData)}
-            else
-              let preProcessState = 
-                match nextOpData.OperationType with
-                | PropsOperation -> 
-                  let propsOperationState: Operations.PropsOperationState<obj> = {Props = props; PrevProps = None}
-                  nextOpData.PreProcess(Some(propsOperationState :> obj)) |> ignore
-                  Some(propsOperationState :> obj)
-                | _ ->
-                  nextOpData.PreProcess(None)
-              nextOperations <- 
-                FSharp.Collections.Array.append 
-                  nextOperations 
-                  [|
-                    {
-                      State = preProcessState; 
-                      Operation = Control(nextOpData); 
-                      Index = currentIndex + 1;
-                      Disposer = None;
-                    }
-                  |]
-            currentIndex <- currentIndex + 1
-          | other -> failwith (sprintf "Unhandled operation %A" other)
-      | End -> 
+    let updateElementAndEffects (operationData: OperationData) =
+      match operationData.Element with 
+      | Some(element) ->
+        renderedElement <- Some(element)
+      | _ -> ()
+      match operationData.Effect with 
+      | Some(effect) ->
+        nextEffects <- nextEffects @ [(wrapEffect currentOperation.Index effect)]
+      | _ -> ()
+      match operationData.LayoutEffect with 
+      | Some(effect) ->
+        nextLayoutEffects <- nextLayoutEffects @ [(wrapEffect currentOperation.Index effect)]
+      | _ -> ()
+
+    let handleInvokeResult invokeResult =
+      match invokeResult with
+      // | Continue(_, __) -> failwith "Continue should only be passed into bind, not into execution."
+      | ControlWait(operationData) ->
+        updateElementAndEffects operationData
         stop <- true
+      | ControlNext(operationData, nextOperation) ->
+        updateElementAndEffects operationData
+        match nextOperation with
+        | End -> 
+          if (currentIndex + 1) < componentState.Operations.Length then
+            let currentNextOp = nextOperations.[currentIndex+1]
+            FSharp.Collections.Array.set
+              nextOperations
+              (currentIndex + 1)
+              {currentNextOp with Operation = End}
+          else
+            nextOperations <- 
+              FSharp.Collections.Array.append 
+                nextOperations 
+                [|
+                  {
+                    State = None; 
+                    Operation = End; 
+                    Index = currentIndex + 1;
+                    Disposer = None;
+                  }
+                |]
+          currentIndex <- currentIndex + 1
+          stop <- true
+        | Control(nextOpData) ->
+          if (currentIndex + 1) < componentState.Operations.Length then
+            let currentNextOp = nextOperations.[currentIndex+1]
+            FSharp.Collections.Array.set
+              nextOperations
+              (currentIndex + 1)
+              {currentNextOp with Operation = Control(nextOpData)}
+          else
+            let preProcessState = nextOpData.PreProcess(None)
+            nextOperations <- 
+              FSharp.Collections.Array.append 
+                nextOperations 
+                [|
+                  {
+                    State = preProcessState; 
+                    Operation = Control(nextOpData); 
+                    Index = currentIndex + 1;
+                    Disposer = None;
+                  }
+                |]
+          currentIndex <- currentIndex + 1
+
+    match currentOperation.Operation with
+    | ControlProps({Execute = execute}) ->
+      let invokeResult = execute props
+      handleInvokeResult invokeResult
+    | Control({GetResult = getResult}) ->
+      let capture = resultCapture currentOperation.Index 
+      let invokeResult = getResult capture currentOperation.State 
+      handleInvokeResult invokeResult
+    | End -> 
+      stop <- true
+    | _ -> failwith (sprintf "Unknown op %A" currentOperation)
   
   (
     {
@@ -297,6 +282,7 @@ let execute resultCapture wrapEffect componentState props =
       Operations = nextOperations; 
       Element = renderedElement;
       ComponentState = updatedComponentState
+      PrevProps = componentState.PrevProps
     },
     nextEffects,
     nextLayoutEffects
@@ -304,10 +290,11 @@ let execute resultCapture wrapEffect componentState props =
 
 let render firstOperation props = 
   let componentStateRef: IRefValue<RefState<'props, 'state>> = Hooks.useRef({
-    Element = None;
-    Operations = [||];
-    OperationIndex = -1;
-    ComponentState = None;
+    Element = None
+    Operations = [||]
+    OperationIndex = -1
+    ComponentState = None
+    PrevProps = None
   })
 
   // trigger rerender by updating a state variable
@@ -393,15 +380,15 @@ let render firstOperation props =
 type HacnBuilder() = 
   member _.Bind(operation, f) = 
     bind operation f
-  member _.Combine(left, right) =
-    combine left right
+  // member _.Combine(left, right) =
+  //   combine left right
   member _.Zero() = 
     zero()
-  member _.Delay(f) = f ()
+  member _.Delay(f) = f
   member _.Run(firstOperation) =
     React.functionComponent<'props>(
       fun (props: 'props) -> 
-        render firstOperation props
+        render (firstOperation ()) props
     ) 
 
 let react = HacnBuilder ()

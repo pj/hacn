@@ -3,11 +3,9 @@ module Hacn.Types
 
 open Fable.React
 
-type CoreOperationTypes =
-  | PropsOperation
-  // | StateGet
-  // | StateSet
-  | NotCore
+// type CoreOperationTypes =
+//   | PropsOperation
+//   | NotCore
 
 type ReRender = (obj option -> obj option) -> unit
 type Dispose = (obj option -> obj option) option
@@ -15,35 +13,50 @@ type Effect = ReRender -> Dispose
 
 type CaptureReturn = (obj option -> unit)
 
-type InvokeResult<'props, 'returnType> =
-  // | InvokeBoth of ReactElement * Effect
-  // | InvokeRender of ReactElement
-  // | InvokeEffect of Effect
-  // | InvokeReturn of 'returnType
-  | InvokeWait of ReactElement option * Effect option * Effect option
-  | InvokeContinue of ReactElement option * Effect option * Effect option * 'returnType
-and PerformData<'props, 'returnType> =
-  { 
-    OperationType: CoreOperationTypes;
-    PreProcess: obj option -> obj option;
-    GetResult: CaptureReturn -> obj option -> InvokeResult<'props, 'returnType>;
+type OperationData =
+  {
+    Element: ReactElement option
+    Effect:  Effect option 
+    LayoutEffect: Effect option
   }
-
-and ControlResult<'props> =
-//   | ControlBoth of ReactElement * Effect
-//   | ControlRender of ReactElement
-//   | ControlEffect of Effect
-//   | ControlNextOperation of Operation<'props, unit>
-//   | ControlWait
-  | ControlWait of ReactElement option * Effect option * Effect option
-  | ControlNext of ReactElement option * Effect option * Effect option * Operation<'props, unit>
-and ControlData<'props> =
+and PerformResult<'props, 'returnType when 'props: equality> =
+  | PerformWait of OperationData
+  | PerformContinue of OperationData * 'returnType
+and PerformData<'props, 'returnType when 'props: equality> =
   { 
-    OperationType: CoreOperationTypes;
+    PreProcess: obj option -> obj option;
+    GetResult: CaptureReturn -> obj option -> PerformResult<'props, 'returnType>;
+  }
+and ControlResult<'props when 'props: equality> =
+  | ControlWait of OperationData
+  | ControlNext of OperationData * Operation<'props, unit>
+and ControlData<'props when 'props: equality> =
+  { 
     PreProcess: obj option -> obj option;
     GetResult: CaptureReturn -> obj option -> ControlResult<'props>;
   }
-and Operation<'props, 'returnType> =
+and PerformPropsData<'props> =
+  { 
+    Changed: 'props option -> 'props -> bool
+  }
+and ControlPropsData<'props when 'props: equality> =
+  { 
+    Changed: 'props option -> 'props -> bool
+    Execute: 'props -> ControlResult<'props>
+  }
+
+// and ControlResult<'props> =
+//   | ControlWait of ReactElement option * Effect option * Effect option
+//   | ControlNext of ReactElement option * Effect option * Effect option * Operation<'props, unit>
+// and ControlData<'props> =
+//   { 
+//     // OperationType: CoreOperationTypes;
+//     PreProcess: obj option -> obj option;
+//     GetResult: CaptureReturn -> obj option -> ControlResult<'props>;
+//   }
+and Operation<'props, 'returnType when 'props: equality> =
   | Perform of PerformData<'props, 'returnType>
+  | PerformProps of PerformPropsData<'props>
   | Control of ControlData<'props>
+  | ControlProps of ControlPropsData<'props>
   | End
