@@ -144,7 +144,7 @@ type StateContainer<'state> =
 //       | None -> failwith "Please set state before calling Get()"
 //   })
 
-let Get<'state> (initialState: 'state) = 
+let State<'state> (initialState: 'state) = 
   Perform({
     PreProcess = fun operationState -> 
       match operationState with
