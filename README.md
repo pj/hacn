@@ -6,6 +6,8 @@ If you're familiar with functional programming languages like Haskell and Scala 
 
 It's written on top of react to make it possible to easily integrate with existing components and potentially to integrate into existing projects.
 
+You can see an example 
+
 ## Installation
 
 To install into your F# project:
@@ -16,7 +18,9 @@ dotnet add package Hacn
 
 ## Usage
 
-Hacn is written using F# computation expressions, if you're not familar with how they work it might be helpful to read a [tutorial](https://fsharpforfunandprofit.com/posts/concurrency-async-and-parallel/) on async programming since Hacn shares some of the same concepts.
+Hacn uses the type `Hacn.Types.Operation` to represent actions and effects that control the execution and rendering of a hacn react component. It's easiest to think of this as being like the `Promise` type in javascript, with some extras to handle things like rendering.
+
+In the same was as async/await is used to combine promises, Hacn uses F# computation expressions to sequence operations. If you're not familar with how computation expressions work it might be helpful to read a [tutorial](https://fsharpforfunandprofit.com/posts/concurrency-async-and-parallel/) on async programming in F#, since Hacn shares some of the same concepts. 
 
 To create a component you use the `react { ... }` expression builder syntax. Hacn components can be included in regular Fable React components:
 
@@ -49,9 +53,11 @@ let User =
 
 ## Operations
 
+Built in operations are currently defined in `Hacn.Operations`, work is still ongoing to document all these properly and expand them to include things like data fetching.
+
 ### Props 
 
-The `Props` operation handles react props, it restarts the sequence of operations from the point where `Props` is used when props changes. Another way of thinking about it is as a stream of changes to the props.
+The `Props` operation handles react props, basically it restarts the sequence of operations from the point where `Props` is used when props changes.
 
 ```fsharp
 module Element
@@ -122,7 +128,7 @@ let Element =
 
 Hacn always rerenders the react element that was rendered, so after capturing the results the Html.input returning onChange events will be rendered again.
 
-### State and capturing values
+### State
 
 The `State` operation works similarly to the `useState` react hook, except it returns a function to create an operation which updates the state:
 
@@ -184,8 +190,6 @@ type PerformData<'props, 'returnType when 'props: equality> =
 
 The `PreProcess` function is mainly for operations that wrap hooks and therefore need to be run every time in the same order a Hacn component renders. The function takes the current operation state if it exists and returns an updated state if something has changed. Returning a value causes the Hacn runtime to restart the sequence of operations at that point.
 
-The `GetResult` method is the main 
-
 As an example wrapping the `useRef` hook is defined as follows:
 
 ```fsharp
@@ -213,30 +217,71 @@ let Ref (initialValue: 'returnType option) =
   })
 ```
 
-Operations that 
+The `GetResult` method is the main method for handling operation logic in Hacn. It has to handle a number of different scenarios for how operations are written, so it ends up being a bit complicated. 
 
+The two parameters it takes are `capture`, which is for updating the operation state from things like dom events like with `RenderCapture`. The second is the current operation state if it has been set.
 
+The return type for `GetResult` is the `PerformResult` typed union, which has two cases - `PerformWait` which causes hacn to wait for an effect or capture to update the operation state and `PerformContinue` which causes hacn to return a value to the sequence of operations. 
 
-## Dispose and state control
+Both cases include a record of type `OperationData`, which includes the `Element` field which is what the operation should render and the `Effect` and `LayoutEffect` fields for any side effects e.g. setTimeout. Both `Effect` and `LayoutEffect` work the same, with `Effect` being run in a `useEffect` hook and `LayoutEffect` being run in a `useLayoutEffect` hook. 
 
-Every effect function can return a dispose function to clean up the effect after it completes
+Effects are functions that take a rerender function that can be used to update the operation state and goto to its location in the sequence of events. This causes its `GetResult` method to be called again, possibly to return the updated result with `PerformContinue`.
 
-In general disposers are run every time 
+Effects can return a function to dispose of any resources when the sequence of operations goes to a previous operation e.g. props change and all operations forward of the `Props` operation need to be reset. Typically operations set their operation state to None in dispose, though this isn't enforced by default (yet).
 
+As an example here is the `Timeout` operation:
 
+```fsharp
+let Timeout time = 
+  Perform({ 
+    PreProcess = fun _ -> None;
+    GetResult = fun _ operationState -> 
+      match operationState with
+      | Some(_) -> 
+        PerformContinue(
+          {
+            Element = None; 
+            Effect = None;
+            LayoutEffect = None
+          }, 
+          ()
+        )
+      | None -> 
+        let timeoutEffect rerender =
+          let timeoutCallback () =
+            let updateState _ = 
+              Some(() :> obj)
+            rerender updateState
+          let timeoutID = Fable.Core.JS.setTimeout timeoutCallback time
+
+          Some(fun _ -> 
+            Fable.Core.JS.clearTimeout timeoutID
+            None
+          )
+          
+        PerformWait(
+          {
+            Element = None
+            Effect = Some(timeoutEffect)
+            LayoutEffect = None
+          }
+        )
+  })
+```
 
 ## Roadmap 
 
-- Fully document 
-- Implement operations like data fetching.
-- Implement operations that use type providers for things like graphql queries.
-- Replace the `RenderCapture` operation with props that automatically capture, will require some kind of global state to set the rendering operation.
+- Fully document operations and architecture.
 - Create state control wrapper operations e.g. Once, Memo, Retry etc.
-- Implement Combine operation in builder correctly, so that conditionals work properly.
-- Create builder that makes operations that can be composed.
+- Replace the `RenderCapture` operation with props that automatically capture, will require some kind of global state to set the rendering operation.
+- Create builder that makes operations that can be composed i.e. combine multiple sequence steps into a single operation.
+- Implement operations like data fetching.
 - Implement error handling to allow try/catch and to allow returning error as value.
+- Implement operations that use type providers for things like graphql queries.
+- Implement Combine operation in builder correctly, so that conditionals work properly.
 - Implement `for` and `while`.
 - See if operation state can be made typesafe.
+- Create compiler that takes sequence and builds a hooks based element out of it.
 
 ## Authors
 
