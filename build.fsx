@@ -169,6 +169,7 @@ Target.create "Clean" <| fun _ ->
         ++ (__SOURCE_DIRECTORY__  @@ "tools/obj")
         ++ (__SOURCE_DIRECTORY__  @@ "src/**/bin")
         ++ (__SOURCE_DIRECTORY__  @@ "src/**/obj")
+        ++ (__SOURCE_DIRECTORY__  @@ "src/**/temp")
         |> Seq.toList
         |> List.append [bin; temp; objFolder; dist]
         |> Shell.cleanDirs
