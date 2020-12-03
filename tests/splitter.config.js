@@ -20,7 +20,6 @@ module.exports = {
                     .sort()
                     .reverse()
                     .find(item => { return item.startsWith("Fable.Jester") })
-
             return require(path.join(testsDir, jesterDir, "SnapshotLoader"))
         }
 

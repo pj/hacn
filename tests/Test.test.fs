@@ -168,7 +168,7 @@ let waitMultiple () =
 let state () =
   let rerenderTrigger, operation = testOperationWithTrigger ()
   let element = react {
-    let! componentState, setComponentState = Get {Current = 0}
+    let! componentState, setComponentState = State {Current = 0}
     do! 
       RenderContinue 
         Html.div 
