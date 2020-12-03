@@ -282,6 +282,7 @@ let Timeout time =
 - Implement `for` and `while`.
 - See if operation state can be made typesafe.
 - Create compiler that takes sequence and builds a hooks based element out of it.
+- Fix type of `Operation` so that it doesn't include separate Perform/Control types.
 
 ## Authors
 
