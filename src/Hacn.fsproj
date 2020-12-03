@@ -4,13 +4,13 @@
     <TargetFramework>netstandard2.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
-    <Content Include="*.fsproj; *.fs; *.js" PackagePath="fable\" />
-    <None Include="propsCompare.js" PackagePath="fable\" />
-    <None Include="paket.references" />
-    <None Include="paket.template" />
+    <!-- <Content Include="*.fsproj; *.fs; *.js" PackagePath="fable\" /> -->
     <Compile Include="Types.fs" />
     <Compile Include="Operations.fs" />
     <Compile Include="Core.fs" />
+    <None Include="paket.references" />
+    <None Include="paket.template" />
+    <None Include="propsCompare.js" PackagePath="fable\" />
   </ItemGroup>
   <Import Project="..\.paket\Paket.Restore.targets" />
 </Project>

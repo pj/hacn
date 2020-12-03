@@ -1,3 +1,7 @@
+### 0.0.12 - Thursday, December 3, 2020
+
+Try to fix propsCompare.js again
+
 ### 0.0.11 - Thursday, December 3, 2020
 
 Try to fix propsCompare.js
