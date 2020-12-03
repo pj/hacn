@@ -1,0 +1,34 @@
+version 5.251.0
+
+// [ FAKE GROUP ]
+group Build
+    source https://api.nuget.org/v3/index.json
+    nuget Fake.DotNet.Cli
+    nuget Fake.IO.FileSystem
+    nuget Fake.Core.Target
+    nuget Fake.Core.ReleaseNotes
+    nuget Fake.JavaScript.Npm
+    nuget Fake.Tools.Git
+    nuget Fake.DotNet.AssemblyInfoFile
+    nuget Fake.DotNet.Cli
+    nuget Fake.DotNet.MSBuild
+    nuget Fake.DotNet.Paket
+    nuget Fake.IO.FileSystem
+    nuget FSharp.Data //
+
+group Core
+    source https://api.nuget.org/v3/index.json
+    nuget Fable.Browser.Dom
+    nuget Fable.Core
+    nuget Fable.React
+    nuget Feliz
+
+group Test
+    source https://api.nuget.org/v3/index.json
+    nuget Fable.Browser.Dom
+    nuget Fable.Core
+    nuget Fable.Jester
+    nuget Fable.React
+    nuget Fable.ReactTestingLibrary
+    nuget Fable.Mocha
+    nuget Feliz

@@ -51,7 +51,7 @@ type TestState = {Text: string}
 
 let App =
   react {
-    let! (state, setState) = Get {Text = ""}
+    let! (state, setState) = State {Text = ""}
 
     let! result = 
       RenderCapture (
