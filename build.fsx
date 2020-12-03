@@ -491,10 +491,8 @@ Target.create "Publish" ignore
 // "Build" ==> "Nuget"
 // "Nuget" ==> "Release"
 
-"Release" <== [ "Nuget"; "ConfigRelease"; "Clean" ]
+"Release" <== [ "Nuget"; "Build"; "ConfigRelease"; "Clean" ]
 
-"Publish" <== ["Release"; "NuGetPublish"; 
-  // "PublishDocs"; 
-  "GitTag"; "GitPush" ]
+"Publish" <== ["GitPush"; "GitTag"; "NuGetPublish"; "Release"]
 
 Target.runOrDefaultWithArguments "Dev"
