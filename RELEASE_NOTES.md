@@ -1,3 +1,7 @@
+### 0.0.10 - Thursday, December 3, 2020
+
+Remove commenting out.
+
 ### 0.0.9 - Thursday, December 3, 2020
 
 Event More Testing of Fake

@@ -7,9 +7,9 @@
     <Content Include="*.fsproj; *.fs; *.js" PackagePath="fable\" />
     <None Include="paket.references" />
     <None Include="paket.template" />
-    <!-- <Compile Include="Types.fs" />
+    <Compile Include="Types.fs" />
     <Compile Include="Operations.fs" />
-    <Compile Include="Core.fs" /> -->
+    <Compile Include="Core.fs" />
   </ItemGroup>
   <Import Project="..\.paket\Paket.Restore.targets" />
 </Project>
