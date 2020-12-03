@@ -2,19 +2,21 @@
 // --------------------------------------------------------------------------------------
 // FAKE build script
 // --------------------------------------------------------------------------------------
-#nowarn "0213"
+// #nowarn "0213"
 #r "paket: groupref Build //"
+#load "./.fake/build.fsx/intellisense.fsx"
 
 open Fake.Core
 open Fake.Core.TargetOperators
 open Fake.DotNet
+// open Fake.DotNet.Cli
 open Fake.JavaScript
 open Fake.IO
 open Fake.IO.FileSystemOperators
 open Fake.IO.Globbing.Operators
 open Fake.Tools
-open Tools.Linting
-open Tools.Web
+// open Tools.Linting
+// open Tools.Web
 open System
 open System.IO
 
@@ -33,10 +35,7 @@ let author = "Paul Johnson"
 let repo = "https://github.com/pj/hacn"
 
 // File system information
-// let solutionFile = "Fable.Jester.sln"
-
-// Github repo
-let repo = "https://github.com/pj/hacn"
+let solutionFile = "hacn.sln"
 
 // Files that have bindings to other languages where name linting needs to be more relaxed.
 let relaxedNameLinting = 
@@ -217,89 +216,90 @@ let restoreSolution () =
 Target.create "Restore" <| fun _ ->
     TaskRunner.runWithRetries restoreSolution 5
 
-Target.create "YarnInstall" <| fun _ ->
-    let setParams (defaults:Yarn.YarnParams) =
-        { defaults with
-            Yarn.YarnParams.YarnFilePath = (__SOURCE_DIRECTORY__ @@ "packages/tooling/Yarnpkg.Yarn/content/bin/yarn.cmd")
-        }
-    Yarn.install setParams
+Target.create "NpmInstall" <| fun _ ->
+    // let setParams (defaults:Npm.NpmParams) =
+    //     { defaults with
+    //         Npm.NpmParams.YarnFilePath = (__SOURCE_DIRECTORY__ @@ "packages/tooling/Yarnpkg.Yarn/content/bin/yarn.cmd")
+    //     }
+    Npm.install id
 
 // --------------------------------------------------------------------------------------
 // Build tasks
 
 Target.create "Build" <| fun _ ->
-    let setParams (defaults:MSBuildParams) =
+    let setParams (defaults: Fake.DotNet.DotNet.BuildOptions) =
         { defaults with
-            Verbosity = Some(Quiet)
-            Targets = ["Build"]
-            Properties =
-                [
-                    "Optimize", "True"
-                    "DebugSymbols", "True"
-                    "Configuration", configuration()
-                    "Version", release.AssemblyVersion
-                    "GenerateDocumentationFile", "true"
-                    "DependsOnNETStandard", "true"
-                ]
+            // Targets = ["Build"]
+            Configuration = Fake.DotNet.DotNet.BuildConfiguration.Release
+            
+            // Properties =
+            //     [
+            //         "Optimize", "True"
+            //         "DebugSymbols", "True"
+            //         "Configuration", configuration()
+            //         "Version", release.AssemblyVersion
+            //         "GenerateDocumentationFile", "true"
+            //         "DependsOnNETStandard", "true"
+            //     ]
          }
     restoreSolution()
 
     !! libGlob
     |> List.ofSeq
-    |> List.iter (MSBuild.build setParams)
+    |> List.iter (DotNet.build setParams)
 
 // --------------------------------------------------------------------------------------
 // Publish net core applications
 
-Target.create "PublishDotNet" <| fun _ ->
-    let runPublish (project: string) (framework: string) =
-        let setParams (defaults:MSBuildParams) =
-            { defaults with
-                Verbosity = Some(Quiet)
-                Targets = ["Publish"]
-                Properties =
-                    [
-                        "Optimize", "True"
-                        "DebugSymbols", "True"
-                        "Configuration", configuration()
-                        "Version", release.AssemblyVersion
-                        "GenerateDocumentationFile", "true"
-                        "TargetFramework", framework
-                    ]
-            }
-        MSBuild.build setParams project
+// Target.create "PublishDotNet" <| fun _ ->
+//     let runPublish (project: string) (framework: string) =
+//         let setParams (defaults:MSBuildParams) =
+//             { defaults with
+//                 Verbosity = Some(Quiet)
+//                 Targets = ["Publish"]
+//                 Properties =
+//                     [
+//                         "Optimize", "True"
+//                         "DebugSymbols", "True"
+//                         "Configuration", configuration()
+//                         "Version", release.AssemblyVersion
+//                         "GenerateDocumentationFile", "true"
+//                         "TargetFramework", framework
+//                     ]
+//             }
+//         MSBuild.build setParams project
 
-    !! libGlob
-    |> Seq.map
-        ((fun f -> (((Path.getDirectory f) @@ "bin" @@ configuration()), f) )
-        >>
-        (fun f ->
-            Directory.EnumerateDirectories(fst f) 
-            |> Seq.filter (fun frFolder -> frFolder.Contains("netcoreapp"))
-            |> Seq.map (fun frFolder -> DirectoryInfo(frFolder).Name), snd f))
-    |> Seq.iter (fun (l,p) -> l |> Seq.iter (runPublish p))
+//     !! libGlob
+//     |> Seq.map
+//         ((fun f -> (((Path.getDirectory f) @@ "bin" @@ configuration()), f) )
+//         >>
+//         (fun f ->
+//             Directory.EnumerateDirectories(fst f) 
+//             |> Seq.filter (fun frFolder -> frFolder.Contains("netcoreapp"))
+//             |> Seq.map (fun frFolder -> DirectoryInfo(frFolder).Name), snd f))
+//     |> Seq.iter (fun (l,p) -> l |> Seq.iter (runPublish p))
 
 // --------------------------------------------------------------------------------------
 // Lint source code
 
-Target.create "Lint" <| fun _ ->
-    fsSrcAndTest
-    -- (__SOURCE_DIRECTORY__  @@ "src/**/AssemblyInfo.*")
-    |> (fun src -> List.fold foldExcludeGlobs src relaxedNameLinting)
-    |> (fun fGlob ->
-        match fsRelaxedNameLinting with
-        | Some(glob) ->
-            [(false, fGlob); (true, glob)]
-        | None -> [(false, fGlob)])
-    |> Seq.map (fun (b,glob) -> (b,glob |> List.ofSeq))
-    |> List.ofSeq
-    |> FSharpLinter.lintFiles
+// Target.create "Lint" <| fun _ ->
+//     fsSrcAndTest
+//     -- (__SOURCE_DIRECTORY__  @@ "src/**/AssemblyInfo.*")
+//     |> (fun src -> List.fold foldExcludeGlobs src relaxedNameLinting)
+//     |> (fun fGlob ->
+//         match fsRelaxedNameLinting with
+//         | Some(glob) ->
+//             [(false, fGlob); (true, glob)]
+//         | None -> [(false, fGlob)])
+//     |> Seq.map (fun (b,glob) -> (b,glob |> List.ofSeq))
+//     |> List.ofSeq
+//     |> FSharpLinter.lintFiles
 
 // --------------------------------------------------------------------------------------
 // Run the unit tests
 
 Target.create "RunTests" <| fun _ ->
-    Yarn.exec "test" id
+    Npm.run "test" id
 
 // --------------------------------------------------------------------------------------
 // Generate Paket load scripts
@@ -332,35 +332,35 @@ Target.create "LoadScripts" <| fun _ ->
     |> Proc.run
     |> ignore
 
-// --------------------------------------------------------------------------------------
-// Update package.json version & name    
+// // --------------------------------------------------------------------------------------
+// // Update package.json version & name    
 
-Target.create "PackageJson" <| fun _ ->
-    let setValues (current: Json.JsonPackage) =
-        { current with
-            Name = Str.toKebabCase project |> Some
-            Version = release.NugetVersion |> Some
-            Description = summary |> Some
-            Homepage = repo |> Some
-            Repository = 
-                { Json.RepositoryValue.Type = "git" |> Some
-                  Json.RepositoryValue.Url = repo |> Some
-                  Json.RepositoryValue.Directory = None }
-                |> Some
-            Bugs = 
-                { Json.BugsValue.Url = 
-                    @"https://github.com/Shmew/Fable.Jester/issues/new/choose" |> Some } |> Some
-            License = "MIT" |> Some
-            Author = author |> Some
-            Private = true |> Some }
+// Target.create "PackageJson" <| fun _ ->
+//     let setValues (current: Json.JsonPackage) =
+//         { current with
+//             Name = Str.toKebabCase project |> Some
+//             Version = release.NugetVersion |> Some
+//             Description = summary |> Some
+//             Homepage = repo |> Some
+//             Repository = 
+//                 { Json.RepositoryValue.Type = "git" |> Some
+//                   Json.RepositoryValue.Url = repo |> Some
+//                   Json.RepositoryValue.Directory = None }
+//                 |> Some
+//             Bugs = 
+//                 { Json.BugsValue.Url = 
+//                     @"https://github.com/pj/hacn/issues/new/choose" |> Some } |> Some
+//             License = "MIT" |> Some
+//             Author = author |> Some
+//             Private = true |> Some }
     
-    Json.setJsonPkg setValues
+//     Json.setJsonPkg setValues
 
 Target.create "Start" <| fun _ ->
-    Yarn.exec "start" id 
+    Npm.exec "start" id 
 
 Target.create "PublishPages" <| fun _ ->
-    Yarn.exec "publish-docs" id
+    Npm.exec "publish-docs" id
 
 // --------------------------------------------------------------------------------------
 // Build and release NuGet targets
@@ -368,12 +368,13 @@ Target.create "PublishPages" <| fun _ ->
 Target.create "NuGet" <| fun _ ->
     Paket.pack(fun p ->
         { p with
-            OutputPath = bin
             Version = release.NugetVersion
             ReleaseNotes = Fake.Core.String.toLines release.Notes
             ProjectUrl = repo
             MinimumFromLockFile = true
-            IncludeReferencedProjects = true })
+            IncludeReferencedProjects = true 
+            WorkingDir = __SOURCE_DIRECTORY__ @@ "./src"
+            ToolType = ToolType.CreateLocalTool()})
 
 Target.create "NuGetPublish" <| fun _ ->
     Paket.push(fun p ->
@@ -382,7 +383,9 @@ Target.create "NuGetPublish" <| fun _ ->
                 match getEnvFromAllOrNone "NUGET_KEY" with
                 | Some key -> key
                 | None -> failwith "The NuGet API key must be set in a NUGET_KEY environment variable"
-            WorkingDir = bin })
+            WorkingDir = __SOURCE_DIRECTORY__ @@ "./src"
+            ToolType = ToolType.CreateLocalTool()
+            })
 
 // --------------------------------------------------------------------------------------
 // Release Scripts
@@ -419,66 +422,79 @@ Target.create "Dev" ignore
 Target.create "Release" ignore
 Target.create "Publish" ignore
 
-"Clean"
-  ==> "AssemblyInfo"
-  ==> "Restore"
-  ==> "PackageJson"
-  ==> "YarnInstall"
-  ==> "Build"
-  ==> "PostBuildClean" 
-  ==> "CopyBinaries"
+// "Clean"
+//   ==> "AssemblyInfo"
+//   ==> "Restore"
+//   // ==> "PackageJson"
+//   ==> "NpmInstall"
+//   // ==> "Build"
+//   // ==> "PostBuildClean" 
+//   // ==> "CopyBinaries"
 
-"Build" ==> "RunTests"
+// "Build" ==> "RunTests"
 
-"Build"
-  ==> "PostBuildClean"
-  ==> "PublishDotNet"
-  ==> "PostPublishClean"
-  ==> "CopyBinaries"
+// "Build"
+//   ==> "PostBuildClean"
+//   // ==> "PublishDotNet"
+//   ==> "PostPublishClean"
+//   ==> "CopyBinaries"
 
-"Restore" ==> "Lint"
+// "Restore" ==> "Lint"
 
-"Lint" 
-  ?=> "Build"
-  ?=> "RunTests"
-  ?=> "CleanDocs"
+// "Lint" 
+//   ?=> "Build"
+//   ?=> "RunTests"
+//   ?=> "CleanDocs"
 
-"Restore" ==> "LoadScripts"
+// "Restore" ==> "LoadScripts"
 
-"All"
-  ==> "GitPush"
-  ?=> "GitTag"
+// "All"
+//   ==> "GitPush"
+//   ?=> "GitTag"
 
-"All" <== ["Lint"; "RunTests"; "CopyBinaries" ]
+// "All" <== [
+//   // "Lint"; 
+//   "RunTests"; 
+//   // "CopyBinaries" 
+//   ]
 
-"CleanDocs"
-  ==> "CopyDocFiles"
-  ==> "PrepDocs"
+// "CleanDocs"
+//   ==> "CopyDocFiles"
+//   ==> "PrepDocs"
 
-"All"
- ==> "NuGet"
- ==> "NuGetPublish"
+// "All"
+//  ==> "NuGet"
+//  ==> "NuGetPublish"
 
-"PrepDocs" 
- ==> "PublishPages"
- ==> "PublishDocs"
+// "PrepDocs" 
+//  ==> "PublishPages"
+//  ==> "PublishDocs"
 
-"All" 
-  ==> "PrepDocs"
+// "All" 
+//   ==> "PrepDocs"
 
-"All" 
-  ==> "PrepDocs"
-  ==> "Start"
+// "All" 
+//   ==> "PrepDocs"
+//   ==> "Start"
 
-"All" ==> "PublishPages"
+// "All" ==> "PublishPages"
 
-"ConfigDebug" ?=> "Clean"
-"ConfigRelease" ?=> "Clean"
+// "ConfigDebug" ?=> "Clean"
+// "ConfigRelease" ?=> "Clean"
 
-"Dev" <== ["All"; "ConfigDebug"; "Start"]
+// "Dev" <== ["All"; "ConfigDebug"; "Start"]
 
-"Release" <== ["All"; "NuGet"; "ConfigRelease"]
+// "Release" <== ["ConfigRelease"; "NuGet"]
 
-"Publish" <== ["Release"; "ConfigRelease"; "NuGetPublish"; "PublishDocs"; "GitTag"; "GitPush" ]
+// "Clean" ==> "ConfigRelease"
+// "ConfigRelease" ==> "Build"
+// "Build" ==> "Nuget"
+// "Nuget" ==> "Release"
+
+"Release" <== [ "Nuget"; "ConfigRelease"; "Clean" ]
+
+"Publish" <== ["Release"; "NuGetPublish"; 
+  // "PublishDocs"; 
+  "GitTag"; "GitPush" ]
 
 Target.runOrDefaultWithArguments "Dev"

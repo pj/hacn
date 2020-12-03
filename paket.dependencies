@@ -14,6 +14,8 @@ group Build
     nuget Fake.DotNet.MSBuild
     nuget Fake.DotNet.Paket
     nuget Fake.IO.FileSystem
+    nuget FSharp.Json
+    nuget NuGet.Packaging
     nuget FSharp.Data //
 
 group Core
