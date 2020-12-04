@@ -6,8 +6,8 @@ open System.Runtime.CompilerServices
 [<assembly: AssemblyTitleAttribute("Hacn")>]
 [<assembly: AssemblyProductAttribute("Hacn")>]
 [<assembly: AssemblyDescriptionAttribute("DSL for creating React components using Fable and F# computation expressions")>]
-[<assembly: AssemblyVersionAttribute("0.0.12")>]
-[<assembly: AssemblyFileVersionAttribute("0.0.12")>]
+[<assembly: AssemblyVersionAttribute("0.0.13")>]
+[<assembly: AssemblyFileVersionAttribute("0.0.13")>]
 [<assembly: AssemblyConfigurationAttribute("Release")>]
 [<assembly: InternalsVisibleToAttribute("Hacn.Tests")>]
 do ()
@@ -16,7 +16,7 @@ module internal AssemblyVersionInformation =
     let [<Literal>] AssemblyTitle = "Hacn"
     let [<Literal>] AssemblyProduct = "Hacn"
     let [<Literal>] AssemblyDescription = "DSL for creating React components using Fable and F# computation expressions"
-    let [<Literal>] AssemblyVersion = "0.0.12"
-    let [<Literal>] AssemblyFileVersion = "0.0.12"
+    let [<Literal>] AssemblyVersion = "0.0.13"
+    let [<Literal>] AssemblyFileVersion = "0.0.13"
     let [<Literal>] AssemblyConfiguration = "Release"
     let [<Literal>] InternalsVisibleTo = "Hacn.Tests"

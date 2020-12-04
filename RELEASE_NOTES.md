@@ -1,3 +1,7 @@
+### 0.0.13 - Thursday, December 4, 2020
+
+Fix props so things work properly and change props return type.
+
 ### 0.0.12 - Thursday, December 3, 2020
 
 Try to fix propsCompare.js again
