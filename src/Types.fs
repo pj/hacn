@@ -38,7 +38,7 @@ and PerformPropsData<'props> =
 and ControlPropsData<'props when 'props: equality> =
   { 
     Changed: 'props option -> 'props -> bool
-    Execute: 'props -> ControlResult<'props>
+    Execute: 'props -> Operation<'props, unit>
   }
 
 and Operation<'props, 'returnType when 'props: equality> =

@@ -43,9 +43,7 @@ let bind<'props, 'resultType, 'x, 'y when 'props: equality and 'x: equality> (un
     ControlProps(
       {
         Changed =  fun a b -> changed (unbox a) (unbox b)
-        Execute = fun props ->
-          let nextOperation = f(unbox props)
-          ControlNext({Element = None; Effect = None; LayoutEffect = None}, nextOperation)
+        Execute = fun props -> f(unbox props)
       }
     )
   | Perform(underlyingOperationData) ->
@@ -195,6 +193,7 @@ let execute resultCapture wrapEffect componentState props =
   let mutable nextEffects = []
   let mutable nextLayoutEffects = []
   let mutable updatedComponentState = componentState.ComponentState
+  let mutable nextProps = componentState.PrevProps
 
   while not stop do
     let currentOperation = nextOperations.[currentIndex]
@@ -211,6 +210,51 @@ let execute resultCapture wrapEffect componentState props =
       | Some(effect) ->
         nextLayoutEffects <- nextLayoutEffects @ [(wrapEffect currentOperation.Index effect)]
       | _ -> ()
+    
+    let handleNextOperation nextOperation =
+      match nextOperation with
+      | End -> 
+        if (currentIndex + 1) < componentState.Operations.Length then
+          let currentNextOp = nextOperations.[currentIndex+1]
+          FSharp.Collections.Array.set
+            nextOperations
+            (currentIndex + 1)
+            {currentNextOp with Operation = End}
+        else
+          nextOperations <- 
+            FSharp.Collections.Array.append 
+              nextOperations 
+              [|
+                {
+                  State = None; 
+                  Operation = End; 
+                  Index = currentIndex + 1;
+                  Disposer = None;
+                }
+              |]
+        currentIndex <- currentIndex + 1
+        stop <- true
+      | Control(nextOpData) ->
+        if (currentIndex + 1) < componentState.Operations.Length then
+          let currentNextOp = nextOperations.[currentIndex+1]
+          FSharp.Collections.Array.set
+            nextOperations
+            (currentIndex + 1)
+            {currentNextOp with Operation = Control(nextOpData)}
+        else
+          let preProcessState = nextOpData.PreProcess(None)
+          nextOperations <- 
+            FSharp.Collections.Array.append 
+              nextOperations 
+              [|
+                {
+                  State = preProcessState; 
+                  Operation = Control(nextOpData); 
+                  Index = currentIndex + 1;
+                  Disposer = None;
+                }
+              |]
+        currentIndex <- currentIndex + 1
 
     let handleInvokeResult invokeResult =
       match invokeResult with
@@ -220,54 +264,13 @@ let execute resultCapture wrapEffect componentState props =
         stop <- true
       | ControlNext(operationData, nextOperation) ->
         updateElementAndEffects operationData
-        match nextOperation with
-        | End -> 
-          if (currentIndex + 1) < componentState.Operations.Length then
-            let currentNextOp = nextOperations.[currentIndex+1]
-            FSharp.Collections.Array.set
-              nextOperations
-              (currentIndex + 1)
-              {currentNextOp with Operation = End}
-          else
-            nextOperations <- 
-              FSharp.Collections.Array.append 
-                nextOperations 
-                [|
-                  {
-                    State = None; 
-                    Operation = End; 
-                    Index = currentIndex + 1;
-                    Disposer = None;
-                  }
-                |]
-          currentIndex <- currentIndex + 1
-          stop <- true
-        | Control(nextOpData) ->
-          if (currentIndex + 1) < componentState.Operations.Length then
-            let currentNextOp = nextOperations.[currentIndex+1]
-            FSharp.Collections.Array.set
-              nextOperations
-              (currentIndex + 1)
-              {currentNextOp with Operation = Control(nextOpData)}
-          else
-            let preProcessState = nextOpData.PreProcess(None)
-            nextOperations <- 
-              FSharp.Collections.Array.append 
-                nextOperations 
-                [|
-                  {
-                    State = preProcessState; 
-                    Operation = Control(nextOpData); 
-                    Index = currentIndex + 1;
-                    Disposer = None;
-                  }
-                |]
-          currentIndex <- currentIndex + 1
+        handleNextOperation nextOperation
 
     match currentOperation.Operation with
     | ControlProps({Execute = execute}) ->
-      let invokeResult = execute props
-      handleInvokeResult invokeResult
+      let nextOperation = execute props
+      nextProps <- Some(props)
+      handleNextOperation nextOperation
     | Control({GetResult = getResult}) ->
       let capture = resultCapture currentOperation.Index 
       let invokeResult = getResult capture currentOperation.State 
@@ -282,7 +285,7 @@ let execute resultCapture wrapEffect componentState props =
       Operations = nextOperations; 
       Element = renderedElement;
       ComponentState = updatedComponentState
-      PrevProps = componentState.PrevProps
+      PrevProps = nextProps
     },
     nextEffects,
     nextLayoutEffects
