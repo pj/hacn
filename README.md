@@ -271,29 +271,18 @@ let Timeout time =
 
 ## Roadmap 
 
-[] Fully document operations and architecture.
-
-[] Create state control wrapper operations e.g. Once, Memo, Retry etc.
-
-[] Replace the `RenderCapture` operation with props that automatically capture, will require some kind of global state to set the rendering operation.
-
-[] Create builder that makes operations that can be composed i.e. combine multiple sequence steps into a single operation.
-
-[] Implement operations like data fetching.
-
-[] Implement error handling to allow try/catch and to allow returning error as value.
-
-[] Implement operations that use type providers for things like graphql queries.
-
-[] Implement Combine operation in builder correctly, so that conditionals work properly.
-
-[] Implement `for` and `while`.
-
-[] See if operation state can be made typesafe.
-
-[] Create compiler that takes sequence and builds a hooks based element out of it.
-
-[] Fix type of `Operation` so that it doesn't include separate Perform/Control types.
+- [] Fully document operations and architecture.
+- [] Create state control wrapper operations e.g. Once, Memo, Retry etc.
+- [] Replace the `RenderCapture` operation with props that automatically capture, will require some kind of global state to set the rendering operation.
+- [] Create builder that makes operations that can be composed i.e. combine multiple sequence steps into a single operation.
+- [] Implement operations like data fetching.
+- [] Implement error handling to allow try/catch and to allow returning error as value.
+- [] Implement operations that use type providers for things like graphql queries.
+- [] Implement Combine operation in builder correctly, so that conditionals work properly.
+- [] Implement `for` and `while`.
+- [] See if operation state can be made typesafe.
+- [] Create compiler that takes sequence and builds a hooks based element out of it.
+- [] Fix type of `Operation` so that it doesn't include separate Perform/Control types.
 
 ## Authors
 
