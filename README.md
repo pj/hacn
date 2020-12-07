@@ -166,7 +166,7 @@ NB: setting the state always triggers the sequence to restart from the point tha
 
 ### Calling passed in functions
 
-The `Call` operation calls
+The `Call` operation calls 
 
 (Though this is actually 
 
