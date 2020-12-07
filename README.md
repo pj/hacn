@@ -20,7 +20,7 @@ dotnet add package Hacn
 
 Hacn uses the type `Hacn.Types.Operation` to represent actions and effects that control the execution and rendering of a hacn react component. It's easiest to think of this as being like the `Promise` type in javascript, with some extras to handle things like rendering.
 
-In the same was as async/await is used to combine promises, Hacn uses F# computation expressions to sequence operations. If you're not familar with how computation expressions work it might be helpful to read a [tutorial](https://fsharpforfunandprofit.com/posts/concurrency-async-and-parallel/) on async programming in F#, since Hacn shares some of the same concepts. 
+In the same was as async/await is used to combine promises in javascript, Hacn uses F# computation expressions to sequence operations. If you're not familar with how computation expressions work it might be helpful to read a [tutorial](https://fsharpforfunandprofit.com/posts/concurrency-async-and-parallel/) on async programming in F#, since Hacn shares some of the same concepts. 
 
 To create a component you use the `react { ... }` expression builder syntax. Hacn components can be included in regular Fable React components:
 
