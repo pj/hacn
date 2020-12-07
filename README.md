@@ -6,7 +6,7 @@ If you're familiar with functional programming languages like Haskell and Scala 
 
 It's written on top of react to make it possible to easily integrate with existing components and potentially to integrate into existing projects.
 
-You can see an example 
+You can see TodoMVC written in it [here](https://github.com/pj/hacn-todomvc)
 
 ## Installation
 
@@ -166,9 +166,25 @@ NB: setting the state always triggers the sequence to restart from the point tha
 
 ### Calling passed in functions
 
-The `Call` operation calls 
+The `Call` operation can be used to call functions that are passed in from parent components and also any kind of effect that doesn't update operation state or trigger rerenders.
 
-(Though this is actually 
+Hacn component props need to implement the equality interface, this isn't automatically generated for props that contain functions so you have to implement it yourself:
+
+```fsharp
+[<CustomEquality; NoComparison>]
+type TestProps = { TestFunc: string -> unit }
+  with 
+    override _.Equals __ = false
+    override _.GetHashCode() = 1
+
+let Test = 
+  react {
+    let! props = Props
+    do! Call (fun () -> (props.TestFunc "Test") )
+  }
+```
+
+NB: the implementation of equality isn't actually used by Fable, but is required for type checking.
 
 ### Writing operations
 
