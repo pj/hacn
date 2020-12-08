@@ -302,3 +302,4 @@ let Timeout time =
 
 ## Authors
 
+- **Paul Johnson** - [pj](https://github.com/pj)
