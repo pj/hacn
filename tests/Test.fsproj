@@ -4,8 +4,10 @@
     <TargetFramework>netstandard2.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Helpers.fs" />
     <Compile Include="Test.test.fs" />
     <Compile Include="Props.test.fs" />
+    <Compile Include="Memo.test.fs" />
     <!-- <Compile Include="Item.test.fs" /> -->
   </ItemGroup>
   <ItemGroup>

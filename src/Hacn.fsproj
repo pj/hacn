@@ -8,6 +8,7 @@
     <Compile Include="Types.fs" />
     <Compile Include="Operations.fs" />
     <Compile Include="Core.fs" />
+    <Compile Include="Memo.fs" />
     <None Include="paket.references" />
     <None Include="paket.template" />
     <None Include="propsCompare.js" PackagePath="fable\" />

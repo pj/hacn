@@ -210,6 +210,13 @@ let execute resultCapture wrapEffect componentState props =
       | Some(effect) ->
         nextLayoutEffects <- nextLayoutEffects @ [(wrapEffect currentOperation.Index effect)]
       | _ -> ()
+      match operationData.OperationState with 
+      | Some(state) ->
+        FSharp.Collections.Array.set
+          nextOperations
+          currentIndex
+          {nextOperations.[currentIndex] with State = state}
+      | _ -> ()
     
     let handleNextOperation nextOperation =
       match nextOperation with

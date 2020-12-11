@@ -2,49 +2,13 @@ module Test
 open Hacn.Core
 open Hacn.Operations
 open Fable.ReactTestingLibrary
+open Helpers
 open Feliz
 open Hacn.Types
 open Fable.Mocha
 open Browser.Types
 
 type TestProps = { Message: string }
-
-let testOperationWithTrigger<'result> () =
-  let mutable internalRerender = None
-  let operation = Perform({
-    PreProcess = fun _ -> None
-    GetResult = fun _ operationState ->
-      let effectFunc rerender =
-        internalRerender <- Some(rerender)
-        Some(fun _ -> 
-          None)
-      match operationState with
-      | None -> 
-        PerformWait(
-          {
-            Element = None
-            Effect = Some(effectFunc)
-            LayoutEffect = None
-          }
-        )
-      | Some(result) -> 
-        let castResult: 'result = unbox result
-        PerformContinue(
-          {
-            Element = None
-            Effect = None
-            LayoutEffect = None
-          },
-          castResult
-        )
-  })
-
-  let rerenderTrigger (value: 'result) =
-    match internalRerender with
-    | Some(rerender) -> rerender(fun _ -> Some(value :> obj))
-    | None -> failwith "Should not happen"
-  
-  rerenderTrigger, operation
 
 type TestState =
   {
@@ -82,7 +46,7 @@ let props () =
   Expect.equal testElement.textContent "Goodbye World" "Text content equal" 
 
 let any () = 
-  let rerenderTrigger, operation = testOperationWithTrigger<string> ()
+  let rerenderTrigger, _, operation = testOperationWithTrigger<string> ()
   let element = react {
     let! _, testResponse = 
       WaitAny2 
@@ -108,7 +72,7 @@ let any () =
   Expect.equal element.textContent "Goodbye World" "Text content equal" 
 
 let waitSingle () = 
-  let rerenderTrigger, operation = testOperationWithTrigger<string> ()
+  let rerenderTrigger, _, operation = testOperationWithTrigger<string> ()
   let element = react {
     let! testResponse = operation
     do! Render Html.div [prop.testId "test"; prop.text testResponse]
@@ -129,8 +93,8 @@ let waitSingle () =
   Expect.equal element.textContent "Hello World" "Text content equal" 
 
 let waitMultiple () = 
-  let rerenderTrigger1, operation1 = testOperationWithTrigger ()
-  let rerenderTrigger2, operation2 = testOperationWithTrigger ()
+  let rerenderTrigger1, _, operation1 = testOperationWithTrigger ()
+  let rerenderTrigger2, _, operation2 = testOperationWithTrigger ()
   let element = react {
     let! hello, world = Wait2 operation1 operation2
     do! 
@@ -166,7 +130,7 @@ let waitMultiple () =
   Expect.equal element.textContent "Hello, World!" "Text content equal" 
 
 let state () =
-  let rerenderTrigger, operation = testOperationWithTrigger ()
+  let rerenderTrigger, _, operation = testOperationWithTrigger ()
   let element = react {
     let! componentState, setComponentState = State {Current = 0}
     do! 

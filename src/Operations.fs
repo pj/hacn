@@ -64,6 +64,7 @@ let Render (element: IReactProperty list -> ReactElement) (props: IReactProperty
           Element = Some(element props)
           Effect = None;
           LayoutEffect = None
+          OperationState = None
         }
       )
   })
@@ -84,6 +85,7 @@ let RenderCapture<'returnType> captureElement =
             Element = Some(captureElement captureResultInternal)
             Effect = Some(eraseCapturedResult)
             LayoutEffect = None
+            OperationState = None
           }, 
           castReturn
         )
@@ -93,6 +95,7 @@ let RenderCapture<'returnType> captureElement =
             Element = Some(captureElement captureResultInternal)
             Effect = None
             LayoutEffect = None
+            OperationState = None
           }
         )
   })
@@ -107,6 +110,7 @@ let RenderContinue element (props: IReactProperty list) =
           Element = Some(renderedElement)
           Effect = None
           LayoutEffect = None
+          OperationState = None
         }, 
         ()
       )
@@ -174,6 +178,7 @@ let State<'state> (initialState: 'state) =
                 Element = None
                 Effect = Some(stateSetEffect)
                 LayoutEffect = None
+                OperationState = None
               }
             )
         })
@@ -185,6 +190,7 @@ let State<'state> (initialState: 'state) =
             Element = None; 
             Effect = None;
             LayoutEffect = None
+            OperationState = None
           }, 
           (castCurrentState.ComponentState, StateSetOperation)
         )
@@ -310,6 +316,7 @@ let Wait2 op1 op2 =
             Element = (getElement element1 element2)
             Effect = (createCombinedEffect effect1 effect2)
             LayoutEffect = (createCombinedEffect layoutEffect1 layoutEffect2)
+            OperationState = None
           }
         )
 
@@ -320,6 +327,7 @@ let Wait2 op1 op2 =
             Element = (getElement element1 element2)
             Effect = (createCombinedEffect effect1 effect2)
             LayoutEffect = (createCombinedEffect layoutEffect1 layoutEffect2)
+            OperationState = None
           }
         )
 
@@ -330,6 +338,7 @@ let Wait2 op1 op2 =
             Element = (getElement element1 element2)
             Effect = (createCombinedEffect effect1 effect2)
             LayoutEffect = (createCombinedEffect layoutEffect1 layoutEffect2)
+            OperationState = None
           }
         )
 
@@ -340,6 +349,7 @@ let Wait2 op1 op2 =
             Element = (getElement element1 element2)
             Effect = (createCombinedEffect effect1 effect2)
             LayoutEffect = (createCombinedEffect layoutEffect1 layoutEffect2)
+            OperationState = None
           },
           (ret1, ret2)
         )
@@ -374,6 +384,7 @@ let WaitAny2 op1 op2 =
             Element = (getElement element1 element2)
             Effect = (createCombinedEffect effect1 effect2)
             LayoutEffect = (createCombinedEffect layoutEffect1 layoutEffect2)
+            OperationState = None
           }
         )
 
@@ -384,6 +395,7 @@ let WaitAny2 op1 op2 =
             Element = (getElement element1 element2)
             Effect = (createCombinedEffect effect1 effect2)
             LayoutEffect = (createCombinedEffect layoutEffect1 layoutEffect2)
+            OperationState = None
           },
           (None, Some(ret2))
         )
@@ -395,6 +407,7 @@ let WaitAny2 op1 op2 =
             Element = (getElement element1 element2)
             Effect = (createCombinedEffect effect1 effect2)
             LayoutEffect = (createCombinedEffect layoutEffect1 layoutEffect2)
+            OperationState = None
           },
           (Some(ret1), None)
         )
@@ -406,6 +419,7 @@ let WaitAny2 op1 op2 =
             Element = (getElement element1 element2)
             Effect = (createCombinedEffect effect1 effect2)
             LayoutEffect = (createCombinedEffect layoutEffect1 layoutEffect2)
+            OperationState = None
           },
           (Some(ret1), Some(ret2))
         )
@@ -431,6 +445,7 @@ let Timeout time =
             Element = None; 
             Effect = None;
             LayoutEffect = None
+            OperationState = None
           }, 
           ()
         )
@@ -452,6 +467,7 @@ let Timeout time =
             Element = None
             Effect = Some(timeoutEffect)
             LayoutEffect = None
+            OperationState = None
           }
         )
   })
@@ -467,6 +483,7 @@ let Interval interval =
             Element = None
             Effect = None
             LayoutEffect = None
+            OperationState = None
           },
           ()
         )
@@ -488,6 +505,7 @@ let Interval interval =
             Element = None
             Effect = Some(timeoutEffect)
             LayoutEffect = None
+            OperationState = None
           }
         )
 
@@ -518,6 +536,7 @@ let ContextCore<'returnType when 'returnType : equality> (useContext: IContext<'
             Element = None; 
             Effect = None;
             LayoutEffect = None
+            OperationState = None
           }, 
           existingContext
         )
@@ -543,6 +562,7 @@ let Ref (initialValue: 'returnType option) =
             Element = None
             Effect = None
             LayoutEffect = None
+            OperationState = None
           }, 
           existingRef
         )
@@ -562,6 +582,7 @@ let Call callable =
           Element = None
           Effect = Some(callCallable)
           LayoutEffect = None
+          OperationState = None
         }, 
         ()
       )
@@ -579,6 +600,7 @@ let CallLayout callable =
           Element = None; 
           Effect = None;
           LayoutEffect = Some(callCallable)
+          OperationState = None
         }, 
         ()
       )

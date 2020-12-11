@@ -14,6 +14,10 @@ type OperationData =
     Element: ReactElement option
     Effect:  Effect option 
     LayoutEffect: Effect option
+    // Useful for memoize/state control operations, where we don't want to 
+    // trigger a rerender. Extra option layer to indicate whether to update 
+    // state or not.
+    OperationState: (obj option) option
   }
 and PerformResult<'props, 'returnType when 'props: equality> =
   | PerformWait of OperationData
