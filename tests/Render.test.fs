@@ -9,56 +9,6 @@ open Feliz
 open Browser.Types
 open Fable.Mocha
 
-// let capturing () =
-//   let element = react {
-//     let! changedValue = 
-//       RenderCapture(
-//         fun capture ->
-//           Html.div [
-//             prop.testId "test"
-//             prop.children [
-//               Html.text "Say hello!"
-//               Html.input [
-//                   prop.type' "text"
-//                   prop.testId "input"
-//                   prop.onChange (
-//                     fun (event: Browser.Types.Event) -> 
-//                       let element: HTMLInputElement = unbox event.target
-//                       capture element.value
-//                     )
-//                 ]
-//             ]
-//           ]
-//       )
-//     if changedValue = "Hello" then
-//       do! Render Html.div [
-//           prop.testId "test"
-//           prop.text "Hi there!"
-//         ]
-//   }
-
-//   let result = RTL.render(element ())
-//   let element = result.getByTestId "test"
-//   Expect.equal element.textContent "Say hello!" "Text content equal" 
-
-//   let inputElement = result.getByTestId "input"
-//   RTL.fireEvent.change(inputElement, [event.target [prop.value "No"]])
-
-//   let element = result.getByTestId "test"
-//   Expect.equal element.textContent "Say hello!" "Text content equal" 
-
-//   let inputElement = result.getByTestId "input"
-//   RTL.fireEvent.change(inputElement, [event.target [prop.value "Okay"]])
-
-//   let element = result.getByTestId "test"
-//   Expect.equal element.textContent "Say hello!" "Text content equal" 
-
-//   let inputElement = result.getByTestId "input"
-//   RTL.fireEvent.change(inputElement, [event.target [prop.value "Hello"]])
-
-//   let element = result.getByTestId "test"
-//   Expect.equal element.textContent "Hi there!" "Text content equal" 
-
 type ClickTypes =
 | Nothing
 | One
