@@ -289,10 +289,11 @@ let Timeout time =
 
 - [ ] Fully document operations and architecture.
 - [x] Create state control wrapper operations e.g. Once, Memo, Retry etc.
-- [ ] Replace the `RenderCapture` operation with props that automatically capture, will require some kind of global state to set the rendering operation.
+- [x] Replace the `RenderCapture` operation with props that automatically capture, will require some kind of global state to set the rendering operation.
 - [ ] Create builder that makes operations that can be composed i.e. combine multiple sequence steps into a single operation.
 - [ ] Implement Combine operation in builder correctly, so that conditionals work properly.
 - [ ] Implement error handling to allow try/catch and to allow returning error as value.
+- [ ] Add implicit rendering return operation and code to replace RenderCapture use cases.
 - [ ] Implement operations like data fetching.
 - [ ] Implement operations that use type providers for things like graphql queries.
 - [ ] Implement `for` and `while`.
