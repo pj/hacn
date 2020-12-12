@@ -1,13 +1,11 @@
 module PropsTest
 open Hacn.Core
 open Hacn.Operations
-open Fable.Jester
 open Fable.ReactTestingLibrary
 open Feliz
-open Hacn.Types
-open Browser.Types
-open Fable.Core.JS
 open Fable.Mocha
+open Hacn.Render
+open Browser.Types
 
 [<CustomEquality; NoComparison>]
 type HeaderProps = { TestFunc: string -> unit }
@@ -19,25 +17,21 @@ let Header =
   react {
     let! props = Props
     let! ref = Ref None
-    let! key = RenderCapture (
-      fun capture ->
-        Html.header [
-          prop.className "header"
-          prop.children [
-            Html.h1 "todos"
-            Html.input [
-              prop.ref ref
-              prop.className "new-todo"
-              prop.testId "test"
-              prop.placeholder "What needs to be done?"
-              prop.onKeyDown (fun keyEvent -> 
-                capture keyEvent.key)
-              prop.autoFocus true
-              prop.type' "text"
-            ]
+    let! key = Render Html.header [
+        prop.className "header"
+        prop.children [
+          Html.h1 "todos"
+          Html.input [
+            prop.ref ref
+            prop.className "new-todo"
+            prop.testId "test"
+            prop.placeholder "What needs to be done?"
+            prop.captureKeyDown
+            prop.autoFocus true
+            prop.type' "text"
+              ]
           ]
-        ]
-    )
+      ]
 
     if key = "Enter" then
       match ref.current with

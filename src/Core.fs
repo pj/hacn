@@ -144,12 +144,17 @@ let runDisposers (componentStateRef: IRefValue<RefState<'props, 'state>>) =
         ({op with State = updatedState})
     | _ -> ()
 
-let getFirstOperation firstOperation componentState =
+// reference to capture function so that rendered elements can implicitly return
+// captured events.
+let mutable implicitCapture = None
+
+let getFirstOperation firstOperation resultCapture componentState =
   if componentState.OperationIndex = -1 then
+    implicitCapture <- Some(resultCapture 0)
     {
       componentState with 
         OperationIndex = 0
-        Operations = [|{State = None; Operation = firstOperation; Index = 0; Disposer = None}|]
+        Operations = [|{State = None; Operation = (firstOperation ()); Index = 0; Disposer = None}|]
     }
   else
     componentState
@@ -280,6 +285,7 @@ let execute resultCapture wrapEffect componentState props =
       handleNextOperation nextOperation
     | Control({GetResult = getResult}) ->
       let capture = resultCapture currentOperation.Index 
+      implicitCapture <- Some(resultCapture (currentOperation.Index + 1))
       let invokeResult = getResult capture currentOperation.State 
       handleInvokeResult invokeResult
     | End -> 
@@ -358,7 +364,7 @@ let render firstOperation props =
       ()
     wrappedEffect
 
-  componentStateRef.current <- getFirstOperation firstOperation componentStateRef.current
+  componentStateRef.current <- getFirstOperation firstOperation updateStateAt componentStateRef.current
 
   componentStateRef.current <- preprocessOperations componentStateRef.current props
   runDisposers componentStateRef
@@ -398,7 +404,7 @@ type HacnBuilder() =
   member _.Run(firstOperation) =
     React.functionComponent<'props>(
       fun (props: 'props) -> 
-        render (firstOperation ()) props
+        render firstOperation props
     ) 
 
 let react = HacnBuilder ()

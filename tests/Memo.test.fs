@@ -10,14 +10,11 @@ open Hacn.Types
 open Browser.Types
 open Fable.Core.JS
 open Fable.Mocha
+open Hacn.Render
 
 type MemoTestProps = {
   TestValue: string
 }
-
-// type WaitContinueState = {
-//   Complete: bool
-// }
 
 let memoTests =
   testList "Memo tests" [

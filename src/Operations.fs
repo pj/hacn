@@ -1,13 +1,9 @@
 module Hacn.Operations
 open Fable.React
-// open Utils
 open Feliz
-open Fable.Core.JsInterop
 open FSharp.Core
-open Fable.Core.JS
 open Fable.Core.Util
 open Fable.Core
-open Fable.Core.JsInterop
 
 [<ImportMember("./propsCompare.js")>]
 let shallowEqualObjects (x: obj) (y: obj): bool = jsNative
@@ -51,102 +47,11 @@ let Props<'props when 'props: equality> : Operation<'props, 'props> =
     }
   )
 
-// type prop with
-//   static member inline captureClick = Interop.mkAttr "captureOnClick" None
-//   static member inline captureChange = Interop.mkAttr "captureOnChange" None
-
-let Render (element: IReactProperty list -> ReactElement) (props: IReactProperty list) =
-  Perform({ 
-    PreProcess = fun _ -> None;
-    GetResult = fun _ __ -> 
-      PerformWait(
-        {
-          Element = Some(element props)
-          Effect = None;
-          LayoutEffect = None
-          OperationState = None
-        }
-      )
-  })
-
-let RenderCapture<'returnType> captureElement =
-  Perform({ 
-    PreProcess = fun _ -> None;
-    GetResult = fun captureResult operationState -> 
-      let captureResultInternal v =
-        captureResult (Some(v))
-      let eraseCapturedResult _ =
-        Some(fun _ -> None)
-      match operationState with
-      | Some(result) -> 
-        let castReturn: 'returnType = unbox result
-        PerformContinue(
-          {
-            Element = Some(captureElement captureResultInternal)
-            Effect = Some(eraseCapturedResult)
-            LayoutEffect = None
-            OperationState = None
-          }, 
-          castReturn
-        )
-      | _ ->
-        PerformWait(
-          {
-            Element = Some(captureElement captureResultInternal)
-            Effect = None
-            LayoutEffect = None
-            OperationState = None
-          }
-        )
-  })
-
-let RenderContinue element (props: IReactProperty list) =
-  Perform({ 
-    PreProcess = fun _ -> None;
-    GetResult = fun captureResult operationState -> 
-      let renderedElement = element props
-      PerformContinue(
-        {
-          Element = Some(renderedElement)
-          Effect = None
-          LayoutEffect = None
-          OperationState = None
-        }, 
-        ()
-      )
-  })
-
 type StateContainer<'state> = 
   {
     Updated: bool;
     ComponentState: 'state;
   }
-
-// let Get<'state> (initialState: 'state) =
-//   Perform({ 
-//     OperationType = StateGet;
-//     PreProcess = fun operationState -> 
-//       match operationState with 
-//       | None -> 
-//         Some(
-//           {
-//             Updated = false; 
-//             ComponentState = initialState;
-//           } :> obj
-//         )
-//       | Some(currentState) -> 
-//         let castCurrentState: StateContainer<'state> = unbox currentState
-//         if castCurrentState.Updated then
-//           Some({castCurrentState with Updated = false} :> obj)
-//         else 
-//           None
-//     GetResult = fun _ operationState -> 
-//       match operationState with
-//       | Some(state) -> 
-//         let castCurrentState: StateContainer<'state> = unbox state
-//         Continue(None, None, castCurrentState.ComponentState)
-//       | None -> failwith "Please set state before calling Get()"
-//   })
 
 let State<'state> (initialState: 'state) = 
   Perform({
@@ -196,25 +101,6 @@ let State<'state> (initialState: 'state) =
         )
       | None -> failwith "Should not happen"
   })
-
-// let Set<'state> (newState: 'state) : Operation<obj, unit> =
-//   Perform({
-//     OperationType = StateSet;
-//     PreProcess = fun _ -> None;
-//     GetResult = fun _ _ -> 
-//       let stateSetter rerender =
-//         let updateState _ = 
-//           Some(
-//             {
-//               Updated = true;
-//               ComponentState = newState
-//             } :> obj
-//           )
-
-//         rerender updateState
-//         None
-//       Wait(None, Some(stateSetter))
-//   })
 
 let createCombinedDispose disposeOpt1 disposeOpt2 =
   let combinedDisposer underlyingState =
@@ -605,9 +491,6 @@ let CallLayout callable =
         ()
       )
   })
-
-// Don't auto-dispose an element?
-let Background = End
 
 // Error handling
 
