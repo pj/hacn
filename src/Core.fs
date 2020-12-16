@@ -61,6 +61,8 @@ let bind<'props, 'resultType, 'x, 'y when 'props: equality and 'x: equality> (un
             | PerformWait(asdf) -> ControlWait(asdf)
       }
     )
+  | Compose(controlData) -> 
+    Control(unbox controlData)
   | _ -> failwith (sprintf "Can't bind operation %A" underlyingOperation)
 
 // let Combine op1 op2 = 
@@ -202,9 +204,12 @@ let execute resultCapture wrapEffect componentState props =
 
   while not stop do
     let currentOperation = nextOperations.[currentIndex]
+    console.log (sprintf "current index: %d" currentIndex)
+    // console.log (sprintf "Current Operation %A" currentOperation)
     let updateElementAndEffects (operationData: OperationData) =
       match operationData.Element with 
       | Some(element) ->
+        console.log (sprintf "Rendering %A" element)
         renderedElement <- Some(element)
       | _ -> ()
       match operationData.Effect with 
@@ -226,6 +231,7 @@ let execute resultCapture wrapEffect componentState props =
     let handleNextOperation nextOperation =
       match nextOperation with
       | End -> 
+        console.log "Next operation is End"
         if (currentIndex + 1) < componentState.Operations.Length then
           let currentNextOp = nextOperations.[currentIndex+1]
           FSharp.Collections.Array.set
@@ -273,11 +279,13 @@ let execute resultCapture wrapEffect componentState props =
       // | Continue(_, __) -> failwith "Continue should only be passed into bind, not into execution."
       | ControlWait(operationData) ->
         updateElementAndEffects operationData
+        console.log "Waiting"
         stop <- true
       | ControlNext(operationData, nextOperation) ->
         updateElementAndEffects operationData
         handleNextOperation nextOperation
 
+    implicitCapture <- Some(resultCapture (currentOperation.Index + 1))
     match currentOperation.Operation with
     | ControlProps({Execute = execute}) ->
       let nextOperation = execute props
@@ -285,10 +293,11 @@ let execute resultCapture wrapEffect componentState props =
       handleNextOperation nextOperation
     | Control({GetResult = getResult}) ->
       let capture = resultCapture currentOperation.Index 
-      implicitCapture <- Some(resultCapture (currentOperation.Index + 1))
+      console.log (sprintf "Setting capture for index %d" currentOperation.Index)
       let invokeResult = getResult capture currentOperation.State 
       handleInvokeResult invokeResult
     | End -> 
+      console.log "Current operation is End"
       stop <- true
     | _ -> failwith (sprintf "Unknown op %A" currentOperation)
   
@@ -323,6 +332,7 @@ let render firstOperation props =
   let updateStateAt index newOpState = 
     // Ignore captures that occur when the operation index is less than the 
     // capture, since we might be rerendering something different.
+    console.log (sprintf "capturing at %d %A current operation index %d" index newOpState componentStateRef.current.OperationIndex)
     if index <= componentStateRef.current.OperationIndex then
       let op = componentStateRef.current.Operations.[index]
       let updatedOp = {op with State = newOpState}
@@ -393,7 +403,7 @@ let render firstOperation props =
       element
     | None -> null
 
-type HacnBuilder() = 
+type ReactBuilder() = 
   member _.Bind(operation, f) = 
     bind operation f
   // member _.Combine(left, right) =
@@ -407,4 +417,34 @@ type HacnBuilder() =
         render firstOperation props
     ) 
 
-let react = HacnBuilder ()
+let react = ReactBuilder ()
+
+// Used for creating fragments that can be composed into a sequence
+type HacnBuilder() = 
+  member _.Bind(operation, f) = 
+    bind operation f
+  // member _.Combine(left, right) =
+  //   combine left right
+  member _.Zero() = 
+    ComposeReturn ()
+    // Perform({ 
+    //   PreProcess = fun _ -> None
+    //   GetResult = fun _ __ -> 
+    //     PerformContinue(
+    //       {
+    //         Element = None
+    //         Effect = None
+    //         LayoutEffect = None
+    //         OperationState = None
+    //       }, 
+    //       ()
+    //     )
+    // })
+  member _.Delay(f) = f
+  member _.Run(firstOperation) =
+    let operation = firstOperation ()
+    match operation with
+    | Control(data) -> Compose(data)
+    | _ -> failwith "Should not happen"
+
+let hacn = HacnBuilder ()

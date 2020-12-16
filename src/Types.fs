@@ -50,4 +50,7 @@ and Operation<'props, 'returnType when 'props: equality> =
   | PerformProps of PerformPropsData<'props>
   | Control of ControlData<'props>
   | ControlProps of ControlPropsData<'props>
+  // For marking composition
+  | Compose of ControlData<'props>
+  | ComposeReturn of 'returnType
   | End

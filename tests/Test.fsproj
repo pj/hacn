@@ -9,6 +9,7 @@
     <Compile Include="Props.test.fs" />
     <Compile Include="Memo.test.fs" />
     <Compile Include="Render.test.fs" />
+    <Compile Include="Composition.test.fs" />
     <!-- <Compile Include="Item.test.fs" /> -->
   </ItemGroup>
   <ItemGroup>
