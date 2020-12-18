@@ -15,7 +15,7 @@ open Browser.Types
 type prop with
   static member withCurrentCapture f = 
     match implicitCapture with 
-    | Some(capture) -> f (fun v -> capture (Some(v :> obj)))
+    | Some(capture) -> f (fun v -> capture (fun _ -> Some(v :> obj)))
     | None -> failwith "No current capture"
 
   // Shortcut for simply returning a value from a click event
@@ -111,7 +111,7 @@ let RenderCapture<'returnType> captureElement =
     PreProcess = fun _ -> None;
     GetResult = fun captureResult operationState -> 
       let captureResultInternal v =
-        captureResult (Some(v))
+        captureResult (fun _ -> Some(v))
       let eraseCapturedResult _ =
         Some(fun _ -> None)
       match operationState with

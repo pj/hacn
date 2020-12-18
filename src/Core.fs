@@ -4,7 +4,7 @@ open Feliz
 open Fable.Core.JS
 open Hacn.Operations
 
-type OpTreeNode<'props when 'props: equality> =
+type OperationElement<'props when 'props: equality> =
   {
     // State storage for the operation.
     State: obj option;
@@ -18,52 +18,26 @@ type OpTreeNode<'props when 'props: equality> =
     Disposer: Dispose;
   }
 
-type RefState<'props, 'state when 'props: equality> =
+type RefState<'props when 'props: equality> =
   {
     // Last element rendered.
-    Element: ReactElement option;
+    Element: ReactElement option
 
     // list of current operations.
-    Operations: OpTreeNode<'props> array;
+    Operations: OperationElement<'props> array
 
     // 'current' operation to perform, get's updated as operations change it
     // e.g. props changes
-    OperationIndex: int;
-
-    // Component state object
-    ComponentState: obj option;
+    OperationIndex: int
 
     PrevProps: 'props option
+
+    ComposeReturn: obj option
   }
 
-let bind<'props, 'resultType, 'x, 'y when 'props: equality and 'x: equality> (underlyingOperation: Operation<'props, 'resultType>) (f: 'resultType -> Operation<'x, unit>) : Operation<'x, 'y> = 
-// let bind underlyingOperation f = 
-  match underlyingOperation with
-  | PerformProps({Changed = changed}) ->
-    ControlProps(
-      {
-        Changed =  fun a b -> changed (unbox a) (unbox b)
-        Execute = fun props -> f(unbox props)
-      }
-    )
-  | Perform(underlyingOperationData) ->
-    Control(
-      {
-        PreProcess = fun operationState -> underlyingOperationData.PreProcess(operationState)
-        GetResult = 
-          fun captureFunc operationState ->
-            let operationResult = underlyingOperationData.GetResult captureFunc operationState
-
-            match operationResult with
-            | PerformContinue(operationData, result) ->
-              let nextOperation = f(result)
-              ControlNext(operationData, nextOperation)
-            | PerformWait(asdf) -> ControlWait(asdf)
-      }
-    )
-  | Compose(controlData) -> 
-    Control(unbox controlData)
-  | _ -> failwith (sprintf "Can't bind operation %A" underlyingOperation)
+// reference to capture function so that rendered elements can implicitly return
+// captured events.
+let mutable implicitCapture = None
 
 // let Combine op1 op2 = 
 //   // let checkNotCore underlyingOperation = 
@@ -134,21 +108,29 @@ let bind<'props, 'resultType, 'x, 'y when 'props: equality and 'x: equality> (un
 let zero() =
   End
 
-let runDisposers (componentStateRef: IRefValue<RefState<'props, 'state>>) =
+let updateOperationsWith index (operations: OperationElement<'props> array) updatedState = 
+  let op = operations.[index]
+  match updatedState with
+  | Keep -> ()
+  | Erase ->
+    FSharp.Collections.Array.set
+      operations
+      index
+      ({op with State = None})
+  | Replace(newState) ->
+    FSharp.Collections.Array.set
+      operations
+      index
+      ({op with State = Some(newState)})
+
+let runDisposers (componentStateRef: IRefValue<RefState<'props>>) =
   for i in (componentStateRef.current.OperationIndex+1) .. (componentStateRef.current.Operations.Length-1) do
     let op = componentStateRef.current.Operations.[i]
     match op.Disposer with
     | Some(dispose) ->
       let updatedState = dispose op.State
-      FSharp.Collections.Array.set
-        componentStateRef.current.Operations
-        i
-        ({op with State = updatedState})
+      updateOperationsWith i componentStateRef.current.Operations updatedState
     | _ -> ()
-
-// reference to capture function so that rendered elements can implicitly return
-// captured events.
-let mutable implicitCapture = None
 
 let getFirstOperation firstOperation resultCapture componentState =
   if componentState.OperationIndex = -1 then
@@ -199,34 +181,53 @@ let execute resultCapture wrapEffect componentState props =
   let mutable nextOperations = componentState.Operations
   let mutable nextEffects = []
   let mutable nextLayoutEffects = []
-  let mutable updatedComponentState = componentState.ComponentState
   let mutable nextProps = componentState.PrevProps
+  let mutable composeReturn = None
 
   while not stop do
     let currentOperation = nextOperations.[currentIndex]
     console.log (sprintf "current index: %d" currentIndex)
     // console.log (sprintf "Current Operation %A" currentOperation)
-    let updateElementAndEffects (operationData: OperationData) =
-      match operationData.Element with 
+    let setElement element =
+      match element with 
       | Some(element) ->
         console.log (sprintf "Rendering %A" element)
         renderedElement <- Some(element)
       | _ -> ()
-      match operationData.Effect with 
+
+    let setEffect effect =
+      match effect with 
       | Some(effect) ->
         nextEffects <- nextEffects @ [(wrapEffect currentOperation.Index effect)]
       | _ -> ()
-      match operationData.LayoutEffect with 
+
+    let setLayoutEffect layoutEffect = 
+      match layoutEffect with 
       | Some(effect) ->
         nextLayoutEffects <- nextLayoutEffects @ [(wrapEffect currentOperation.Index effect)]
       | _ -> ()
-      match operationData.OperationState with 
+
+    let setOperationState operationState = 
+      match operationState with 
       | Some(state) ->
         FSharp.Collections.Array.set
           nextOperations
           currentIndex
           {nextOperations.[currentIndex] with State = state}
       | _ -> ()
+
+    let updateElementAndEffects (operationData: OperationData) =
+      setElement operationData.Element
+      setEffect operationData.Effect
+      setLayoutEffect operationData.LayoutEffect
+      setOperationState operationData.OperationState
+      updateOperationsWith currentIndex nextOperations operationData.OperationState
+
+    let updateComposeElementAndEffects (composeEffects: ComposeSideEffects<'props>) =
+      setElement composeEffects.Element
+      List.iter (fun effect -> setEffect (Some(effect))) composeEffects.Effects
+      List.iter (fun effect -> setLayoutEffect (Some(effect))) composeEffects.LayoutEffects
+      setOperationState composeEffects.OperationState
     
     let handleNextOperation nextOperation =
       match nextOperation with
@@ -273,6 +274,10 @@ let execute resultCapture wrapEffect componentState props =
                 }
               |]
         currentIndex <- currentIndex + 1
+      | ComposeReturn(returnType) ->
+        composeReturn <- Some(returnType :> obj)
+        currentIndex <- currentIndex + 1
+        stop <- true
 
     let handleInvokeResult invokeResult =
       match invokeResult with
@@ -296,6 +301,18 @@ let execute resultCapture wrapEffect componentState props =
       console.log (sprintf "Setting capture for index %d" currentOperation.Index)
       let invokeResult = getResult capture currentOperation.State 
       handleInvokeResult invokeResult
+    | Compose({ExecuteCompose = executeCompose}) ->
+      let capture = resultCapture currentOperation.Index 
+      console.log (sprintf "Setting capture for index %d" currentOperation.Index)
+      let invokeResult = executeCompose capture currentOperation.State props (wrapEffect currentOperation.Index)
+      match invokeResult with
+      | ComposeWait(composeEffects) ->
+        updateComposeElementAndEffects composeEffects
+        stop <- true
+      | ComposeFinished(composeEffects, nextOperation) ->
+        updateComposeElementAndEffects composeEffects
+        handleNextOperation nextOperation
+
     | End -> 
       console.log "Current operation is End"
       stop <- true
@@ -303,23 +320,23 @@ let execute resultCapture wrapEffect componentState props =
   
   (
     {
-      OperationIndex = currentIndex; 
-      Operations = nextOperations; 
-      Element = renderedElement;
-      ComponentState = updatedComponentState
+      OperationIndex = currentIndex
+      Operations = nextOperations
+      Element = renderedElement
       PrevProps = nextProps
+      ComposeReturn = composeReturn
     },
     nextEffects,
     nextLayoutEffects
   )
 
 let render firstOperation props = 
-  let componentStateRef: IRefValue<RefState<'props, 'state>> = Hooks.useRef({
+  let componentStateRef: IRefValue<RefState<'props>> = Hooks.useRef({
     Element = None
     Operations = [||]
     OperationIndex = -1
-    ComponentState = None
     PrevProps = None
+    ComposeReturn = None
   })
 
   // trigger rerender by updating a state variable
@@ -329,13 +346,13 @@ let render firstOperation props =
     state.update (sprintf "blah%f" asdf)
 
   // Capture a result to return to the flow.
-  let updateStateAt index newOpState = 
+  let captureResult index stateUpdater = 
     // Ignore captures that occur when the operation index is less than the 
     // capture, since we might be rerendering something different.
-    console.log (sprintf "capturing at %d %A current operation index %d" index newOpState componentStateRef.current.OperationIndex)
+    // console.log (sprintf "capturing at %d %A current operation index %d" index newOpState componentStateRef.current.OperationIndex)
     if index <= componentStateRef.current.OperationIndex then
       let op = componentStateRef.current.Operations.[index]
-      let updatedOp = {op with State = newOpState}
+      let updatedOp = {op with State = (stateUpdater op.State)}
       FSharp.Collections.Array.set
         componentStateRef.current.Operations
         index
@@ -354,7 +371,7 @@ let render firstOperation props =
       index
       updatedOp
 
-  let wrapEffect index effect =
+  let wrapEffect index (effect: Effect) =
     let wrapUpdateState index stateUpdater = 
       if index <= componentStateRef.current.OperationIndex then
         let op = componentStateRef.current.Operations.[index]
@@ -368,18 +385,18 @@ let render firstOperation props =
         runDisposers componentStateRef
         rerender ()
     let updateState = wrapUpdateState index
-    let wrappedEffect _ =
+    let wrappedEffect () =
       let disposer = effect updateState
       updateDisposer index disposer
       ()
     wrappedEffect
 
-  componentStateRef.current <- getFirstOperation firstOperation updateStateAt componentStateRef.current
+  componentStateRef.current <- getFirstOperation firstOperation captureResult componentStateRef.current
 
   componentStateRef.current <- preprocessOperations componentStateRef.current props
   runDisposers componentStateRef
 
-  let nextState, wrappedNextEffects, wrappedNextLayoutEffects = execute updateStateAt wrapEffect componentStateRef.current props
+  let nextState, wrappedNextEffects, wrappedNextLayoutEffects = execute captureResult wrapEffect componentStateRef.current props
 
   componentStateRef.current <- nextState
 
@@ -402,6 +419,124 @@ let render firstOperation props =
     | Some(element) -> 
       element
     | None -> null
+
+let bind<'props, 'resultType, 'x, 'y when 'props: equality and 'x: equality> (underlyingOperation: Operation<'props, 'resultType>) (f: 'resultType -> Operation<'x, unit>) : Operation<'x, 'y> = 
+// let bind underlyingOperation f = 
+  match underlyingOperation with
+  | PerformProps({Changed = changed}) ->
+    ControlProps(
+      {
+        Changed =  fun a b -> changed (unbox a) (unbox b)
+        Execute = fun props -> f(unbox props)
+      }
+    )
+  | Perform(underlyingOperationData) ->
+    Control(
+      {
+        PreProcess = fun operationState -> underlyingOperationData.PreProcess(operationState)
+        GetResult = 
+          fun captureFunc operationState ->
+            let operationResult = underlyingOperationData.GetResult captureFunc operationState
+
+            match operationResult with
+            | PerformContinue(operationData, result) ->
+              let nextOperation = f(result)
+              ControlNext(operationData, nextOperation)
+            | PerformWait(asdf) -> ControlWait(asdf)
+      }
+    )
+  | ComposeStart(composeFirst) ->
+    Compose(
+      {
+        PreProcess = fun operationState -> None
+        ExecuteCompose = 
+          fun captureReturn operationStateOpt props wrapEffect ->
+            implicitCapture <- Some(resultCapture 0)
+            let composeState: RefState<'props> = 
+              match operationStateOpt with
+              | Some(operationState) -> unbox operationState
+              | None -> 
+                {
+                  OperationIndex = 0 
+                  Operations = [|{
+                    State = None
+                    Operation = (composeFirst ())
+                    Index = 0
+                    Disposer = None
+                  }|]
+                  Element = None
+                  PrevProps = None
+                  ComposeReturn = None
+                }
+            let composeCapture index subStateUpdater = 
+              let stateUpdater existingStateOpt = 
+                match existingStateOpt with
+                | Some(existingState) ->
+                  let castExistingState = unbox existingState
+                  if index <= castExistingState.OperationIndex then
+                    let op = castExistingState.Operations.[index]
+                    let updatedOp = {op with State = (subStateUpdater op.State)}
+                    FSharp.Collections.Array.set
+                      castExistingState.Operations
+                      index
+                      updatedOp
+                    runDisposers castExistingState
+
+                    Some (castExistingState :> obj)
+                  else 
+                    None
+                  | None -> failwith "should not happen"
+              captureReturn stateUpdater
+            
+            let composeWrapEffect index effect = 
+              let composeEffect rerender =
+                let composeStateUpdater existingStateOpt = 
+                  match existingStateOpt with
+                  | Some(existingState) ->
+                    let castExistingState = unbox existingState
+                    if index <= castExistingState.OperationIndex then
+                      let mutable updatedState = None
+                      let op = castExistingState.Operations.[index]
+                      let underlyingRender underlyingUpdater =
+                        updatedState <- underlyingUpdater op.State
+                        ()
+
+                      let dispose = effect underlyingRender
+                      FSharp.Collections.Array.set
+                        castExistingState.Operations
+                        index
+                        {op with State = updatedState; Disposer = dispose}
+                      runDisposers componentStateRef
+
+                      Some(castExistingState :> obj)
+                    else 
+                      None
+                  | None -> failwith "should not happen"
+
+                rerender composeStateUpdater
+
+                None
+              wrapEffect composeEffect
+
+            let executionResult, nextEffects, layoutEffects = 
+              execute composeCapture composeWrapEffect composeState (unbox props)
+            
+            let composeEffects = {
+              Effects = nextEffects
+              LayoutEffects = layoutEffects
+              Element = executionResult.Element
+              OperationState = Some (Some(executionResult :> obj))
+            }
+            match executionResult.ComposeReturn with
+            | Some(returnType) -> 
+              let nextOperation = f (unbox returnType)
+              ComposeFinished(composeEffects, nextOperation)
+            | None ->
+              ComposeWait(composeEffects)
+      }
+    )
+  | _ -> failwith (sprintf "Can't bind operation %A" underlyingOperation)
+
 
 type ReactBuilder() = 
   member _.Bind(operation, f) = 
@@ -427,24 +562,8 @@ type HacnBuilder() =
   //   combine left right
   member _.Zero() = 
     ComposeReturn ()
-    // Perform({ 
-    //   PreProcess = fun _ -> None
-    //   GetResult = fun _ __ -> 
-    //     PerformContinue(
-    //       {
-    //         Element = None
-    //         Effect = None
-    //         LayoutEffect = None
-    //         OperationState = None
-    //       }, 
-    //       ()
-    //     )
-    // })
   member _.Delay(f) = f
   member _.Run(firstOperation) =
-    let operation = firstOperation ()
-    match operation with
-    | Control(data) -> Compose(data)
-    | _ -> failwith "Should not happen"
+    ComposeStart (firstOperation)
 
 let hacn = HacnBuilder ()

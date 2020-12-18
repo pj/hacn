@@ -2,12 +2,20 @@
 module Hacn.Types
 
 open Fable.React
+open System
 
-type ReRender = (obj option -> obj option) -> unit
-type Dispose = (obj option -> obj option) option
+type UpdateState =
+| Keep
+| Erase
+| Replace of obj
+
+type StateUpdater = (obj option -> UpdateState)
+
+type ReRender = StateUpdater -> unit
+type Dispose = StateUpdater option
 type Effect = ReRender -> Dispose
 
-type CaptureReturn = (obj option -> unit)
+type CaptureReturn = (StateUpdater -> unit)
 
 type OperationData =
   {
@@ -17,7 +25,7 @@ type OperationData =
     // Useful for memoize/state control operations, where we don't want to 
     // trigger a rerender. Extra option layer to indicate whether to update 
     // state or not.
-    OperationState: (obj option) option
+    OperationState: UpdateState
   }
 and PerformResult<'props, 'returnType when 'props: equality> =
   | PerformWait of OperationData
@@ -35,6 +43,21 @@ and ControlData<'props when 'props: equality> =
     PreProcess: obj option -> obj option;
     GetResult: CaptureReturn -> obj option -> ControlResult<'props>;
   }
+and ComposeSideEffects<'props when 'props: equality> =
+  {
+    Effects: (unit -> unit) list
+    LayoutEffects: (unit -> unit) list
+    Element: ReactElement option
+    OperationState: (obj option) option
+  }
+and ComposeResult<'props when 'props: equality> =
+  | ComposeWait of ComposeSideEffects<'props>
+  | ComposeFinished of ComposeSideEffects<'props> * Operation<'props, unit>
+and ComposeData<'props when 'props: equality> =
+  { 
+    PreProcess: obj option -> obj option;
+    ExecuteCompose: CaptureReturn -> obj option -> 'props -> (Effect -> (unit -> unit)) -> ComposeResult<'props>;
+  }
 and PerformPropsData<'props> =
   { 
     Changed: 'props option -> 'props -> bool
@@ -50,7 +73,8 @@ and Operation<'props, 'returnType when 'props: equality> =
   | PerformProps of PerformPropsData<'props>
   | Control of ControlData<'props>
   | ControlProps of ControlPropsData<'props>
-  // For marking composition
-  | Compose of ControlData<'props>
+  // For composition
+  | ComposeStart of (unit -> Operation<'props, unit>)
   | ComposeReturn of 'returnType
+  | Compose of ComposeData<'props>
   | End

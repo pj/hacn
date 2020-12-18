@@ -74,7 +74,7 @@ let State<'state> (initialState: 'state) =
           GetResult = fun _ _ -> 
             let stateSetEffect rerender =
               let updateState _ =
-                captureResult (Some({Updated = true; ComponentState = newState} :> obj))
+                captureResult (fun _ -> (Some({Updated = true; ComponentState = newState} :> obj)))
                 None
               rerender updateState
               None
