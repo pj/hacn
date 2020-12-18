@@ -108,8 +108,9 @@ let mutable implicitCapture = None
 let zero() =
   End
 
-let updateOperationsWith index (operations: OperationElement<'props> array) updatedState = 
+let updateOperationsWith index (operations: OperationElement<'props> array) stateUpdater = 
   let op = operations.[index]
+  let updatedState = stateUpdater op.State
   match updatedState with
   | Keep -> ()
   | Erase ->
@@ -128,8 +129,7 @@ let runDisposers (componentStateRef: IRefValue<RefState<'props>>) =
     let op = componentStateRef.current.Operations.[i]
     match op.Disposer with
     | Some(dispose) ->
-      let updatedState = dispose op.State
-      updateOperationsWith i componentStateRef.current.Operations updatedState
+      updateOperationsWith i componentStateRef.current.Operations dispose
     | _ -> ()
 
 let getFirstOperation firstOperation resultCapture componentState =
@@ -220,8 +220,7 @@ let execute resultCapture wrapEffect componentState props =
       setElement operationData.Element
       setEffect operationData.Effect
       setLayoutEffect operationData.LayoutEffect
-      setOperationState operationData.OperationState
-      updateOperationsWith currentIndex nextOperations operationData.OperationState
+      updateOperationsWith currentIndex nextOperations (fun _ -> operationData.OperationState)
 
     let updateComposeElementAndEffects (composeEffects: ComposeSideEffects<'props>) =
       setElement composeEffects.Element
@@ -351,12 +350,7 @@ let render firstOperation props =
     // capture, since we might be rerendering something different.
     // console.log (sprintf "capturing at %d %A current operation index %d" index newOpState componentStateRef.current.OperationIndex)
     if index <= componentStateRef.current.OperationIndex then
-      let op = componentStateRef.current.Operations.[index]
-      let updatedOp = {op with State = (stateUpdater op.State)}
-      FSharp.Collections.Array.set
-        componentStateRef.current.Operations
-        index
-        updatedOp
+      updateOperationsWith index componentStateRef.current.Operations stateUpdater
       componentStateRef.current <- {componentStateRef.current with OperationIndex = index}
 
       runDisposers componentStateRef
@@ -374,13 +368,7 @@ let render firstOperation props =
   let wrapEffect index (effect: Effect) =
     let wrapUpdateState index stateUpdater = 
       if index <= componentStateRef.current.OperationIndex then
-        let op = componentStateRef.current.Operations.[index]
-
-        let updatedState = stateUpdater op.State
-        FSharp.Collections.Array.set
-          componentStateRef.current.Operations
-          index
-          {op with State = updatedState}
+        updateOperationsWith index componentStateRef.current.Operations stateUpdater
         componentStateRef.current <- {componentStateRef.current with OperationIndex = index}
         runDisposers componentStateRef
         rerender ()
@@ -474,18 +462,13 @@ let bind<'props, 'resultType, 'x, 'y when 'props: equality and 'x: equality> (un
                 | Some(existingState) ->
                   let castExistingState = unbox existingState
                   if index <= castExistingState.OperationIndex then
-                    let op = castExistingState.Operations.[index]
-                    let updatedOp = {op with State = (subStateUpdater op.State)}
-                    FSharp.Collections.Array.set
-                      castExistingState.Operations
-                      index
-                      updatedOp
+                    updateOperationsWith index castExistingState.Operations subStateUpdater
                     runDisposers castExistingState
 
-                    Some (castExistingState :> obj)
+                    Replace (castExistingState :> obj)
                   else 
-                    None
-                  | None -> failwith "should not happen"
+                    Keep
+                | None -> failwith "should not happen"
               captureReturn stateUpdater
             
             let composeWrapEffect index effect = 
@@ -495,7 +478,7 @@ let bind<'props, 'resultType, 'x, 'y when 'props: equality and 'x: equality> (un
                   | Some(existingState) ->
                     let castExistingState = unbox existingState
                     if index <= castExistingState.OperationIndex then
-                      let mutable updatedState = None
+                      let mutable updatedState = Keep
                       let op = castExistingState.Operations.[index]
                       let underlyingRender underlyingUpdater =
                         updatedState <- underlyingUpdater op.State
@@ -508,9 +491,9 @@ let bind<'props, 'resultType, 'x, 'y when 'props: equality and 'x: equality> (un
                         {op with State = updatedState; Disposer = dispose}
                       runDisposers componentStateRef
 
-                      Some(castExistingState :> obj)
+                      Replace(castExistingState :> obj)
                     else 
-                      None
+                      Keep
                   | None -> failwith "should not happen"
 
                 rerender composeStateUpdater
