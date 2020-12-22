@@ -15,7 +15,7 @@ open Browser.Types
 type prop with
   static member withCurrentCapture f = 
     match implicitCapture with 
-    | Some(capture) -> f (fun v -> capture (fun _ -> Some(v :> obj)))
+    | Some(capture) -> f (fun v -> capture (fun _ -> Replace(v :> obj)))
     | None -> failwith "No current capture"
 
   // Shortcut for simply returning a value from a click event
@@ -66,7 +66,7 @@ let Render (element: IReactProperty list -> ReactElement) (props: IReactProperty
     PreProcess = fun _ -> None;
     GetResult = fun _ operationState -> 
       let eraseCapturedResult _ =
-        Some(fun _ -> None)
+        Some(fun _ -> Erase)
       match operationState with
       | Some(result) -> 
         let castReturn: 'returnType = unbox result
@@ -75,7 +75,7 @@ let Render (element: IReactProperty list -> ReactElement) (props: IReactProperty
             Element = Some(element props)
             Effect = Some(eraseCapturedResult)
             LayoutEffect = None
-            OperationState = None
+            OperationState = Keep
           }, 
           castReturn
         )
@@ -85,7 +85,7 @@ let Render (element: IReactProperty list -> ReactElement) (props: IReactProperty
             Element = Some(element props)
             Effect = None
             LayoutEffect = None
-            OperationState = None
+            OperationState = Keep
           }
         )
   })
@@ -100,7 +100,7 @@ let RenderContinue element (props: IReactProperty list) =
           Element = Some(renderedElement)
           Effect = None
           LayoutEffect = None
-          OperationState = None
+          OperationState = Keep
         }, 
         ()
       )
@@ -111,9 +111,9 @@ let RenderCapture<'returnType> captureElement =
     PreProcess = fun _ -> None;
     GetResult = fun captureResult operationState -> 
       let captureResultInternal v =
-        captureResult (fun _ -> Some(v))
+        captureResult (fun _ -> Replace(v))
       let eraseCapturedResult _ =
-        Some(fun _ -> None)
+        Some(fun _ -> Erase)
       match operationState with
       | Some(result) -> 
         let castReturn: 'returnType = unbox result
@@ -122,7 +122,7 @@ let RenderCapture<'returnType> captureElement =
             Element = Some(captureElement captureResultInternal)
             Effect = Some(eraseCapturedResult)
             LayoutEffect = None
-            OperationState = None
+            OperationState = Keep
           }, 
           castReturn
         )
@@ -132,7 +132,7 @@ let RenderCapture<'returnType> captureElement =
             Element = Some(captureElement captureResultInternal)
             Effect = None
             LayoutEffect = None
-            OperationState = None
+            OperationState = Keep
           }
         )
   })

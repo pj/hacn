@@ -74,8 +74,8 @@ let State<'state> (initialState: 'state) =
           GetResult = fun _ _ -> 
             let stateSetEffect rerender =
               let updateState _ =
-                captureResult (fun _ -> (Some({Updated = true; ComponentState = newState} :> obj)))
-                None
+                captureResult (fun _ -> (Replace({Updated = true; ComponentState = newState} :> obj)))
+                Keep
               rerender updateState
               None
             PerformWait(
@@ -83,7 +83,7 @@ let State<'state> (initialState: 'state) =
                 Element = None
                 Effect = Some(stateSetEffect)
                 LayoutEffect = None
-                OperationState = None
+                OperationState = Keep
               }
             )
         })
@@ -95,7 +95,7 @@ let State<'state> (initialState: 'state) =
             Element = None; 
             Effect = None;
             LayoutEffect = None
-            OperationState = None
+            OperationState = Keep
           }, 
           (castCurrentState.ComponentState, StateSetOperation)
         )
@@ -111,22 +111,38 @@ let createCombinedDispose disposeOpt1 disposeOpt2 =
     match disposeOpt1 with 
     | Some(dispose) -> 
       let disposeResult = dispose currentState.[0]
-      FSharp.Collections.Array.set
-        currentState
-        0
-        disposeResult
+      match disposeResult with
+      | Replace(state) ->
+        FSharp.Collections.Array.set
+          currentState
+          0
+          (Some(state))
+      | Erase -> 
+        FSharp.Collections.Array.set
+          currentState
+          0
+          None
+      | Keep -> ()
     | _ -> ()
 
     match disposeOpt2 with
     | Some(dispose) -> 
       let disposeResult = dispose currentState.[1]
-      FSharp.Collections.Array.set
-        currentState
-        1
-        disposeResult
+      match disposeResult with
+      | Replace(state) ->
+        FSharp.Collections.Array.set
+          currentState
+          1
+          (Some(state))
+      | Erase -> 
+        FSharp.Collections.Array.set
+          currentState
+          1
+          None
+      | Keep -> ()
     | _ -> ()
 
-    Some(currentState :> obj)
+    Replace(currentState :> obj)
       
   match disposeOpt1, disposeOpt2 with
   | None, None -> None
@@ -144,11 +160,20 @@ let createCombinedEffect eff1Opt eff2Opt =
             | None -> FSharp.Collections.Array.create stateLength None
             | Some(x) -> unbox x
           let updatedState = stateUpdater (currentState.[index])
-          FSharp.Collections.Array.set
-            currentState
-            index
-            updatedState
-          Some(currentState :> obj)
+          match updatedState with
+          | Replace(state) ->
+            FSharp.Collections.Array.set
+              currentState
+              index
+              (Some(state))
+          | Erase -> 
+            FSharp.Collections.Array.set
+              currentState
+              index
+              None
+          | Keep -> ()
+
+          Replace(currentState :> obj)
         rerender indexedStateUpdater
 
       let disposeOpt1 = 
@@ -202,7 +227,7 @@ let Wait2 op1 op2 =
             Element = (getElement element1 element2)
             Effect = (createCombinedEffect effect1 effect2)
             LayoutEffect = (createCombinedEffect layoutEffect1 layoutEffect2)
-            OperationState = None
+            OperationState = Keep
           }
         )
 
@@ -213,7 +238,7 @@ let Wait2 op1 op2 =
             Element = (getElement element1 element2)
             Effect = (createCombinedEffect effect1 effect2)
             LayoutEffect = (createCombinedEffect layoutEffect1 layoutEffect2)
-            OperationState = None
+            OperationState = Keep
           }
         )
 
@@ -224,7 +249,7 @@ let Wait2 op1 op2 =
             Element = (getElement element1 element2)
             Effect = (createCombinedEffect effect1 effect2)
             LayoutEffect = (createCombinedEffect layoutEffect1 layoutEffect2)
-            OperationState = None
+            OperationState = Keep
           }
         )
 
@@ -235,7 +260,7 @@ let Wait2 op1 op2 =
             Element = (getElement element1 element2)
             Effect = (createCombinedEffect effect1 effect2)
             LayoutEffect = (createCombinedEffect layoutEffect1 layoutEffect2)
-            OperationState = None
+            OperationState = Keep
           },
           (ret1, ret2)
         )
@@ -270,7 +295,7 @@ let WaitAny2 op1 op2 =
             Element = (getElement element1 element2)
             Effect = (createCombinedEffect effect1 effect2)
             LayoutEffect = (createCombinedEffect layoutEffect1 layoutEffect2)
-            OperationState = None
+            OperationState = Keep
           }
         )
 
@@ -281,7 +306,7 @@ let WaitAny2 op1 op2 =
             Element = (getElement element1 element2)
             Effect = (createCombinedEffect effect1 effect2)
             LayoutEffect = (createCombinedEffect layoutEffect1 layoutEffect2)
-            OperationState = None
+            OperationState = Keep
           },
           (None, Some(ret2))
         )
@@ -293,7 +318,7 @@ let WaitAny2 op1 op2 =
             Element = (getElement element1 element2)
             Effect = (createCombinedEffect effect1 effect2)
             LayoutEffect = (createCombinedEffect layoutEffect1 layoutEffect2)
-            OperationState = None
+            OperationState = Keep
           },
           (Some(ret1), None)
         )
@@ -305,7 +330,7 @@ let WaitAny2 op1 op2 =
             Element = (getElement element1 element2)
             Effect = (createCombinedEffect effect1 effect2)
             LayoutEffect = (createCombinedEffect layoutEffect1 layoutEffect2)
-            OperationState = None
+            OperationState = Keep
           },
           (Some(ret1), Some(ret2))
         )
@@ -331,7 +356,7 @@ let Timeout time =
             Element = None; 
             Effect = None;
             LayoutEffect = None
-            OperationState = None
+            OperationState = Keep
           }, 
           ()
         )
@@ -339,13 +364,13 @@ let Timeout time =
         let timeoutEffect rerender =
           let timeoutCallback () =
             let updateState _ = 
-              Some(() :> obj)
+              Replace(() :> obj)
             rerender updateState
           let timeoutID = Fable.Core.JS.setTimeout timeoutCallback time
 
           Some(fun _ -> 
             Fable.Core.JS.clearTimeout timeoutID
-            None
+            Keep
           )
           
         PerformWait(
@@ -353,7 +378,7 @@ let Timeout time =
             Element = None
             Effect = Some(timeoutEffect)
             LayoutEffect = None
-            OperationState = None
+            OperationState = Keep
           }
         )
   })
@@ -369,7 +394,7 @@ let Interval interval =
             Element = None
             Effect = None
             LayoutEffect = None
-            OperationState = None
+            OperationState = Keep
           },
           ()
         )
@@ -377,13 +402,13 @@ let Interval interval =
         let timeoutEffect rerender =
           let timeoutCallback () =
             let updateState _ = 
-              Some(() :> obj)
+              Replace(() :> obj)
             rerender updateState
           let timeoutID = Fable.Core.JS.setInterval timeoutCallback interval
 
           Some(fun _ -> 
             Fable.Core.JS.clearInterval timeoutID
-            None
+            Keep
           )
           
         PerformWait(
@@ -391,7 +416,7 @@ let Interval interval =
             Element = None
             Effect = Some(timeoutEffect)
             LayoutEffect = None
-            OperationState = None
+            OperationState = Keep
           }
         )
 
@@ -422,7 +447,7 @@ let ContextCore<'returnType when 'returnType : equality> (useContext: IContext<'
             Element = None; 
             Effect = None;
             LayoutEffect = None
-            OperationState = None
+            OperationState = Keep
           }, 
           existingContext
         )
@@ -448,7 +473,7 @@ let Ref (initialValue: 'returnType option) =
             Element = None
             Effect = None
             LayoutEffect = None
-            OperationState = None
+            OperationState = Keep
           }, 
           existingRef
         )
@@ -468,7 +493,7 @@ let Call callable =
           Element = None
           Effect = Some(callCallable)
           LayoutEffect = None
-          OperationState = None
+          OperationState = Keep
         }, 
         ()
       )
@@ -486,7 +511,7 @@ let CallLayout callable =
           Element = None; 
           Effect = None;
           LayoutEffect = Some(callCallable)
-          OperationState = None
+          OperationState = Keep
         }, 
         ()
       )

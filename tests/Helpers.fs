@@ -17,8 +17,7 @@ let testOperationWithTrigger<'result> () =
       callCount := !callCount + 1
       let effectFunc rerender =
         internalRerender <- Some(rerender)
-        Some(fun _ -> 
-          None)
+        Some(fun _ -> Keep)
       match operationState with
       | None -> 
         PerformWait(
@@ -26,7 +25,7 @@ let testOperationWithTrigger<'result> () =
             Element = None
             Effect = Some(effectFunc)
             LayoutEffect = None
-            OperationState = None
+            OperationState = Keep
           }
         )
       | Some(result) -> 
@@ -36,7 +35,7 @@ let testOperationWithTrigger<'result> () =
             Element = None
             Effect = None
             LayoutEffect = None
-            OperationState = None
+            OperationState = Keep
           },
           castResult
         )
@@ -44,7 +43,7 @@ let testOperationWithTrigger<'result> () =
 
   let rerenderTrigger (value: 'result) =
     match internalRerender with
-    | Some(rerender) -> rerender(fun _ -> Some(value :> obj))
+    | Some(rerender) -> rerender(fun _ -> Replace(value :> obj))
     | None -> failwith "Should not happen"
   
   rerenderTrigger, callCount, operation

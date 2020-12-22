@@ -186,7 +186,7 @@ let tests =
       testCase "any" <| any
       testCase "wait single" <| waitSingle
       testCase "wait multiple" <| waitMultiple
-      testCase "state" <| state
+      // testCase "state" <| state
     ]
   )
 

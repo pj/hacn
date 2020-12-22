@@ -25,10 +25,18 @@ let Memo<'returnType> wrappedOperation (changed: (obj option -> bool) option) =
           rerender (fun rerenderState ->
             let castUnderlyingState: MemoState<'returnType> = unbox rerenderState
             let underlyingState = stateUpdater castUnderlyingState.UnderlyingState
-            Some ({
-              castUnderlyingState with 
-                UnderlyingState = underlyingState; Status = Rerendered
-            } :> obj)
+            match underlyingState with
+            | Replace(state) ->
+              Replace ({
+                castUnderlyingState with 
+                  UnderlyingState = Some(state); Status = Rerendered
+              } :> obj)
+            | Erase -> 
+              Replace ({
+                castUnderlyingState with 
+                  UnderlyingState = None; Status = Rerendered
+              } :> obj)
+            | Keep -> Keep
           ) 
         
         match underlyingEffectOpt with
@@ -48,11 +56,11 @@ let Memo<'returnType> wrappedOperation (changed: (obj option -> bool) option) =
               { 
                 operationData with
                   OperationState = 
-                    Some (Some({
+                    Replace({
                       UnderlyingState = underlyingOperationState
                       ReturnedValue = returnValue
                       Status = Complete
-                    } :> obj))
+                    } :> obj)
               },
               returnValue
             )
@@ -62,11 +70,11 @@ let Memo<'returnType> wrappedOperation (changed: (obj option -> bool) option) =
                 operationData with 
                   Effect = Some(wrapUnderlyingEffect operationData.Effect)
                   OperationState = 
-                    Some (Some({
+                    Replace({
                       UnderlyingState = underlyingOperationState
                       ReturnedValue = null
                       Status = Waiting
-                    } :> obj))
+                    } :> obj)
               }
             )
         | _ -> failwith "Underlying operation must be Perform"
@@ -84,12 +92,12 @@ let Memo<'returnType> wrappedOperation (changed: (obj option -> bool) option) =
           else
             // Continue with the cached value.
             PerformContinue(
-              {Element = None; Effect = None; LayoutEffect = None; OperationState = None}, 
+              {Element = None; Effect = None; LayoutEffect = None; OperationState = Keep}, 
               castUnderlyingState.ReturnedValue
             )
         | Waiting -> 
           PerformWait(
-            {Element = None; Effect = None; LayoutEffect = None; OperationState = None}
+            {Element = None; Effect = None; LayoutEffect = None; OperationState = Keep}
           )
         | Rerendered ->
           runUnderlying (unbox castUnderlyingState.UnderlyingState)

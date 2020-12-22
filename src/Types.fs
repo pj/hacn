@@ -23,8 +23,7 @@ type OperationData =
     Effect:  Effect option 
     LayoutEffect: Effect option
     // Useful for memoize/state control operations, where we don't want to 
-    // trigger a rerender. Extra option layer to indicate whether to update 
-    // state or not.
+    // trigger a rerender. 
     OperationState: UpdateState
   }
 and PerformResult<'props, 'returnType when 'props: equality> =
@@ -41,23 +40,23 @@ and ControlResult<'props when 'props: equality> =
 and ControlData<'props when 'props: equality> =
   { 
     PreProcess: obj option -> obj option;
-    GetResult: CaptureReturn -> obj option -> ControlResult<'props>;
+    GetResult: CaptureReturn -> obj option -> 'props -> ControlResult<'props>;
   }
 and ComposeSideEffects<'props when 'props: equality> =
   {
-    Effects: (unit -> unit) list
-    LayoutEffects: (unit -> unit) list
+    Effects: (int * Effect) list
+    LayoutEffects: (int * Effect) list
     Element: ReactElement option
     OperationState: (obj option) option
   }
-and ComposeResult<'props when 'props: equality> =
-  | ComposeWait of ComposeSideEffects<'props>
-  | ComposeFinished of ComposeSideEffects<'props> * Operation<'props, unit>
-and ComposeData<'props when 'props: equality> =
-  { 
-    PreProcess: obj option -> obj option;
-    ExecuteCompose: CaptureReturn -> obj option -> 'props -> (Effect -> (unit -> unit)) -> ComposeResult<'props>;
-  }
+// and ComposeResult<'props when 'props: equality> =
+//   | ComposeWait of ComposeSideEffects<'props>
+//   | ComposeFinished of ComposeSideEffects<'props> * Operation<'props, unit>
+// and ComposeData<'props when 'props: equality> =
+//   { 
+//     PreProcess: obj option -> obj option;
+//     ExecuteCompose: CaptureReturn -> obj option -> 'props -> ControlResult<'props>;
+//   }
 and PerformPropsData<'props> =
   { 
     Changed: 'props option -> 'props -> bool
@@ -76,5 +75,5 @@ and Operation<'props, 'returnType when 'props: equality> =
   // For composition
   | ComposeStart of (unit -> Operation<'props, unit>)
   | ComposeReturn of 'returnType
-  | Compose of ComposeData<'props>
+  | Compose of ControlData<'props>
   | End

@@ -42,7 +42,7 @@ let memoTests =
                 Element = None
                 Effect = None
                 LayoutEffect = None
-                OperationState = None
+                OperationState = Keep
               }, 
               "Hello World!"
             )

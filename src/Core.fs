@@ -159,21 +159,25 @@ let preprocessOperations refState props =
   for item in refState.Operations do
     match item with
       | {State = opState; Operation = op; Index = index} ->
+        let executePreprocess preProcess = 
+          // let processOpState: obj option = getOperationState refState operationType opState props
+
+          let result = preProcess opState
+          match result with
+            | Some(newOpState) -> 
+              FSharp.Collections.Array.set 
+                nextState.Operations 
+                index 
+                {State = Some(newOpState); Operation = op; Index = index; Disposer = None}
+              if index < nextIndex then
+                nextState <- {nextState with OperationIndex = index}
+                nextIndex <- index
+            | None -> ()
         match op with 
           | Control({PreProcess = preProcess}) -> 
-            // let processOpState: obj option = getOperationState refState operationType opState props
-
-            let result = preProcess opState
-            match result with
-              | Some(newOpState) -> 
-                FSharp.Collections.Array.set 
-                  nextState.Operations 
-                  index 
-                  {State = Some(newOpState); Operation = op; Index = index; Disposer = None}
-                if index < nextIndex then
-                  nextState <- {nextState with OperationIndex = index}
-                  nextIndex <- index
-              | None -> ()
+            executePreprocess preProcess
+          | Compose({PreProcess = preProcess}) -> 
+            executePreprocess preProcess
           | ControlProps({Changed = changed}) ->
             if changed refState.PrevProps props && index < nextIndex then
               nextState <- {nextState with OperationIndex = index}
@@ -183,7 +187,7 @@ let preprocessOperations refState props =
 
   nextState
 
-let execute resultCapture wrapEffect componentState props =
+let execute resultCapture componentState props =
   let mutable currentIndex = componentState.OperationIndex
   let mutable stop = false
   let mutable renderedElement = componentState.Element
@@ -207,13 +211,13 @@ let execute resultCapture wrapEffect componentState props =
     let setEffect effect =
       match effect with 
       | Some(effect) ->
-        nextEffects <- nextEffects @ [(wrapEffect currentOperation.Index effect)]
+        nextEffects <- nextEffects @ [(currentOperation.Index, effect)]
       | _ -> ()
 
     let setLayoutEffect layoutEffect = 
       match layoutEffect with 
       | Some(effect) ->
-        nextLayoutEffects <- nextLayoutEffects @ [(wrapEffect currentOperation.Index effect)]
+        nextLayoutEffects <- nextLayoutEffects @ [(currentOperation.Index, effect)]
       | _ -> ()
 
     let setOperationState operationState = 
@@ -282,6 +286,27 @@ let execute resultCapture wrapEffect componentState props =
                 }
               |]
         currentIndex <- currentIndex + 1
+      | Compose(nextOpData) ->
+        if (currentIndex + 1) < componentState.Operations.Length then
+          let currentNextOp = nextOperations.[currentIndex+1]
+          FSharp.Collections.Array.set
+            nextOperations
+            (currentIndex + 1)
+            {currentNextOp with Operation = Compose(nextOpData)}
+        else
+          let preProcessState = nextOpData.PreProcess(None)
+          nextOperations <- 
+            FSharp.Collections.Array.append 
+              nextOperations 
+              [|
+                {
+                  State = preProcessState; 
+                  Operation = Compose(nextOpData); 
+                  Index = currentIndex + 1;
+                  Disposer = None;
+                }
+              |]
+        currentIndex <- currentIndex + 1
       | ComposeReturn(returnType) ->
         composeReturn <- Some(returnType :> obj)
         currentIndex <- currentIndex + 1
@@ -301,25 +326,28 @@ let execute resultCapture wrapEffect componentState props =
     implicitCapture <- Some(resultCapture (currentOperation.Index + 1))
     match currentOperation.Operation with
     | ControlProps({Execute = execute}) ->
+      console.log (sprintf "Handling Control Props")
       let nextOperation = execute props
+      console.log( nextOperation )
       nextProps <- Some(props)
       handleNextOperation nextOperation
     | Control({GetResult = getResult}) ->
       let capture = resultCapture currentOperation.Index 
       console.log (sprintf "Setting capture for index %d" currentOperation.Index)
-      let invokeResult = getResult capture currentOperation.State 
+      let invokeResult = getResult capture currentOperation.State props 
       handleInvokeResult invokeResult
-    | Compose({ExecuteCompose = executeCompose}) ->
+    | Compose({GetResult = getResult}) ->
       let capture = resultCapture currentOperation.Index 
       console.log (sprintf "Setting capture for index %d" currentOperation.Index)
-      let invokeResult = executeCompose capture currentOperation.State props (wrapEffect currentOperation.Index)
-      match invokeResult with
-      | ComposeWait(composeEffects) ->
-        updateComposeElementAndEffects composeEffects
-        stop <- true
-      | ComposeFinished(composeEffects, nextOperation) ->
-        updateComposeElementAndEffects composeEffects
-        handleNextOperation nextOperation
+      let invokeResult = getResult capture currentOperation.State props
+      handleInvokeResult invokeResult
+      // match invokeResult with
+      // | ControlWait(composeEffects) ->
+      //   updateComposeElementAndEffects composeEffects
+      //   stop <- true
+      // | ComposeFinished(composeEffects, nextOperation) ->
+      //   updateComposeElementAndEffects composeEffects
+      //   handleNextOperation nextOperation
 
     | End -> 
       console.log "Current operation is End"
@@ -366,40 +394,36 @@ let render firstOperation props =
 
       rerender ()
 
-  let wrapEffect index (effect: Effect) =
+  let callEffect index (effect: Effect) =
     let wrapUpdateState index stateUpdater = 
       if index <= componentStateRef.current.OperationIndex then
         updateOperationsWith index componentStateRef.current.Operations stateUpdater
         componentStateRef.current <- {componentStateRef.current with OperationIndex = index}
         runDisposers componentStateRef.current.OperationIndex componentStateRef.current.Operations
         rerender ()
-    let updateState = wrapUpdateState index
-    let wrappedEffect () =
-      let disposer = effect updateState
-      updateDisposer index componentStateRef.current.Operations disposer
-      ()
-    wrappedEffect
+    let disposer = effect (wrapUpdateState index)
+    updateDisposer index componentStateRef.current.Operations disposer
 
   componentStateRef.current <- getFirstOperation firstOperation captureResult componentStateRef.current
 
   componentStateRef.current <- preprocessOperations componentStateRef.current props
   runDisposers componentStateRef.current.OperationIndex componentStateRef.current.Operations
 
-  let nextState, wrappedNextEffects, wrappedNextLayoutEffects = execute captureResult wrapEffect componentStateRef.current props
+  let nextState, nextEffects, nextLayoutEffects = execute captureResult componentStateRef.current props
 
   componentStateRef.current <- nextState
 
   // run any effects.
   Hooks.useEffect (
     fun () ->
-      List.map (fun eff -> eff ()) wrappedNextEffects |> ignore
+      List.iter (fun (index, eff) -> callEffect index eff) nextEffects
       ()
     )
 
   // run any layout effect.
   React.useLayoutEffect (
     fun () ->
-      List.map (fun eff -> eff ()) wrappedNextLayoutEffects |> ignore
+      List.iter (fun (index, eff) -> callEffect index eff) nextLayoutEffects
       ()
     )
 
@@ -424,7 +448,7 @@ let bind<'props, 'resultType, 'x, 'y when 'props: equality and 'x: equality> (un
       {
         PreProcess = fun operationState -> underlyingOperationData.PreProcess(operationState)
         GetResult = 
-          fun captureFunc operationState ->
+          fun captureFunc operationState props ->
             let operationResult = underlyingOperationData.GetResult captureFunc operationState
 
             match operationResult with
@@ -438,8 +462,9 @@ let bind<'props, 'resultType, 'x, 'y when 'props: equality and 'x: equality> (un
     Compose(
       {
         PreProcess = fun operationState -> None
-        ExecuteCompose = 
-          fun captureReturn operationStateOpt props wrapEffect ->
+        GetResult = 
+          fun captureReturn operationStateOpt props ->
+            console.log "getting compose result"
             let composeCapture index subStateUpdater = 
               let stateUpdater existingStateOpt = 
                 match existingStateOpt with
@@ -473,44 +498,66 @@ let bind<'props, 'resultType, 'x, 'y when 'props: equality and 'x: equality> (un
                   ComposeReturn = None
                 }
             
-            let composeWrapEffect index effect = 
-              let composeEffect rerender = 
+            let wrapComposeEffects effects rerender =
+              let callEffect (index, effect) = 
                 let underlyingRerender underlyingUpdater = 
                   let composeUpdater existingStateOpt =
                     match existingStateOpt with
                     | Some(existingState) ->
                       let castExistingState = unbox existingState
                       if index <= castExistingState.OperationIndex then
-                        updateOperationsWith index castExistingState.Operations underlyingUpdater
-                        runDisposers castExistingState.OperationIndex castExistingState.Operations
+                        updateOperationsWith 
+                          index 
+                          castExistingState.Operations 
+                          underlyingUpdater
+                        runDisposers 
+                          castExistingState.OperationIndex 
+                          castExistingState.Operations
 
                         Replace (castExistingState :> obj)
                       else 
                         Keep
                     | None -> failwith "should not happen"
-
                   rerender composeUpdater
                 let dispose = effect underlyingRerender
                 updateDisposer index composeState.Operations dispose
-                None
+                (index, dispose)
 
-              wrapEffect composeEffect
+              let disposers = List.map callEffect effects
+              let composeDisposer existingStateOpt = 
+                match existingStateOpt with
+                | Some(existingState) ->
+                  let castExistingState = unbox existingState
+                  let callDisposer (index, disposeOpt) =
+                    match disposeOpt with
+                    | Some(dispose) -> 
+                      updateOperationsWith 
+                        index 
+                        castExistingState.Operations 
+                        dispose
+                    | None -> ()
 
-            let executionResult, nextEffects, layoutEffects = 
-              execute composeCapture composeWrapEffect composeState (unbox props)
+                  List.iter callDisposer disposers
+                  Replace(castExistingState :> obj)
+                | None -> failwith "should not happen"
+              Some(composeDisposer)
+
+            let executionResult, nextEffects, nextLayoutEffects = 
+              execute composeCapture composeState (unbox props)
             
             let composeEffects = {
-              Effects = nextEffects
-              LayoutEffects = layoutEffects
+              Effect = Some(wrapComposeEffects nextEffects)
+              LayoutEffect = Some(wrapComposeEffects nextLayoutEffects)
               Element = executionResult.Element
-              OperationState = Some (Some(executionResult :> obj))
+              OperationState = Replace(executionResult :> obj)
             }
+
             match executionResult.ComposeReturn with
             | Some(returnType) -> 
               let nextOperation = f (unbox returnType)
-              ComposeFinished(composeEffects, nextOperation)
+              ControlNext(composeEffects, nextOperation)
             | None ->
-              ComposeWait(composeEffects)
+              ControlWait(composeEffects)
       }
     )
   | _ -> failwith (sprintf "Can't bind operation %A" underlyingOperation)
