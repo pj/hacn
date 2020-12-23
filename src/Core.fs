@@ -77,13 +77,17 @@ let runDisposers operationIndex (operations: OperationElement<'props> array) =
       updateOperationsWith i operations dispose
     | _ -> ()
 
-let getFirstOperation firstOperation resultCapture componentState =
+let getFirstOperation delayOperation resultCapture componentState =
   if componentState.OperationIndex = -1 then
     implicitCapture <- Some(resultCapture 0)
+    let firstOperation = 
+      match delayOperation with
+      | Delay(f) -> f ()
+      | _ -> failwith (sprintf "First operation from builder must be of type Delay: %A" delayOperation)
     {
       componentState with 
         OperationIndex = 0
-        Operations = [|{State = None; Operation = (firstOperation ()); Index = 0; Disposer = None}|]
+        Operations = [|{State = None; Operation = firstOperation; Index = 0; Disposer = None}|]
     }
   else
     componentState
@@ -673,7 +677,7 @@ type ReactBuilder() =
     combine left right
   member _.Zero() = 
     End
-  member _.Delay(f) = f 
+  member _.Delay(f) = Delay f 
   member _.Run(firstOperation) =
     React.functionComponent<'props>(
       fun (props: 'props) -> 

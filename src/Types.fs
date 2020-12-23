@@ -76,4 +76,7 @@ and Operation<'props, 'returnType when 'props: equality> =
   | ComposeStart of (unit -> Operation<'props, unit>)
   | ComposeReturn of 'returnType
   | Compose of ControlData<'props>
+
+  // Delay
+  | Delay of (unit -> Operation<'props, unit>)
   | End
