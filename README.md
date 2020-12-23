@@ -292,7 +292,8 @@ let Timeout time =
 - [x] Replace the `RenderCapture` operation with props that automatically capture, will require some kind of global state to set the rendering operation.
 - [x] Create builder that makes operations that can be composed i.e. combine multiple sequence steps into a single operation.
   - [ ] Implement Preprocess for composition
-  - [ ] More tests for compisition. 
+  - [ ] More tests for composition. 
+  - [ ] Implement return for composition. 
 - [ ] Implement Combine operation in builder correctly, so that conditionals work properly.
 - [ ] Implement error handling to allow try/catch and to allow returning error as value.
 - [ ] Implement operations like data fetching.

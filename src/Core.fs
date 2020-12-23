@@ -39,74 +39,10 @@ type RefState<'props when 'props: equality> =
 // captured events.
 let mutable implicitCapture = None
 
-// let Combine op1 op2 = 
-//   // let checkNotCore underlyingOperation = 
-//   //   match underlyingOperation with
-//   //   | End -> ()
-//   //   | Control({OperationType = NotCore}) -> ()
-//   //   | _ -> failwith "Underlying operations must be a Control NotCore operation"
-//   // checkNotCore op1
-//   // checkNotCore op2
-//   Perform({ 
-//     PreProcess = fun _ -> None
-//     GetResult = fun capture operationState -> 
-//       let underlyingStateCast: (obj option) array = 
-//         match operationState with
-//         | Some(x) -> unbox x
-//         | None -> [|None; None|]
-//       let opState1 = underlyingStateCast.[0]
-//       let opResult1 = 
-//         match op1 with
-//         | End -> Next(operationData, End)
-//         | Control(pd1) -> 
-//           pd1.GetResult capture opState1
-//         | _ -> failwith "Can only work with Perform operations"
-//       let opState2 = underlyingStateCast.[1]
-//       let opResult2 = 
-//         match op2 with
-//         | End -> ControlNext(None, None, None, End)
-//         | Control(pd2) -> 
-//           pd2.GetResult capture opState2
-//         | _ -> failwith "Can only work with Perform operations"
-      
-//       match opResult1, opResult2 with
-//       | ControlWait(element1, effect1, layoutEffect1), ControlWait(element2, effect2, layoutEffect2) ->
-//         ControlWait(
-//           (getElement element1 element2), 
-//           (createCombinedEffect effect1 effect2), 
-//           (createCombinedEffect layoutEffect1 layoutEffect2)
-//         )
-
-//       | ControlWait(element1, effect1, layoutEffect1), ControlNext(element2, effect2, layoutEffect2, _) ->
-//         ControlWait(
-//           (getElement element1 element2), 
-//           (createCombinedEffect effect1 effect2), 
-//           (createCombinedEffect layoutEffect1 layoutEffect2)
-//         )
-
-//       | ControlNext(element1, effect1, layoutEffect1, _), ControlWait(element2, effect2, layoutEffect2) ->
-//         ControlWait(
-//           (getElement element1 element2), 
-//           (createCombinedEffect effect1 effect2),
-//           (createCombinedEffect layoutEffect1 layoutEffect2)
-//         )
-
-//       | ControlNext(element1, effect1, layoutEffect1, _), ControlNext(element2, effect2, layoutEffect2, ret2) ->
-//         ControlNext(
-//           (getElement element1 element2), 
-//           (createCombinedEffect effect1 effect2),
-//           (createCombinedEffect layoutEffect1 layoutEffect2),
-//           ret2
-//         )
-//   })
-
-// let combine left right = 
-//     match left, right with
-//     | (End, End) -> End 
-//     | _ -> Combine left right
-
-let zero() =
-  End
+type CombineState<'props when 'props: equality> = {
+  FirstState: obj option
+  SecondState: obj option
+}
 
 let updateOperationsWith index (operations: OperationElement<'props> array) stateUpdater = 
   let op = operations.[index]
@@ -332,7 +268,6 @@ let execute resultCapture componentState props =
       let capture = resultCapture currentOperation.Index 
       let invokeResult = getResult capture currentOperation.State props
       handleInvokeResult invokeResult
-
     | End -> 
       stop <- true
     | _ -> failwith (sprintf "Unknown op %A" currentOperation)
@@ -418,6 +353,266 @@ let render firstOperation props =
       element
     | None -> null
 
+let executionState composeCapture operationStateOpt firstOperation: RefState<'props> = 
+  match operationStateOpt with
+  | Some(operationState) -> unbox operationState
+  | None -> 
+    implicitCapture <- Some(composeCapture 0)
+    {
+      OperationIndex = 0 
+      Operations = [|{
+        State = None
+        Operation = (firstOperation ())
+        Index = 0
+        Disposer = None
+      }|]
+      Element = None
+      PrevProps = None
+      ComposeReturn = None
+    }
+
+let executionCapture captureReturn index subStateUpdater = 
+  let stateUpdater existingStateOpt = 
+    match existingStateOpt with
+    | Some(existingState) ->
+      let castExistingState = unbox existingState
+      if index <= castExistingState.OperationIndex then
+        updateOperationsWith index castExistingState.Operations subStateUpdater
+        runDisposers castExistingState.OperationIndex castExistingState.Operations
+
+        Replace (castExistingState :> obj)
+      else 
+        Keep
+    | None -> failwith "should not happen"
+  captureReturn stateUpdater
+
+let wrapExecutionEffects composeState effects rerender =
+  let callEffect (index, effect) = 
+    let underlyingRerender underlyingUpdater = 
+      let composeUpdater existingStateOpt =
+        match existingStateOpt with
+        | Some(existingState) ->
+          let castExistingState = unbox existingState
+          if index <= castExistingState.OperationIndex then
+            updateOperationsWith 
+              index 
+              castExistingState.Operations 
+              underlyingUpdater
+            runDisposers 
+              castExistingState.OperationIndex 
+              castExistingState.Operations
+
+            Replace (castExistingState :> obj)
+          else 
+            Keep
+        | None -> failwith "should not happen"
+      rerender composeUpdater
+    let dispose = effect underlyingRerender
+    updateDisposer index composeState.Operations dispose
+    (index, dispose)
+
+  let disposers = List.map callEffect effects
+  let composeDisposer existingStateOpt = 
+    match existingStateOpt with
+    | Some(existingState) ->
+      let castExistingState = unbox existingState
+      let callDisposer (index, disposeOpt) =
+        match disposeOpt with
+        | Some(dispose) -> 
+          updateOperationsWith 
+            index 
+            castExistingState.Operations 
+            dispose
+        | None -> ()
+
+      List.iter callDisposer disposers
+      Replace(castExistingState :> obj)
+    | None -> failwith "should not happen"
+  Some(composeDisposer)
+
+let combine op1 op2 =
+  match (op1, op2) with 
+  | End, End -> End
+  | _ -> 
+    Control({
+      PreProcess = fun _ -> None
+      GetResult = fun captureReturn combineStateOpt props ->  
+        let combineState = 
+          match combineStateOpt with
+          | Some(combineState) -> unbox combineState
+          | None -> {
+            FirstState = None
+            SecondState = None
+          }
+
+        let createCombineCapture stateSetter underlyingStateUpdater =
+          let captureUpdater combineStateOpt =
+            let combineState = 
+              match combineStateOpt with
+              | Some(combineState) -> unbox combineState
+              | None -> failwith "Should not happen"
+          
+            let updateState = underlyingStateUpdater combineState.FirstState
+
+            match updateState with
+            | Keep -> Keep
+            | Erase -> Replace(stateSetter combineState None)
+            | Replace(state) -> Replace(stateSetter combineState (Some state))
+
+          captureReturn captureUpdater
+
+        let createCombineEffect combineState firstEffects secondEffects = 
+          let firstState, secondState =
+            (
+              match combineState.FirstState with
+              | Some(s) -> unbox s
+              | None -> failwith "should not happen"
+              match combineState.SecondState with
+              | Some(s) -> unbox s
+              | None -> failwith "should not happen"
+            )
+
+          let firstEffect = wrapExecutionEffects firstState firstEffects
+          let secondEffect = wrapExecutionEffects secondState secondEffects
+          let combineEffect rerender =
+            let combineRerender stateGetter stateSetter underlyingUpdater =
+              let combineUpdater combineStateOpt = 
+                let combineState = 
+                  match combineStateOpt with
+                  | Some(combineState) -> unbox combineState
+                  | None -> failwith "Should not happen"
+                
+                let updatedState = underlyingUpdater (stateGetter combineState)
+                match updatedState with
+                | Erase -> Replace(stateSetter combineState None)
+                | Keep -> Keep
+                | Replace(s) -> Replace(stateSetter combineState (Some s))
+
+              rerender combineUpdater
+
+            let firstDisposer = 
+              firstEffect 
+                (combineRerender (fun x -> x.FirstState) 
+                (fun x v -> {x with FirstState = v}))
+            let secondDisposer = 
+              secondEffect 
+                (combineRerender (fun x -> x.SecondState ) 
+                (fun x v -> {x with SecondState = v}))
+
+            let combineDisposer combineStateOpt = 
+              let combineState = 
+                match combineStateOpt with
+                | Some(combineState) -> unbox combineState
+                | None -> failwith "Should not happen"
+              
+              let updatedState = 
+                match firstDisposer with
+                | Some(disposer) -> 
+                  let firstDisposeResponse = disposer combineState.FirstState 
+                  match firstDisposeResponse with
+                  | Erase -> {combineState with FirstState = None}
+                  | Keep -> combineState
+                  | Replace(s) -> {combineState with FirstState = Some(s)}
+                | None -> combineState
+              match secondDisposer with
+              | Some(disposer) -> 
+                let disposeResponse = disposer combineState.FirstState 
+                match disposeResponse with
+                | Erase -> Replace({updatedState with SecondState = None})
+                | Keep -> Replace(updatedState)
+                | Replace(s) -> Replace({updatedState with SecondState = Some(s)})
+              | None -> Replace(updatedState)
+              
+            Some(combineDisposer)
+          combineEffect
+        
+        let secondExecute controlData2 =
+          let secondCapture = createCombineCapture (fun existingState newValue -> {existingState with SecondState = newValue})
+          let composeCaptureReturn = executionCapture secondCapture
+          let composeState = executionState composeCaptureReturn combineState.SecondState (fun () -> Control(controlData2))
+
+          composeState, execute composeCaptureReturn composeState (unbox props)
+        
+        let firstExecute controlData1 controlData2 = 
+          let firstCapture = createCombineCapture (fun existingState newValue -> {existingState with FirstState = newValue})
+          let firstCaptureReturn = executionCapture firstCapture
+          let firstState = executionState firstCaptureReturn combineState.FirstState (fun () -> Control(controlData1))
+
+          firstState, execute firstCaptureReturn firstState (unbox props)
+
+        let executeCombine controlData1 controlData2 = 
+          let firstState, (firstExecutionResult, firstEffects, firstLayoutEffects) = 
+            firstExecute controlData1 controlData2
+          match firstState.Operations.[firstState.OperationIndex].Operation with
+          | End ->
+            let secondState, (secondExecuteResult, secondEffects, secondLayoutEffects) = secondExecute controlData2
+            let element = Option.orElse firstExecutionResult.Element secondExecuteResult.Element
+            let combineData =
+              {
+                Effect = Some(createCombineEffect combineState firstEffects secondEffects)
+                LayoutEffect = Some(createCombineEffect combineState firstLayoutEffects secondLayoutEffects)
+                Element = element
+                OperationState = Replace({
+                  combineState with 
+                    FirstState = Some(firstExecutionResult :> obj)
+                    SecondState = Some(secondExecuteResult :> obj)
+                  })
+              } 
+            match secondState.Operations.[secondState.OperationIndex].Operation with
+            | End -> 
+              ControlNext(combineData, End)
+            | _ -> 
+              ControlWait(combineData)
+          | _ ->
+            ControlWait( {
+                Effect = Some(createCombineEffect combineState firstEffects [])
+                LayoutEffect = Some(createCombineEffect combineState firstLayoutEffects [])
+                Element = firstExecutionResult.Element
+                OperationState = Replace({
+                  combineState with 
+                    FirstState = Some(firstExecutionResult :> obj)
+                  })
+              } 
+            )
+
+        let executeSingle controlData = 
+          let state, (executionResult, effects, layoutEffects) = 
+            secondExecute controlData
+          match state.Operations.[state.OperationIndex].Operation with
+          | End ->
+            ControlNext(
+              {
+                Effect = Some(createCombineEffect combineState [] effects)
+                LayoutEffect = Some(createCombineEffect combineState [] layoutEffects)
+                Element = executionResult.Element
+                OperationState = Replace({ combineState with SecondState = Some(executionResult :> obj)})
+              }, 
+              End
+            )
+          | _ ->
+            ControlWait({
+              Effect = Some(createCombineEffect combineState [] effects)
+              LayoutEffect = Some(createCombineEffect combineState [] layoutEffects)
+              Element = executionResult.Element
+              OperationState = Replace({ combineState with SecondState = Some(executionResult :> obj)})
+            })
+        
+        match op1, op2 with
+        | End, Control(controlData) -> 
+          executeSingle controlData
+        | End, Compose(controlData) -> 
+          executeSingle controlData
+        | Control(controlData1), Control(controlData2) ->
+          executeCombine controlData1 controlData2
+        | Compose(controlData1), Control(controlData2) ->
+          executeCombine controlData1 controlData2
+        | Control(controlData1), Compose(controlData2) ->
+          executeCombine controlData1 controlData2
+        | Compose(controlData1), Compose(controlData2) ->
+          executeCombine controlData1 controlData2
+        | _ -> failwith (sprintf "Invalid types for combine:\n %A\n\n %A" op1 op2)
+    })
+
 let bind<'props, 'resultType, 'x, 'y when 'props: equality and 'x: equality> (underlyingOperation: Operation<'props, 'resultType>) (f: 'resultType -> Operation<'x, unit>) : Operation<'x, 'y> = 
 // let bind underlyingOperation f = 
   match underlyingOperation with
@@ -449,89 +644,14 @@ let bind<'props, 'resultType, 'x, 'y when 'props: equality and 'x: equality> (un
         PreProcess = fun operationState -> None
         GetResult = 
           fun captureReturn operationStateOpt props ->
-            let composeCapture index subStateUpdater = 
-              let stateUpdater existingStateOpt = 
-                match existingStateOpt with
-                | Some(existingState) ->
-                  let castExistingState = unbox existingState
-                  if index <= castExistingState.OperationIndex then
-                    updateOperationsWith index castExistingState.Operations subStateUpdater
-                    runDisposers castExistingState.OperationIndex castExistingState.Operations
-
-                    Replace (castExistingState :> obj)
-                  else 
-                    Keep
-                | None -> failwith "should not happen"
-              captureReturn stateUpdater
-
-            let composeState: RefState<'props> = 
-              match operationStateOpt with
-              | Some(operationState) -> unbox operationState
-              | None -> 
-                implicitCapture <- Some(composeCapture 0)
-                {
-                  OperationIndex = 0 
-                  Operations = [|{
-                    State = None
-                    Operation = (composeFirst ())
-                    Index = 0
-                    Disposer = None
-                  }|]
-                  Element = None
-                  PrevProps = None
-                  ComposeReturn = None
-                }
-            
-            let wrapComposeEffects effects rerender =
-              let callEffect (index, effect) = 
-                let underlyingRerender underlyingUpdater = 
-                  let composeUpdater existingStateOpt =
-                    match existingStateOpt with
-                    | Some(existingState) ->
-                      let castExistingState = unbox existingState
-                      if index <= castExistingState.OperationIndex then
-                        updateOperationsWith 
-                          index 
-                          castExistingState.Operations 
-                          underlyingUpdater
-                        runDisposers 
-                          castExistingState.OperationIndex 
-                          castExistingState.Operations
-
-                        Replace (castExistingState :> obj)
-                      else 
-                        Keep
-                    | None -> failwith "should not happen"
-                  rerender composeUpdater
-                let dispose = effect underlyingRerender
-                updateDisposer index composeState.Operations dispose
-                (index, dispose)
-
-              let disposers = List.map callEffect effects
-              let composeDisposer existingStateOpt = 
-                match existingStateOpt with
-                | Some(existingState) ->
-                  let castExistingState = unbox existingState
-                  let callDisposer (index, disposeOpt) =
-                    match disposeOpt with
-                    | Some(dispose) -> 
-                      updateOperationsWith 
-                        index 
-                        castExistingState.Operations 
-                        dispose
-                    | None -> ()
-
-                  List.iter callDisposer disposers
-                  Replace(castExistingState :> obj)
-                | None -> failwith "should not happen"
-              Some(composeDisposer)
-
+            let composeCaptureReturn = executionCapture captureReturn
+            let composeState = executionState composeCaptureReturn operationStateOpt composeFirst
             let executionResult, nextEffects, nextLayoutEffects = 
-              execute composeCapture composeState (unbox props)
+              execute composeCaptureReturn composeState (unbox props)
             
             let composeEffects = {
-              Effect = Some(wrapComposeEffects nextEffects)
-              LayoutEffect = Some(wrapComposeEffects nextLayoutEffects)
+              Effect = Some(wrapExecutionEffects composeState nextEffects)
+              LayoutEffect = Some(wrapExecutionEffects composeState nextLayoutEffects)
               Element = executionResult.Element
               OperationState = Replace(executionResult :> obj)
             }
@@ -546,15 +666,14 @@ let bind<'props, 'resultType, 'x, 'y when 'props: equality and 'x: equality> (un
     )
   | _ -> failwith (sprintf "Can't bind operation %A" underlyingOperation)
 
-
 type ReactBuilder() = 
   member _.Bind(operation, f) = 
     bind operation f
-  // member _.Combine(left, right) =
-  //   combine left right
+  member _.Combine(left, right) =
+    combine left right
   member _.Zero() = 
-    zero()
-  member _.Delay(f) = f
+    End
+  member _.Delay(f) = f 
   member _.Run(firstOperation) =
     React.functionComponent<'props>(
       fun (props: 'props) -> 
@@ -567,8 +686,8 @@ let react = ReactBuilder ()
 type HacnBuilder() = 
   member _.Bind(operation, f) = 
     bind operation f
-  // member _.Combine(left, right) =
-  //   combine left right
+  member _.Combine(left, right) =
+    combine left right
   member _.Zero() = 
     ComposeReturn ()
   member _.Delay(f) = f
