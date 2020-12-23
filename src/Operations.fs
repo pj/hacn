@@ -75,6 +75,7 @@ let State<'state> (initialState: 'state) =
             let stateSetEffect rerender =
               let updateState _ =
                 captureResult (fun _ -> (Replace({Updated = true; ComponentState = newState} :> obj)))
+                // Replace({Updated = true; ComponentState = newState} :> obj)
                 Keep
               rerender updateState
               None

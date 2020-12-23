@@ -199,12 +199,9 @@ let execute resultCapture componentState props =
 
   while not stop do
     let currentOperation = nextOperations.[currentIndex]
-    console.log (sprintf "current index: %d" currentIndex)
-    // console.log (sprintf "Current Operation %A" currentOperation)
     let setElement element =
       match element with 
       | Some(element) ->
-        console.log (sprintf "Rendering %A" element)
         renderedElement <- Some(element)
       | _ -> ()
 
@@ -244,7 +241,6 @@ let execute resultCapture componentState props =
     let handleNextOperation nextOperation =
       match nextOperation with
       | End -> 
-        console.log "Next operation is End"
         if (currentIndex + 1) < componentState.Operations.Length then
           let currentNextOp = nextOperations.[currentIndex+1]
           FSharp.Collections.Array.set
@@ -317,7 +313,6 @@ let execute resultCapture componentState props =
       // | Continue(_, __) -> failwith "Continue should only be passed into bind, not into execution."
       | ControlWait(operationData) ->
         updateElementAndEffects operationData
-        console.log "Waiting"
         stop <- true
       | ControlNext(operationData, nextOperation) ->
         updateElementAndEffects operationData
@@ -326,31 +321,19 @@ let execute resultCapture componentState props =
     implicitCapture <- Some(resultCapture (currentOperation.Index + 1))
     match currentOperation.Operation with
     | ControlProps({Execute = execute}) ->
-      console.log (sprintf "Handling Control Props")
       let nextOperation = execute props
-      console.log( nextOperation )
       nextProps <- Some(props)
       handleNextOperation nextOperation
     | Control({GetResult = getResult}) ->
       let capture = resultCapture currentOperation.Index 
-      console.log (sprintf "Setting capture for index %d" currentOperation.Index)
       let invokeResult = getResult capture currentOperation.State props 
       handleInvokeResult invokeResult
     | Compose({GetResult = getResult}) ->
       let capture = resultCapture currentOperation.Index 
-      console.log (sprintf "Setting capture for index %d" currentOperation.Index)
       let invokeResult = getResult capture currentOperation.State props
       handleInvokeResult invokeResult
-      // match invokeResult with
-      // | ControlWait(composeEffects) ->
-      //   updateComposeElementAndEffects composeEffects
-      //   stop <- true
-      // | ComposeFinished(composeEffects, nextOperation) ->
-      //   updateComposeElementAndEffects composeEffects
-      //   handleNextOperation nextOperation
 
     | End -> 
-      console.log "Current operation is End"
       stop <- true
     | _ -> failwith (sprintf "Unknown op %A" currentOperation)
   
@@ -404,12 +387,14 @@ let render firstOperation props =
     let disposer = effect (wrapUpdateState index)
     updateDisposer index componentStateRef.current.Operations disposer
 
-  componentStateRef.current <- getFirstOperation firstOperation captureResult componentStateRef.current
+  componentStateRef.current <- 
+    getFirstOperation firstOperation captureResult componentStateRef.current
 
   componentStateRef.current <- preprocessOperations componentStateRef.current props
   runDisposers componentStateRef.current.OperationIndex componentStateRef.current.Operations
 
-  let nextState, nextEffects, nextLayoutEffects = execute captureResult componentStateRef.current props
+  let nextState, nextEffects, nextLayoutEffects = 
+    execute captureResult componentStateRef.current props
 
   componentStateRef.current <- nextState
 
@@ -464,7 +449,6 @@ let bind<'props, 'resultType, 'x, 'y when 'props: equality and 'x: equality> (un
         PreProcess = fun operationState -> None
         GetResult = 
           fun captureReturn operationStateOpt props ->
-            console.log "getting compose result"
             let composeCapture index subStateUpdater = 
               let stateUpdater existingStateOpt = 
                 match existingStateOpt with

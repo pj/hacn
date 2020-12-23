@@ -9,6 +9,7 @@ open Fable.Mocha
 open Browser.Types
 open Hacn.Operations
 open Hacn.Render
+open Browser.Dom
 
 type TestProps = { Message: string }
 
@@ -186,7 +187,7 @@ let tests =
       testCase "any" <| any
       testCase "wait single" <| waitSingle
       testCase "wait multiple" <| waitMultiple
-      // testCase "state" <| state
+      testCase "state" <| state
     ]
   )
 

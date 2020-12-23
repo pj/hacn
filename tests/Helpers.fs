@@ -7,6 +7,7 @@ open Feliz
 open Hacn.Types
 open Fable.Mocha
 open Browser.Types
+open Browser.Dom
 
 let testOperationWithTrigger<'result> () =
   let mutable internalRerender = None
@@ -17,7 +18,7 @@ let testOperationWithTrigger<'result> () =
       callCount := !callCount + 1
       let effectFunc rerender =
         internalRerender <- Some(rerender)
-        Some(fun _ -> Keep)
+        Some(fun _ -> Erase)
       match operationState with
       | None -> 
         PerformWait(
