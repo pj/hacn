@@ -23,13 +23,9 @@ let combineTests =
         react {
           let! props = Props
           if props.ShowBlocker then
-            do! Render Html.div [
-              prop.testId "test"
-              prop.captureClick ()
-            ]
             let! x = operation
             do! Render Html.div [
-              prop.testId "test2"
+              prop.testId "test"
               prop.captureClick ()
             ]
 
@@ -39,6 +35,7 @@ let combineTests =
           ]
         }
       let result = RTL.render(App {ShowBlocker = true})
+      rerenderTrigger "asdf"
       let element = result.getByTestId "test"
       RTL.fireEvent.click(element)
       let element = result.getByTestId "clicked"
