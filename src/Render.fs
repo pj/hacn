@@ -12,40 +12,45 @@ open Fable.Core.JsInterop
 open Hacn.Core
 open Browser.Types
 
+type CaptureEvent () = 
+  member val Capture = None with get, set
+  member this.CaptureValue value = 
+    match this.Capture with
+    | None -> failwith "Capture must be set"
+    | Some(captureFunc) -> captureFunc (fun _ -> (Replace(value :> obj)))
+
+let mutable captureObjects: CaptureEvent array = [||]
+
 type prop with
-  static member withCurrentCapture f = 
-    match implicitCapture with 
-    | Some(capture) -> f (fun v -> capture (fun _ -> Replace(v :> obj)))
-    | None -> failwith "No current capture"
+  static member CreateCaptureObject = 
+    let captureObj = CaptureEvent()
+    captureObjects <- FSharp.Collections.Array.append captureObjects [|captureObj|]
+    captureObj
 
   // Shortcut for simply returning a value from a click event
   static member inline captureClick value = 
-    prop.withCurrentCapture (fun capture -> 
-      prop.onClick (fun event -> capture value)
-    )
+    let captureObj = prop.CreateCaptureObject
+    prop.onClick (fun event -> captureObj.CaptureValue value)
 
   static member inline captureClickEvent (func : MouseEvent -> 'a) = 
-    prop.withCurrentCapture (fun capture -> 
-      prop.onClick (fun event -> capture (func event))
-    )
+    let captureObj = prop.CreateCaptureObject
+    prop.onClick (fun event -> captureObj.CaptureValue (func event))
 
   static member inline captureCheckChange = 
-    prop.withCurrentCapture prop.onCheckedChange
+    let captureObj = prop.CreateCaptureObject
+    prop.onCheckedChange (fun (value: bool) -> captureObj.CaptureValue value)
 
   static member inline captureValueChange = 
-    prop.withCurrentCapture (fun capture ->
-      prop.onChange (fun (value: string) -> capture value)
-    )
+    let captureObj = prop.CreateCaptureObject
+    prop.onChange (fun (value: string) -> captureObj.CaptureValue value)
 
   static member inline captureChange (func : Event -> 'a)= 
-    prop.withCurrentCapture (fun capture ->
-      prop.onChange (fun (value: Event) -> capture (func value))
-    )
+    let captureObj = prop.CreateCaptureObject
+    prop.onChange (fun (value: Event) -> captureObj.CaptureValue (func value))
 
   static member inline captureKeyDown = 
-    prop.withCurrentCapture (fun capture ->
-      prop.onKeyDown (fun keyEvent -> capture (keyEvent.key))
-    )
+    let captureObj = prop.CreateCaptureObject
+    prop.onKeyDown (fun keyEvent -> captureObj.CaptureValue (keyEvent.key))
 
 // let Render (element: IReactProperty list -> ReactElement) (props: IReactProperty list) =
 //   Perform({ 
@@ -61,12 +66,18 @@ type prop with
 //       )
 //   })
 
+let bindCapture captureResult = 
+  for captureObj in captureObjects do
+    captureObj.Capture <- Some(captureResult)
+  captureObjects <- [||]
+
 let Render (element: IReactProperty list -> ReactElement) (props: IReactProperty list) =
   Perform({ 
     PreProcess = fun _ -> None;
-    GetResult = fun _ operationState -> 
+    GetResult = fun captureResult operationState -> 
       let eraseCapturedResult _ =
         Some(fun _ -> Erase)
+      bindCapture captureResult
       match operationState with
       | Some(result) -> 
         let castReturn: 'returnType = unbox result
@@ -94,6 +105,7 @@ let RenderContinue element (props: IReactProperty list) =
   Perform({ 
     PreProcess = fun _ -> None;
     GetResult = fun captureResult operationState -> 
+      bindCapture captureResult
       let renderedElement = element props
       PerformContinue(
         {
@@ -114,6 +126,7 @@ let RenderCapture<'returnType> captureElement =
         captureResult (fun _ -> Replace(v))
       let eraseCapturedResult _ =
         Some(fun _ -> Erase)
+      bindCapture captureResult
       match operationState with
       | Some(result) -> 
         let castReturn: 'returnType = unbox result

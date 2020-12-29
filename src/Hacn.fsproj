@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFramework>net5.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
     <!-- <Content Include="*.fsproj; *.fs; *.js" PackagePath="fable\" /> -->
@@ -10,6 +10,7 @@
     <Compile Include="Core.fs" />
     <Compile Include="Memo.fs" />
     <Compile Include="Render.fs" />
+
     <None Include="paket.references" />
     <None Include="paket.template" />
     <None Include="propsCompare.js" PackagePath="fable\" />

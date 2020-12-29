@@ -35,10 +35,6 @@ type RefState<'props when 'props: equality> =
     ComposeReturn: obj option
   }
 
-// reference to capture function so that rendered elements can implicitly return
-// captured events.
-let mutable implicitCapture = None
-
 type CombineState<'props when 'props: equality> = {
   FirstState: obj option
   SecondState: obj option
@@ -79,7 +75,6 @@ let runDisposers operationIndex (operations: OperationElement<'props> array) =
 
 let getFirstOperation delayOperation resultCapture componentState =
   if componentState.OperationIndex = -1 then
-    implicitCapture <- Some(resultCapture 0)
     let firstOperation = 
       match delayOperation with
       | Delay(f) -> f ()
@@ -258,7 +253,6 @@ let execute resultCapture componentState props =
         updateElementAndEffects operationData
         handleNextOperation nextOperation
 
-    implicitCapture <- Some(resultCapture (currentOperation.Index + 1))
     match currentOperation.Operation with
     | ControlProps({Execute = execute}) ->
       let nextOperation = execute props
@@ -361,7 +355,6 @@ let initialExecutionState composeCapture operationStateOpt firstOperation: RefSt
   match operationStateOpt with
   | Some(operationState) -> unbox operationState
   | None -> 
-    implicitCapture <- Some(composeCapture 0)
     {
       OperationIndex = 0 
       Operations = [|{
