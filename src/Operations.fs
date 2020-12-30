@@ -72,12 +72,8 @@ let State<'state> (initialState: 'state) =
         Perform({
           PreProcess = fun _ -> None;
           GetResult = fun _ _ -> 
-            let stateSetEffect rerender =
-              let updateState _ =
-                captureResult (fun _ -> (Replace({Updated = true; ComponentState = newState} :> obj)))
-                // Replace({Updated = true; ComponentState = newState} :> obj)
-                Keep
-              rerender updateState
+            let stateSetEffect () =
+              captureResult (fun _ -> (Replace({Updated = true; ComponentState = newState} :> obj)))
               None
             PerformWait(
               {
@@ -153,40 +149,17 @@ let createCombinedEffect eff1Opt eff2Opt =
   match eff1Opt, eff2Opt with
   | None, None -> None
   | eff1Opt, eff2Opt ->
-    let combinedEffect rerender =
-      let indexedRerender stateLength index stateUpdater = 
-        let indexedStateUpdater underlyingState =
-          let currentState: (obj option) array = 
-            match underlyingState with 
-            | None -> FSharp.Collections.Array.create stateLength None
-            | Some(x) -> unbox x
-          let updatedState = stateUpdater (currentState.[index])
-          match updatedState with
-          | Replace(state) ->
-            FSharp.Collections.Array.set
-              currentState
-              index
-              (Some(state))
-          | Erase -> 
-            FSharp.Collections.Array.set
-              currentState
-              index
-              None
-          | Keep -> ()
-
-          Replace(currentState :> obj)
-        rerender indexedStateUpdater
-
+    let combinedEffect () =
       let disposeOpt1 = 
         match eff1Opt with
           | Some(eff1) ->
-            eff1 (indexedRerender 2 0)
+            eff1 ()
           | _ -> None
       
       let disposeOpt2 =  
         match eff2Opt with
           | Some(eff2) ->
-            eff2 (indexedRerender 2 1)
+            eff2 ()
           | _ -> None
 
       createCombinedDispose disposeOpt1 disposeOpt2
@@ -198,6 +171,29 @@ let getElement elementOpt1 elementOpt2 =
   | Some(element1), None -> Some(element1)
   | None, Some(element2) -> Some(element2)
   | None, None -> None
+      
+let indexedCapture capture index stateUpdater = 
+  let indexUpdater underlyingState = 
+    let castUnderlyingState: (obj option) array = 
+      match underlyingState with
+      | Some(x) -> unbox x
+      | None -> [|None; None|]
+    let updatedState = stateUpdater castUnderlyingState.[index]
+    match updatedState with
+    | Replace(state) ->
+      FSharp.Collections.Array.set
+        castUnderlyingState
+        index
+        (Some state)
+      Replace (castUnderlyingState)
+    | Erase -> 
+      FSharp.Collections.Array.set
+        castUnderlyingState
+        index
+        None
+      Replace (castUnderlyingState)
+    | Keep -> Keep
+  capture indexUpdater
 
 let Wait2 op1 op2 = 
   Perform({ 
@@ -211,13 +207,13 @@ let Wait2 op1 op2 =
       let opResult1 = 
         match op1 with
         | Perform(pd1) -> 
-          pd1.GetResult capture opState1
+          pd1.GetResult (indexedCapture capture 0) opState1
         | _ -> failwith "Can only work with Perform operations"
       let opState2 = underlyingStateCast.[1]
       let opResult2 = 
         match op2 with
         | Perform(pd2) -> 
-          pd2.GetResult capture opState2
+          pd2.GetResult (indexedCapture capture 1) opState2
         | _ -> failwith "Can only work with Perform operations"
       
       match opResult1, opResult2 with
@@ -279,13 +275,13 @@ let WaitAny2 op1 op2 =
       let opResult1 = 
         match op1 with
         | Perform(pd1) -> 
-          pd1.GetResult capture opState1
+          pd1.GetResult (indexedCapture capture 0) opState1
         | _ -> failwith "Can only work with Perform operations"
       let opState2 = underlyingStateCast.[1]
       let opResult2 = 
         match op2 with
         | Perform(pd2) -> 
-          pd2.GetResult capture opState2
+          pd2.GetResult (indexedCapture capture 1) opState2
         | _ -> failwith "Can only work with Perform operations"
       
       match opResult1, opResult2 with
@@ -349,7 +345,7 @@ let NextAny = End
 let Timeout time = 
   Perform({ 
     PreProcess = fun _ -> None;
-    GetResult = fun _ operationState -> 
+    GetResult = fun captureResult operationState -> 
       match operationState with
       | Some(_) -> 
         PerformContinue(
@@ -362,11 +358,11 @@ let Timeout time =
           ()
         )
       | None -> 
-        let timeoutEffect rerender =
+        let timeoutEffect () =
           let timeoutCallback () =
             let updateState _ = 
               Replace(() :> obj)
-            rerender updateState
+            captureResult updateState
           let timeoutID = Fable.Core.JS.setTimeout timeoutCallback time
 
           Some(fun _ -> 
@@ -387,7 +383,7 @@ let Timeout time =
 let Interval interval = 
   Perform({ 
     PreProcess = fun _ -> None;
-    GetResult = fun _ operationState -> 
+    GetResult = fun captureResult operationState -> 
       match operationState with
       | Some(_) -> 
         PerformContinue(
@@ -400,11 +396,11 @@ let Interval interval =
           ()
         )
       | None -> 
-        let timeoutEffect rerender =
+        let timeoutEffect () =
           let timeoutCallback () =
             let updateState _ = 
               Replace(() :> obj)
-            rerender updateState
+            captureResult updateState
           let timeoutID = Fable.Core.JS.setInterval timeoutCallback interval
 
           Some(fun _ -> 

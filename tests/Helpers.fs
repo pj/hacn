@@ -14,10 +14,10 @@ let testOperationWithTrigger<'result> () =
   let callCount = ref 0
   let operation = Perform({
     PreProcess = fun _ -> None
-    GetResult = fun _ operationState ->
+    GetResult = fun capture operationState ->
       callCount := !callCount + 1
-      let effectFunc rerender =
-        internalRerender <- Some(rerender)
+      let effectFunc () =
+        internalRerender <- Some(capture)
         Some(fun _ -> Erase)
       match operationState with
       | None -> 

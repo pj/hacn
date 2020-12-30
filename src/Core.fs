@@ -311,13 +311,7 @@ let render firstOperation props =
       rerender ()
 
   let callEffect index (effect: Effect) =
-    let wrapUpdateState index stateUpdater = 
-      if index <= componentStateRef.current.OperationIndex then
-        updateOperationsWith index componentStateRef.current.Operations stateUpdater
-        componentStateRef.current <- {componentStateRef.current with OperationIndex = index}
-        runDisposers componentStateRef.current.OperationIndex componentStateRef.current.Operations
-        rerender ()
-    let disposer = effect (wrapUpdateState index)
+    let disposer = effect ()
     updateDisposer index componentStateRef.current.Operations disposer
 
   componentStateRef.current <- 
@@ -383,28 +377,9 @@ let executionCapture captureReturn index subStateUpdater =
     | None -> failwith "should not happen"
   captureReturn stateUpdater
 
-let wrapExecutionEffects composeState effects rerender =
+let wrapExecutionEffects composeState effects () =
   let callEffect (index, effect) = 
-    let underlyingRerender underlyingUpdater = 
-      let composeUpdater existingStateOpt =
-        match existingStateOpt with
-        | Some(existingState) ->
-          let castExistingState = unbox existingState
-          if index <= castExistingState.OperationIndex then
-            updateOperationsWith 
-              index 
-              castExistingState.Operations 
-              underlyingUpdater
-            runDisposers 
-              castExistingState.OperationIndex 
-              castExistingState.Operations
-
-            Replace (castExistingState :> obj)
-          else 
-            Keep
-        | None -> failwith "should not happen"
-      rerender composeUpdater
-    let dispose = effect underlyingRerender
+    let dispose = effect ()
     updateDisposer index composeState.Operations dispose
     (index, dispose)
 
@@ -459,35 +434,16 @@ let combine op1 op2 =
           combineCapture captureUpdater
 
         let createCombineEffect combineState firstEffect secondEffect = 
-          let combineEffect rerender =
-            let combineRerender stateGetter stateSetter underlyingUpdater =
-              let combineUpdater combineStateOpt = 
-                let combineState = 
-                  match combineStateOpt with
-                  | Some(combineState) -> unbox combineState
-                  | None -> failwith "Should not happen"
-                
-                let updatedState = underlyingUpdater (stateGetter combineState)
-                match updatedState with
-                | Erase -> Replace(stateSetter combineState None)
-                | Keep -> Keep
-                | Replace(s) -> Replace(stateSetter combineState (Some s))
-
-              rerender combineUpdater
-
+          let combineEffect () =
             let firstDisposer = 
               match firstEffect with
               | Some(effect) ->
-                effect
-                  (combineRerender (fun x -> x.FirstState) 
-                    (fun x v -> {x with FirstState = v}))
+                effect ()
               | None -> None
             let secondDisposer = 
               match secondEffect with
               | Some(effect) ->
-                effect 
-                  (combineRerender (fun x -> x.SecondState ) 
-                    (fun x v -> {x with SecondState = v}))
+                effect ()
               | None -> None
 
             let combineDisposer combineStateOpt = 

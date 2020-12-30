@@ -20,36 +20,37 @@ let Memo<'returnType> wrappedOperation (changed: (obj option -> bool) option) =
   Perform({ 
     PreProcess = fun _ -> None;
     GetResult = fun capture operationState -> 
-      let wrapUnderlyingEffect underlyingEffectOpt rerender =
-        let wrapRerender stateUpdater =
-          rerender (fun rerenderState ->
-            let castUnderlyingState: MemoState<'returnType> = unbox rerenderState
-            let underlyingState = stateUpdater castUnderlyingState.UnderlyingState
-            match underlyingState with
-            | Replace(state) ->
-              Replace ({
-                castUnderlyingState with 
-                  UnderlyingState = Some(state); Status = Rerendered
-              } :> obj)
-            | Erase -> 
-              Replace ({
-                castUnderlyingState with 
-                  UnderlyingState = None; Status = Rerendered
-              } :> obj)
-            | Keep -> Keep
-          ) 
-        
+      let wrapUnderlyingEffect underlyingEffectOpt () =
         match underlyingEffectOpt with
         | Some(underlyingEffect) ->
-          underlyingEffect wrapRerender |> ignore
+          underlyingEffect () |> ignore
           None
         | None -> 
           None
       
+      let underlyingCapture stateUpdater =
+        let memoUpdater underlyingState =
+          let castUnderlyingState: MemoState<'returnType> = unbox underlyingState
+          let updatedState = stateUpdater castUnderlyingState.UnderlyingState
+          match updatedState with
+          | Replace(state) ->
+            Replace ({
+              castUnderlyingState with 
+                UnderlyingState = Some(state); Status = Rerendered
+            } :> obj)
+          | Erase -> 
+            Replace ({
+              castUnderlyingState with 
+                UnderlyingState = None; Status = Rerendered
+            } :> obj)
+          | Keep -> Keep
+
+        capture memoUpdater
+      
       let runUnderlying underlyingOperationState = 
         match wrappedOperation with
         | Perform({GetResult = getResult}) ->
-          let response = getResult capture underlyingOperationState
+          let response = getResult underlyingCapture underlyingOperationState
           match response with 
           | PerformContinue(operationData, returnValue) -> 
             PerformContinue(

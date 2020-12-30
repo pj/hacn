@@ -11,9 +11,8 @@ type UpdateState =
 
 type StateUpdater = (obj option -> UpdateState)
 
-type ReRender = StateUpdater -> unit
 type Dispose = StateUpdater option
-type Effect = ReRender -> Dispose
+type Effect = unit -> Dispose
 
 type CaptureReturn = (StateUpdater -> unit)
 
