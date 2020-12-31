@@ -298,10 +298,12 @@ let Timeout time =
   - [x] Fix implicit capture bug where render fails if Render is first in combine.
   - [ ] Implement Preprocess for combine
   - [ ] More tests for combine, including compose
-- [ ] Implement error handling to allow try/catch
+- [x] Implement error handling to allow try/catch
   - [ ] Handle errors within Wait and WaitAny
   - [ ] Preprocess for error handling
-- [ ] Allow returning error as value.
+  - [ ] More tests especially with compose and combine.
+  - [ ] Error handling in dispose
+- [ ] Allow returning error as value (rather than try/with)
 - [ ] Implement operations like data fetching.
 - [ ] Implement operations that use type providers for things like graphql queries.
 - [ ] See if operation state can be made typesafe.
