@@ -23,7 +23,6 @@ let compositionTests =
         react {
           let! props = Props
           do! clickBlocker ()
-          console.log "After click blocker"
           do! Render Html.div [
             prop.testId "clicked"
             prop.text "Element Clicked!"

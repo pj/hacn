@@ -43,7 +43,7 @@ let Memo<'returnType> wrappedOperation (changed: (obj option -> bool) option) =
               castUnderlyingState with 
                 UnderlyingState = None; Status = Rerendered
             } :> obj)
-          | Keep -> Keep
+          | keepOrError -> keepOrError
 
         capture memoUpdater
       

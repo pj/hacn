@@ -39,8 +39,10 @@ let combineTests =
           ]
         }
       let result = RTL.render(App {ShowBlocker = true})
+      result.debug ()
       let element = result.getByTestId "test"
       RTL.fireEvent.click(element)
+      result.debug ()
       rerenderTrigger "asdf"
       let element = result.getByTestId "test"
       RTL.fireEvent.click(element)

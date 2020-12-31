@@ -105,6 +105,7 @@ let createCombinedDispose disposeOpt1 disposeOpt2 =
       match underlyingState with 
       | None -> FSharp.Collections.Array.create 2 None
       | Some(x) -> unbox x
+    // TODO: Fix error handling and wait
     match disposeOpt1 with 
     | Some(dispose) -> 
       let disposeResult = dispose currentState.[0]
@@ -192,7 +193,7 @@ let indexedCapture capture index stateUpdater =
         index
         None
       Replace (castUnderlyingState)
-    | Keep -> Keep
+    | keepOrException -> keepOrException
   capture indexUpdater
 
 let Wait2 op1 op2 = 

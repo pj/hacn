@@ -295,15 +295,18 @@ let Timeout time =
   - [ ] More tests for composition. 
   - [ ] Implement return for composition. 
 - [x] Implement Combine operation in builder correctly, so that conditionals work properly.
-  - [ ] Fix implicit capture bug where render fails if Render is first in combine.
+  - [x] Fix implicit capture bug where render fails if Render is first in combine.
   - [ ] Implement Preprocess for combine
   - [ ] More tests for combine, including compose
-- [ ] Implement error handling to allow try/catch and to allow returning error as value.
+- [ ] Implement error handling to allow try/catch
+  - [ ] Handle errors within Wait and WaitAny
+  - [ ] Preprocess for error handling
+- [ ] Allow returning error as value.
 - [ ] Implement operations like data fetching.
 - [ ] Implement operations that use type providers for things like graphql queries.
 - [ ] See if operation state can be made typesafe.
-- [ ] Create compiler that takes sequence and builds a hooks based element out of it.
 - [ ] Fix type of `Operation` so that it doesn't include separate Perform/Control types.
+- [ ] Create compiler that takes sequence and builds a hooks based element out of it.
 
 ## Authors
 

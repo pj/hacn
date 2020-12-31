@@ -4,10 +4,19 @@ module Hacn.Types
 open Fable.React
 open System
 
+type [<AllowNullLiteral>] InfoComponentObject =
+  abstract componentStack: string with get
+
+type ExceptionDetails = {
+  Exception: exn
+  InfoComponent: InfoComponentObject option
+}
+
 type UpdateState =
 | Keep
 | Erase
 | Replace of obj
+| SetException of ExceptionDetails
 
 type StateUpdater = (obj option -> UpdateState)
 
@@ -18,7 +27,10 @@ type CaptureReturn = (StateUpdater -> unit)
 
 type OperationData =
   {
-    Element: ReactElement option
+    // To capture render errors we need the captureFunc used for the rendered 
+    // element. This makes it easy to ensure that we can update the error state
+    // of the exact rendered element.
+    Element: (ReactElement * CaptureReturn) option
     Effect:  Effect option 
     LayoutEffect: Effect option
     // Useful for memoize/state control operations, where we don't want to 
@@ -45,8 +57,13 @@ and ComposeSideEffects<'props when 'props: equality> =
   {
     Effects: (int * Effect) list
     LayoutEffects: (int * Effect) list
-    Element: ReactElement option
+    Element: (ReactElement * CaptureReturn) option
     OperationState: (obj option) option
+  }
+and ExceptionData<'props when 'props: equality> =
+  { 
+    // PreProcess: obj option -> obj option;
+    GetResult: CaptureReturn -> obj option -> 'props -> ControlResult<'props>;
   }
 // and ComposeResult<'props when 'props: equality> =
 //   | ComposeWait of ComposeSideEffects<'props>
@@ -78,4 +95,7 @@ and Operation<'props, 'returnType when 'props: equality> =
 
   // Delay
   | Delay of (unit -> Operation<'props, unit>)
+
+  // Exception
+  | TryWith of ExceptionData<'props>
   | End

@@ -16,12 +16,14 @@ type OperationElement<'props when 'props: equality> =
     Index: int;
 
     Disposer: Dispose;
+
+    Exception: ExceptionDetails option
   }
 
 type RefState<'props when 'props: equality> =
   {
     // Last element rendered.
-    Element: ReactElement option
+    Element: (ReactElement * CaptureReturn) option
 
     // list of current operations.
     Operations: OperationElement<'props> array
@@ -40,6 +42,30 @@ type CombineState<'props when 'props: equality> = {
   SecondState: obj option
 }
 
+type ErrorBoundaryProps =
+  { 
+    Inner : ReactElement
+    OnError : CaptureReturn
+  }
+
+type ErrorBoundary(props) =
+  inherit Component<ErrorBoundaryProps, unit>(props)
+
+  override x.componentDidCatch(error, info) =
+    let info = info :?> InfoComponentObject
+    props.OnError (fun _ -> SetException({Exception = error; InfoComponent = Some(info)}))
+
+  override x.render() =
+    x.props.Inner
+
+let hasException operations =
+  FSharp.Collections.Array.tryFind (fun x -> x.Exception.IsSome) operations
+
+let operationsEnded refState =
+  match refState.Operations.[refState.OperationIndex].Operation with
+  | End -> true
+  | _ -> false
+
 let updateOperationsWith index (operations: OperationElement<'props> array) stateUpdater = 
   let op = operations.[index]
   let updatedState = stateUpdater op.State
@@ -55,6 +81,11 @@ let updateOperationsWith index (operations: OperationElement<'props> array) stat
       operations
       index
       ({op with State = Some(newState)})
+  | SetException(exceptionDetails) ->
+    FSharp.Collections.Array.set
+      operations
+      index
+      ({op with Exception = Some(exceptionDetails)})
 
 let updateDisposer index (operations: OperationElement<'props> array) disposer = 
   let op = operations.[index]
@@ -64,7 +95,6 @@ let updateDisposer index (operations: OperationElement<'props> array) disposer =
     index
     updatedOp
 
-
 let runDisposers operationIndex (operations: OperationElement<'props> array) =
   for i in (operationIndex+1) .. (operations.Length-1) do
     let op = operations.[i]
@@ -73,7 +103,7 @@ let runDisposers operationIndex (operations: OperationElement<'props> array) =
       updateOperationsWith i operations dispose
     | _ -> ()
 
-let getFirstOperation delayOperation resultCapture componentState =
+let getFirstOperation delayOperation componentState =
   if componentState.OperationIndex = -1 then
     let firstOperation = 
       match delayOperation with
@@ -82,10 +112,40 @@ let getFirstOperation delayOperation resultCapture componentState =
     {
       componentState with 
         OperationIndex = 0
-        Operations = [|{State = None; Operation = firstOperation; Index = 0; Disposer = None}|]
+        Operations = [|{
+          State = None
+          Operation = firstOperation
+          Index = 0
+          Disposer = None
+          Exception = None
+        }|]
     }
   else
     componentState
+  
+let initialExecutionState operationStateOpt firstOperation: RefState<'props> = 
+  match operationStateOpt with
+  | Some(operationState) -> unbox operationState
+  | None -> 
+    {
+      OperationIndex = 0 
+      Operations = [|{
+        State = None
+        Operation = (firstOperation ())
+        Index = 0
+        Disposer = None
+        Exception = None
+      }|]
+      Element = None
+      PrevProps = None
+      ComposeReturn = None
+    }
+
+let throwIfException operations =
+  for operation in operations do
+    match operation.Exception with
+    | Some(details) -> raise details.Exception
+    | None -> ()
 
 // Preprocess operations e.g. props, context, refs
 let preprocessOperations refState props =
@@ -103,7 +163,7 @@ let preprocessOperations refState props =
               FSharp.Collections.Array.set 
                 nextState.Operations 
                 index 
-                {State = Some(newOpState); Operation = op; Index = index; Disposer = None}
+                {State = Some(newOpState); Operation = op; Index = index; Disposer = None; Exception = None}
               if index < nextIndex then
                 nextState <- {nextState with OperationIndex = index}
                 nextIndex <- index
@@ -117,6 +177,9 @@ let preprocessOperations refState props =
             if changed refState.PrevProps props && index < nextIndex then
               nextState <- {nextState with OperationIndex = index}
               nextIndex <- index
+          | TryWith(_) -> 
+            // TODO: preprocess for TryWith
+            ()
           | End -> ()
           | _ -> failwith (sprintf "Unknown op %A" op)
 
@@ -131,6 +194,7 @@ let execute resultCapture componentState props =
   let mutable nextLayoutEffects = []
   let mutable nextProps = componentState.PrevProps
   let mutable composeReturn = None
+  let mutable inTryWith = false
 
   while not stop do
     let currentOperation = nextOperations.[currentIndex]
@@ -188,10 +252,11 @@ let execute resultCapture componentState props =
               nextOperations 
               [|
                 {
-                  State = None; 
-                  Operation = End; 
-                  Index = currentIndex + 1;
-                  Disposer = None;
+                  State = None
+                  Operation = End
+                  Index = currentIndex + 1
+                  Disposer = None
+                  Exception = None
                 }
               |]
         currentIndex <- currentIndex + 1
@@ -210,10 +275,11 @@ let execute resultCapture componentState props =
               nextOperations 
               [|
                 {
-                  State = preProcessState; 
-                  Operation = Control(nextOpData); 
-                  Index = currentIndex + 1;
-                  Disposer = None;
+                  State = preProcessState
+                  Operation = Control(nextOpData)
+                  Index = currentIndex + 1
+                  Disposer = None
+                  Exception = None
                 }
               |]
         currentIndex <- currentIndex + 1
@@ -231,10 +297,11 @@ let execute resultCapture componentState props =
               nextOperations 
               [|
                 {
-                  State = preProcessState; 
-                  Operation = Compose(nextOpData); 
-                  Index = currentIndex + 1;
-                  Disposer = None;
+                  State = preProcessState
+                  Operation = Compose(nextOpData)
+                  Index = currentIndex + 1
+                  Disposer = None
+                  Exception = None
                 }
               |]
         currentIndex <- currentIndex + 1
@@ -255,18 +322,27 @@ let execute resultCapture componentState props =
 
     match currentOperation.Operation with
     | ControlProps({Execute = execute}) ->
+      inTryWith <- false
       let nextOperation = execute props
       nextProps <- Some(props)
       handleNextOperation nextOperation
     | Control({GetResult = getResult}) ->
+      inTryWith <- false
       let capture = resultCapture currentOperation.Index 
       let invokeResult = getResult capture currentOperation.State props 
       handleInvokeResult invokeResult
     | Compose({GetResult = getResult}) ->
+      inTryWith <- false
+      let capture = resultCapture currentOperation.Index 
+      let invokeResult = getResult capture currentOperation.State props
+      handleInvokeResult invokeResult
+    | TryWith({GetResult = getResult}) ->
+      inTryWith <- true
       let capture = resultCapture currentOperation.Index 
       let invokeResult = getResult capture currentOperation.State props
       handleInvokeResult invokeResult
     | End -> 
+      inTryWith <- true
       stop <- true
     | _ -> failwith (sprintf "Unknown op %A" currentOperation)
   
@@ -279,7 +355,8 @@ let execute resultCapture componentState props =
       ComposeReturn = composeReturn
     },
     nextEffects,
-    nextLayoutEffects
+    nextLayoutEffects,
+    inTryWith
   )
 
 let render firstOperation props = 
@@ -301,7 +378,6 @@ let render firstOperation props =
   let captureResult index stateUpdater = 
     // Ignore captures that occur when the operation index is less than the 
     // capture, since we might be rerendering something different.
-    // console.log (sprintf "capturing at %d %A current operation index %d" index newOpState componentStateRef.current.OperationIndex)
     if index <= componentStateRef.current.OperationIndex then
       updateOperationsWith index componentStateRef.current.Operations stateUpdater
       componentStateRef.current <- {componentStateRef.current with OperationIndex = index}
@@ -315,12 +391,14 @@ let render firstOperation props =
     updateDisposer index componentStateRef.current.Operations disposer
 
   componentStateRef.current <- 
-    getFirstOperation firstOperation captureResult componentStateRef.current
+    getFirstOperation firstOperation componentStateRef.current
+
+  throwIfException componentStateRef.current.Operations
 
   componentStateRef.current <- preprocessOperations componentStateRef.current props
   runDisposers componentStateRef.current.OperationIndex componentStateRef.current.Operations
 
-  let nextState, nextEffects, nextLayoutEffects = 
+  let nextState, nextEffects, nextLayoutEffects, inTryWith = 
     execute captureResult componentStateRef.current props
 
   componentStateRef.current <- nextState
@@ -338,29 +416,15 @@ let render firstOperation props =
       List.iter (fun (index, eff) -> callEffect index eff) nextLayoutEffects
       ()
     )
-
+  
   // Render current element
   match componentStateRef.current.Element with
-    | Some(element) -> 
-      element
+    | Some((element, capture)) -> 
+      if inTryWith then
+        ofType<ErrorBoundary,_,_> {Inner = element; OnError = capture} []
+      else 
+        element
     | None -> null
-
-let initialExecutionState composeCapture operationStateOpt firstOperation: RefState<'props> = 
-  match operationStateOpt with
-  | Some(operationState) -> unbox operationState
-  | None -> 
-    {
-      OperationIndex = 0 
-      Operations = [|{
-        State = None
-        Operation = (firstOperation ())
-        Index = 0
-        Disposer = None
-      }|]
-      Element = None
-      PrevProps = None
-      ComposeReturn = None
-    }
 
 let executionCapture captureReturn index subStateUpdater = 
   let stateUpdater existingStateOpt = 
@@ -402,6 +466,60 @@ let wrapExecutionEffects composeState effects () =
     | None -> failwith "should not happen"
   Some(composeDisposer)
 
+let createCombineCapture underlyingCapture stateGetter stateSetter underlyingStateUpdater =
+  let captureUpdater combineStateOpt =
+    let combineState = 
+      match combineStateOpt with
+      | Some(combineState) -> unbox combineState
+      | None -> failwith "Should not happen"
+  
+    let updateState = underlyingStateUpdater (stateGetter combineState)
+
+    match updateState with
+    | Keep -> Keep
+    | Erase -> Replace(stateSetter combineState None)
+    | Replace(state) -> Replace(stateSetter combineState (Some state))
+    | SetException(_) -> failwith "Can't set exception in combine"
+
+  underlyingCapture captureUpdater
+
+let combineExecute underlyingCapture props op existingState stateGetter stateSetter =
+  let underlyingExecute firstOperation =
+    let capture = createCombineCapture underlyingCapture stateGetter stateSetter
+    let captureReturn = executionCapture capture
+    let executionState = initialExecutionState existingState firstOperation
+
+    let executionResult, effects, layoutEffects, _ = 
+      execute captureReturn executionState (unbox props)
+
+    let ended = operationsEnded executionResult
+
+    (
+      {
+        Effect = Some(wrapExecutionEffects executionResult effects)
+        LayoutEffect = Some(wrapExecutionEffects executionResult layoutEffects)
+        Element = executionResult.Element
+        OperationState = Replace(executionResult :> obj)
+      }, 
+      ended
+    )
+  match op with
+  | End -> 
+    (
+      {
+        Effect = None
+        LayoutEffect = None
+        Element = None
+        OperationState = Keep
+      }, 
+      true
+    )
+  | Control(controlData) ->
+    underlyingExecute (fun () -> Control(controlData))
+  | Delay(firstOperation) ->
+    underlyingExecute firstOperation
+  | _ -> failwith (sprintf "OperationType can't be used here: %A" op)
+
 let combine op1 op2 =
   match (op1, op2) with 
   | End, End -> End
@@ -416,22 +534,6 @@ let combine op1 op2 =
             FirstState = None
             SecondState = None
           }
-
-        let createCombineCapture stateGetter stateSetter underlyingStateUpdater =
-          let captureUpdater combineStateOpt =
-            let combineState = 
-              match combineStateOpt with
-              | Some(combineState) -> unbox combineState
-              | None -> failwith "Should not happen"
-          
-            let updateState = underlyingStateUpdater (stateGetter combineState)
-
-            match updateState with
-            | Keep -> Keep
-            | Erase -> Replace(stateSetter combineState None)
-            | Replace(state) -> Replace(stateSetter combineState (Some state))
-
-          combineCapture captureUpdater
 
         let createCombineEffect combineState firstEffect secondEffect = 
           let combineEffect () =
@@ -459,7 +561,8 @@ let combine op1 op2 =
                   match firstDisposeResponse with
                   | Erase -> {combineState with FirstState = None}
                   | Keep -> combineState
-                  | Replace(s) -> {combineState with FirstState = Some(s)}
+                  | Replace(s) -> {combineState with FirstState = Some(unbox s)}
+                  | SetException(_) -> failwith "Can't set exception in dispose"
                 | None -> combineState
               match secondDisposer with
               | Some(disposer) -> 
@@ -467,54 +570,17 @@ let combine op1 op2 =
                 match disposeResponse with
                 | Erase -> Replace({updatedState with SecondState = None})
                 | Keep -> Replace(updatedState)
-                | Replace(s) -> Replace({updatedState with SecondState = Some(s)})
+                | Replace(s) -> Replace({updatedState with SecondState = Some(unbox s)})
+                | SetException(_) -> failwith "Can't set exception in dispose"
               | None -> Replace(updatedState)
               
             Some(combineDisposer)
           combineEffect
         
-        let combineExecute op existingState stateGetter stateSetter =
-          let underlyingExecute firstOperation =
-            let capture = createCombineCapture stateGetter stateSetter 
-            let captureReturn = executionCapture capture
-            let executionState = initialExecutionState captureReturn existingState firstOperation
-
-            let executionResult, effects, layoutEffects = 
-              execute captureReturn executionState (unbox props)
-
-            let ended = 
-              match executionResult.Operations.[executionResult.OperationIndex].Operation with
-              | End -> true
-              | _ -> false
-
-            (
-              {
-                Effect = Some(wrapExecutionEffects executionResult effects)
-                LayoutEffect = Some(wrapExecutionEffects executionResult layoutEffects)
-                Element = executionResult.Element
-                OperationState = Replace(executionResult :> obj)
-              }, 
-              ended
-            )
-          match op with
-          | End -> 
-            (
-              {
-                Effect = None
-                LayoutEffect = None
-                Element = None
-                OperationState = Keep
-              }, 
-              true
-            )
-          | Control(controlData) ->
-            underlyingExecute (fun () -> Control(controlData))
-          | Delay(firstOperation) ->
-            underlyingExecute firstOperation
-          | _ -> failwith (sprintf "OperationType can't be used here: %A" op1)
-
         let firstOperationData, firstEnded = 
           combineExecute 
+            combineCapture
+            props
             op1
             combineState.FirstState
             (fun existingState -> existingState.FirstState)
@@ -525,10 +591,13 @@ let combine op1 op2 =
           | Erase -> {combineState with FirstState = None}
           | Keep -> combineState
           | Replace(s) -> {combineState with FirstState = Some(s)}
+          | SetException(_) -> failwith "Can't set exception in combine execute"
         
         if firstEnded then
           let secondOperationData, secondEnded = 
             combineExecute 
+              combineCapture
+              props
               op2
               combineState.SecondState
               (fun existingState -> existingState.SecondState)
@@ -539,6 +608,8 @@ let combine op1 op2 =
             | Erase -> {updatedState with SecondState = None}
             | Keep -> updatedState
             | Replace(s) -> {updatedState with SecondState = Some(s)}
+            | SetException(_) -> failwith "Can't set exception in combine execute"
+
           let element = Option.orElse firstOperationData.Element secondOperationData.Element
 
           let controlData = {
@@ -595,8 +666,8 @@ let bind<'props, 'resultType, 'x, 'y when 'props: equality and 'x: equality> (un
         GetResult = 
           fun captureReturn operationStateOpt props ->
             let composeCaptureReturn = executionCapture captureReturn
-            let composeState = initialExecutionState composeCaptureReturn operationStateOpt composeFirst
-            let executionResult, nextEffects, nextLayoutEffects = 
+            let composeState = initialExecutionState operationStateOpt composeFirst
+            let executionResult, nextEffects, nextLayoutEffects, _ = 
               execute composeCaptureReturn composeState (unbox props)
             
             let composeEffects = {
@@ -616,11 +687,93 @@ let bind<'props, 'resultType, 'x, 'y when 'props: equality and 'x: equality> (un
     )
   | _ -> failwith (sprintf "Can't bind operation %A" underlyingOperation)
 
+type ExceptionState<'props when 'props : equality> = {
+  ExecutingState: RefState<'props> option
+  ExceptionState: RefState<'props> option
+  InException: bool
+}
+
+let tryWith bodyOperation handler =
+  TryWith {
+    GetResult = 
+      fun captureResult tryWithStateOpt props -> 
+        let tryWithState = 
+          match tryWithStateOpt with
+          | Some(s) -> unbox s
+          | None -> {
+            ExecutingState = None
+            ExceptionState = None
+            InException = false
+          }
+
+        let existingError =
+          match tryWithState.ExecutingState with
+          | Some(s) -> hasException s.Operations
+          | None -> None
+
+        let handleOperation =
+          if (not tryWithState.InException) && existingError.IsSome then
+            handler existingError.Value.Exception.Value
+          else
+            End
+
+        let inException = tryWithState.InException || existingError.IsSome
+        if inException then
+          match tryWithState.ExceptionState with
+          | Some(x) -> throwIfException x.Operations
+          | None -> ()
+          let exceptionEffects, ended = 
+            combineExecute 
+              captureResult
+              props
+              handleOperation
+              tryWithState.ExceptionState
+              (fun existingState -> existingState.ExceptionState)
+              (fun existingState newValue -> {existingState with ExceptionState = (unbox newValue)})
+
+          let updatedState = 
+            match exceptionEffects.OperationState with
+            | Erase -> Replace({tryWithState with ExecutingState = None})
+            | Keep -> Keep
+            | Replace(s) -> Replace({tryWithState with ExecutingState = Some(unbox s)})
+            | SetException(_) -> failwith "Can't set exception in combine execute"
+          let x = {exceptionEffects with OperationState = updatedState}
+
+          if ended then
+            ControlNext(x, End)
+          else
+            ControlWait(x)
+        else
+          let exceptionEffects, ended = 
+            combineExecute 
+              captureResult
+              props
+              bodyOperation
+              tryWithState.ExecutingState
+              (fun existingState -> existingState.ExecutingState)
+              (fun existingState newValue -> {existingState with ExecutingState = unbox newValue})
+          
+          let updatedState = 
+            match exceptionEffects.OperationState with
+            | Erase -> Replace({tryWithState with ExecutingState = None})
+            | Keep -> Keep
+            | Replace(s) -> Replace({tryWithState with ExecutingState = Some(unbox s)})
+            | SetException(_) -> failwith "Can't set exception in combine execute"
+          let x = {exceptionEffects with OperationState = updatedState}
+
+          if ended then
+            ControlNext(x, End)
+          else
+            ControlWait(x)
+  }
+
 type ReactBuilder() = 
   member _.Bind(operation, f) = 
     bind operation f
   member _.Combine(left, right) =
     combine left right
+  member _.TryWith(expr, handler) = 
+    tryWith expr handler
   member _.Zero() = 
     End
   member _.Delay(f) = Delay f 
@@ -638,6 +791,8 @@ type HacnBuilder() =
     bind operation f
   member _.Combine(left, right) =
     combine left right
+  member _.TryWith(expr, handler) = 
+    tryWith expr handler
   member _.Zero() = 
     ComposeReturn ()
   member _.Delay(f) = f

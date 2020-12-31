@@ -17,7 +17,8 @@ type CaptureEvent () =
   member this.CaptureValue value = 
     match this.Capture with
     | None -> failwith "Capture must be set"
-    | Some(captureFunc) -> captureFunc (fun _ -> (Replace(value :> obj)))
+    | Some(captureFunc) -> 
+      captureFunc (fun _ -> (Replace(value :> obj)))
 
 let mutable captureObjects: CaptureEvent array = [||]
 
@@ -30,7 +31,8 @@ type prop with
   // Shortcut for simply returning a value from a click event
   static member inline captureClick value = 
     let captureObj = prop.CreateCaptureObject
-    prop.onClick (fun event -> captureObj.CaptureValue value)
+    prop.onClick (fun event -> 
+      captureObj.CaptureValue value)
 
   static member inline captureClickEvent (func : MouseEvent -> 'a) = 
     let captureObj = prop.CreateCaptureObject
@@ -52,20 +54,6 @@ type prop with
     let captureObj = prop.CreateCaptureObject
     prop.onKeyDown (fun keyEvent -> captureObj.CaptureValue (keyEvent.key))
 
-// let Render (element: IReactProperty list -> ReactElement) (props: IReactProperty list) =
-//   Perform({ 
-//     PreProcess = fun _ -> None;
-//     GetResult = fun _ __ -> 
-//       PerformWait(
-//         {
-//           Element = Some(element props)
-//           Effect = None;
-//           LayoutEffect = None
-//           OperationState = None
-//         }
-//       )
-//   })
-
 let bindCapture captureResult = 
   for captureObj in captureObjects do
     captureObj.Capture <- Some(captureResult)
@@ -83,7 +71,7 @@ let Render (element: IReactProperty list -> ReactElement) (props: IReactProperty
         let castReturn: 'returnType = unbox result
         PerformContinue(
           {
-            Element = Some(element props)
+            Element = Some(((element props), captureResult))
             Effect = Some(eraseCapturedResult)
             LayoutEffect = None
             OperationState = Keep
@@ -93,7 +81,7 @@ let Render (element: IReactProperty list -> ReactElement) (props: IReactProperty
       | _ ->
         PerformWait(
           {
-            Element = Some(element props)
+            Element = Some(((element props), captureResult))
             Effect = None
             LayoutEffect = None
             OperationState = Keep
@@ -106,10 +94,9 @@ let RenderContinue element (props: IReactProperty list) =
     PreProcess = fun _ -> None;
     GetResult = fun captureResult operationState -> 
       bindCapture captureResult
-      let renderedElement = element props
       PerformContinue(
         {
-          Element = Some(renderedElement)
+          Element = Some(((element props), captureResult))
           Effect = None
           LayoutEffect = None
           OperationState = Keep
@@ -132,7 +119,7 @@ let RenderCapture<'returnType> captureElement =
         let castReturn: 'returnType = unbox result
         PerformContinue(
           {
-            Element = Some(captureElement captureResultInternal)
+            Element = Some((captureElement captureResultInternal, captureResult))
             Effect = Some(eraseCapturedResult)
             LayoutEffect = None
             OperationState = Keep
@@ -142,7 +129,7 @@ let RenderCapture<'returnType> captureElement =
       | _ ->
         PerformWait(
           {
-            Element = Some(captureElement captureResultInternal)
+            Element = Some((captureElement captureResultInternal, captureResult))
             Effect = None
             LayoutEffect = None
             OperationState = Keep

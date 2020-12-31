@@ -11,6 +11,7 @@
     <Compile Include="Render.test.fs" />
     <Compile Include="Composition.test.fs" />
     <Compile Include="Combine.test.fs" />
+    <Compile Include="Exception.test.fs" />
     <!-- <Compile Include="Item.test.fs" /> -->
   </ItemGroup>
   <ItemGroup>

@@ -45,6 +45,6 @@ let testOperationWithTrigger<'result> () =
   let rerenderTrigger (value: 'result) =
     match internalRerender with
     | Some(rerender) -> rerender(fun _ -> Replace(value :> obj))
-    | None -> failwith "Should not happen"
+    | None -> failwith "internalRerender should have been set"
   
   rerenderTrigger, callCount, operation
