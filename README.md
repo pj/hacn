@@ -22,6 +22,8 @@ Hacn uses the type `Hacn.Types.Operation` to represent actions and effects that 
 
 In the same was as async/await is used to combine promises in javascript, Hacn uses F# computation expressions to sequence operations. If you're not familar with how computation expressions work it might be helpful to read a [tutorial](https://fsharpforfunandprofit.com/posts/concurrency-async-and-parallel/) on async programming in F#, since Hacn shares some of the same concepts. 
 
+Unlike async/await, control flow in a Hacn component isn't simply linear with one operation following another. Operations have state and can signal that they have changed causing all the operations after them to re-execute. Another way of thinking about this is as a kind of implicit goto.
+
 To create a component you use the `react { ... }` expression builder syntax. Hacn components can be included in regular Fable React components:
 
 ```fsharp
@@ -97,7 +99,31 @@ let Element =
   }
 ```
 
-It's also possible to capture dom events and "return" them from the `RenderCapture` operation into the sequence of events:
+It's also possible to capture dom events and "return" them from the `Render` operation into the sequence of events:
+
+```fsharp
+module Element
+
+open Hacn.Core
+open Hacn.Operations
+
+let Element = 
+  react {
+    let! newValue = Render(
+      Html.div [
+        prop.text value
+        prop.children [
+          Html.input [
+            prop.captureValueChange
+          ]
+        ]
+      ]
+    )
+    console.log newValue
+  }
+```
+
+Capture can also be performced manually using the `RenderCapture` operation.
 
 ```fsharp
 module Element
@@ -186,6 +212,85 @@ let Test =
 
 NB: the implementation of equality isn't actually used by Fable, but is required for type checking.
 
+### Alpha features
+
+The following features and operations need some additional work and testing.
+
+#### Composition
+
+The `react` expression builder returns a react component rather than an `Operation`, which means you can't easily compose sequences of operations.
+
+There is a separate `hacn` builder that allows creation of composable operations:
+
+```fsharp
+let clickBlocker () = hacn {
+  do! Render Html.div [
+    prop.text "Continue?"
+    prop.captureClick ()
+  ]
+}
+let App = 
+  react {
+    let! props = Props
+    do! clickBlocker ()
+    do! Render Html.div [
+      prop.testId "clicked"
+      prop.text "Element Clicked!"
+    ]
+  }
+```
+
+#### If/Then
+
+Conditionals can be used:
+
+```fsharp
+type CombineProps = {
+  ShowBlocker: bool
+}
+
+let App = 
+  react {
+    let! props = Props
+    if props.ShowBlocker then
+      do! Render Html.div [
+        prop.text "Continue?"
+        prop.captureClick ()
+      ]
+
+    do! Render Html.div [
+      prop.text "Done!"
+    ]
+  }
+```
+
+#### Error handling
+
+There is some support for catching errors in child components and in operations. Check the section below for how to trigger errors in operations.
+
+```fsharp
+type TestException(message:string) =
+   inherit Exception(message, null)
+
+let errorComponent = React.functionComponent (
+    fun _ -> 
+      raise (TestException "Something's wrong")
+      []
+    )
+let App = 
+  react {
+    try 
+      let! x = Props
+      do! Render errorComponent []
+    with
+    | e -> 
+      do! Render Html.div [
+        prop.testId "error"
+        prop.text e.Exception.Message
+      ]
+  }
+```
+
 ### Writing operations
 
 The interface for wrting operations is defined by the `Operation` typed union in `Hacn.Types`. The `Perform` record interface is the primary way to write operations that do things like call hooks and wrap functions like the `setTimeout` function. The `PerformProps` interface is used to create operations with custom props change detection logic.
@@ -198,10 +303,10 @@ The `Perform` type case takes a record that contains two functions, `PreProcess`
 
 ```fsharp
 type PerformData<'props, 'returnType when 'props: equality> =
-  { 
-    PreProcess: obj option -> obj option;
-    GetResult: CaptureReturn -> obj option -> PerformResult<'props, 'returnType>;
-  }
+{ 
+PreProcess: obj option -> obj option;
+GetResult: CaptureReturn -> obj option -> PerformResult<'props, 'returnType>;
+}
 ```
 
 The `PreProcess` function is mainly for operations that wrap hooks and therefore need to be run every time in the same order a Hacn component renders. The function takes the current operation state if it exists and returns an updated state if something has changed. Returning a value causes the Hacn runtime to restart the sequence of operations at that point.
@@ -210,79 +315,86 @@ As an example wrapping the `useRef` hook is defined as follows:
 
 ```fsharp
 let Ref (initialValue: 'returnType option) =
-  Perform({ 
-    PreProcess = fun operationState -> 
-      let currentRef = Hooks.useRef(initialValue)
-      let castOperationState: 'returnType option = unbox operationState
-      match castOperationState with
-      | Some(_) -> None
-      | None -> Some(currentRef :> obj)
-    GetResult = fun _ operationState -> 
-      let castOperationState: (('returnType option) IRefValue) option = unbox operationState
-      match castOperationState with
-      | Some(existingRef) -> 
-        PerformContinue(
-          {
-            Element = None
-            Effect = None
-            LayoutEffect = None
-          }, 
-          existingRef
-        )
-      | None -> failwith "should not happen"
-  })
+Perform({ 
+PreProcess = fun operationState -> 
+  let currentRef = Hooks.useRef(initialValue)
+  let castOperationState: 'returnType option = unbox operationState
+  match castOperationState with
+  | Some(_) -> None
+  | None -> Some(currentRef :> obj)
+GetResult = fun _ operationState -> 
+  let castOperationState: (('returnType option) IRefValue) option = unbox operationState
+  match castOperationState with
+  | Some(existingRef) -> 
+    PerformContinue(
+      {
+        Element = None
+        Effect = None
+        LayoutEffect = None
+      }, 
+      existingRef
+    )
+  | None -> failwith "should not happen"
+})
 ```
 
 The `GetResult` method is the main method for handling operation logic in Hacn. It has to handle a number of different scenarios for how operations are written, so it ends up being a bit complicated. 
 
-The two parameters it takes are `capture`, which is for updating the operation state from things like dom events like with `RenderCapture`. The second is the current operation state if it has been set.
+The two parameters it takes are `capture`, which is for updating the operation state from effects and dom events. The second is the current operation state if it has been set.
 
-The return type for `GetResult` is the `PerformResult` typed union, which has two cases - `PerformWait` which causes hacn to wait for an effect or capture to update the operation state and `PerformContinue` which causes hacn to return a value to the sequence of operations. 
+The `capture` parameter is a function that takes a function to update the operation state. The type of the update function is `StateUpdater` and takes the current state (if any) and returns one of the following to update the operation state:
+- Keep - keep the existing state as is.
+- Erase - set the operation state to `None`.
+- Replace - update the state to the value of replace.
+- SetException - used to set the exception on operations, so that they can be handled with try/with.
 
-Both cases include a record of type `OperationData`, which includes the `Element` field which is what the operation should render and the `Effect` and `LayoutEffect` fields for any side effects e.g. setTimeout. Both `Effect` and `LayoutEffect` work the same, with `Effect` being run in a `useEffect` hook and `LayoutEffect` being run in a `useLayoutEffect` hook. 
+The return type for `GetResult` is the `PerformResult` typed union, which has two cases - `PerformWait` which causes hacn to wait for an effect or capture to update the operation state and `PerformContinue` which causes hacn to return a value to the sequence of operations.
 
-Effects are functions that take a rerender function that can be used to update the operation state and goto to its location in the sequence of events. This causes its `GetResult` method to be called again, possibly to return the updated result with `PerformContinue`.
+Both cases include a record of type `OperationData`, which includes several fields for controlling hacn:
+- The `Element` field which is what the operation should render.
+- The `Effect` and `LayoutEffect` fields for any side effects e.g. setTimeout. Both `Effect` and `LayoutEffect` work the same, with `Effect` being run in a `useEffect` hook and `LayoutEffect` being run in a `useLayoutEffect` hook.
+- `OperationState` - immediately updates the operation state without triggering a rerender - mostly used for memoization.
 
-Effects can return a function to dispose of any resources when the sequence of operations goes to a previous operation e.g. props change and all operations forward of the `Props` operation need to be reset. Typically operations set their operation state to None in dispose, though this isn't enforced by default (yet).
+Effects are functions that can be used to update the operation state and goto to its location in the sequence of events. This causes its `GetResult` method to be called again, possibly to return the updated result with `PerformContinue`.
+
+Effects can return a function to dispose of any resources when the sequence of operations goes to a previous operation e.g. props change and all operations forward of the `Props` operation need to be reset. Typically operations set their operation state to None in dispose, though this isn't enforced by default (yet). The dispose function returns a state updater like the `capture` function passed into `GetResult`
 
 As an example here is the `Timeout` operation:
 
 ```fsharp
 let Timeout time = 
-  Perform({ 
-    PreProcess = fun _ -> None;
-    GetResult = fun _ operationState -> 
-      match operationState with
-      | Some(_) -> 
-        PerformContinue(
-          {
-            Element = None; 
-            Effect = None;
-            LayoutEffect = None
-          }, 
-          ()
-        )
-      | None -> 
-        let timeoutEffect rerender =
-          let timeoutCallback () =
-            let updateState _ = 
-              Some(() :> obj)
-            rerender updateState
-          let timeoutID = Fable.Core.JS.setTimeout timeoutCallback time
+Perform({ 
+PreProcess = fun _ -> None;
+GetResult = fun captureResult operationState -> 
+  match operationState with
+  | Some(_) -> 
+    PerformContinue(
+      {
+        Element = None; 
+        Effect = None;
+        LayoutEffect = None
+      }, 
+      ()
+    )
+  | None -> 
+    let timeoutEffect () =
+      let timeoutCallback () =
+        captureResult Replace(() :> obj)
+      let timeoutID = Fable.Core.JS.setTimeout timeoutCallback time
 
-          Some(fun _ -> 
-            Fable.Core.JS.clearTimeout timeoutID
-            None
-          )
-          
-        PerformWait(
-          {
-            Element = None
-            Effect = Some(timeoutEffect)
-            LayoutEffect = None
-          }
-        )
-  })
+      Some(fun _ -> 
+        Fable.Core.JS.clearTimeout timeoutID
+        None
+      )
+      
+    PerformWait(
+      {
+        Element = None
+        Effect = Some(timeoutEffect)
+        LayoutEffect = None
+      }
+    )
+})
 ```
 
 ## Roadmap 
@@ -291,24 +403,24 @@ let Timeout time =
 - [x] Create state control wrapper operations e.g. Once, Memo, Retry etc.
 - [x] Replace the `RenderCapture` operation with props that automatically capture, will require some kind of global state to set the rendering operation.
 - [x] Create builder that makes operations that can be composed i.e. combine multiple sequence steps into a single operation.
-  - [ ] Implement Preprocess for composition
-  - [ ] More tests for composition. 
-  - [ ] Implement return for composition. 
+- [ ] Implement Preprocess for composition
+- [ ] More tests for composition. 
+- [ ] Implement return for composition. 
 - [x] Implement Combine operation in builder correctly, so that conditionals work properly.
-  - [x] Fix implicit capture bug where render fails if Render is first in combine.
-  - [ ] Implement Preprocess for combine
-  - [ ] More tests for combine, including compose
+- [x] Fix implicit capture bug where render fails if Render is first in combine.
+- [ ] Implement Preprocess for combine
+- [ ] More tests for combine, including compose
 - [x] Implement error handling to allow try/catch
-  - [ ] Handle errors within Wait and WaitAny
-  - [ ] Preprocess for error handling
-  - [ ] More tests especially with compose and combine.
-  - [ ] Error handling in dispose
+- [ ] Handle errors within Wait and WaitAny
+- [ ] Preprocess for error handling
+- [ ] More tests especially with compose and combine.
+- [ ] Error handling in dispose
 - [ ] Allow returning error as value (rather than try/with)
 - [ ] Implement operations like data fetching.
 - [ ] Implement operations that use type providers for things like graphql queries.
 - [ ] See if operation state can be made typesafe.
 - [ ] Fix type of `Operation` so that it doesn't include separate Perform/Control types.
-- [ ] Create compiler that takes sequence and builds a hooks based element out of it.
+- [ ] Create compiler that takes a hacn component and compiles a hooks based element out of it.
 
 ## Authors
 

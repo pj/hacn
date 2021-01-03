@@ -1,3 +1,9 @@
+### 0.0.14 - Monday, January 4, 2020
+
+- Add Composition, Conditionals and Error Handling.
+- Update capture of dom events.
+- Add Memo Operation.
+
 ### 0.0.13 - Thursday, December 4, 2020
 
 Fix props so things work properly and change props return type.
