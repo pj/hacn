@@ -403,18 +403,18 @@ GetResult = fun captureResult operationState ->
 - [x] Create state control wrapper operations e.g. Once, Memo, Retry etc.
 - [x] Replace the `RenderCapture` operation with props that automatically capture, will require some kind of global state to set the rendering operation.
 - [x] Create builder that makes operations that can be composed i.e. combine multiple sequence steps into a single operation.
-- [ ] Implement Preprocess for composition
-- [ ] More tests for composition. 
-- [ ] Implement return for composition. 
+  - [ ] Implement Preprocess for composition
+  - [ ] More tests for composition. 
+  - [ ] Implement return for composition. 
 - [x] Implement Combine operation in builder correctly, so that conditionals work properly.
-- [x] Fix implicit capture bug where render fails if Render is first in combine.
-- [ ] Implement Preprocess for combine
-- [ ] More tests for combine, including compose
+  - [x] Fix implicit capture bug where render fails if Render is first in combine.
+  - [ ] Implement Preprocess for combine
+  - [ ] More tests for combine, including compose
 - [x] Implement error handling to allow try/catch
-- [ ] Handle errors within Wait and WaitAny
-- [ ] Preprocess for error handling
-- [ ] More tests especially with compose and combine.
-- [ ] Error handling in dispose
+  - [ ] Handle errors within Wait and WaitAny
+  - [ ] Preprocess for error handling
+  - [ ] More tests especially with compose and combine.
+  - [ ] Error handling in dispose
 - [ ] Allow returning error as value (rather than try/with)
 - [ ] Implement operations like data fetching.
 - [ ] Implement operations that use type providers for things like graphql queries.
