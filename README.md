@@ -405,7 +405,7 @@ GetResult = fun captureResult operationState ->
 - [x] Create builder that makes operations that can be composed i.e. combine multiple sequence steps into a single operation.
   - [ ] Implement Preprocess for composition
   - [ ] More tests for composition. 
-  - [ ] Implement return for composition. 
+  - [x] Implement return for composition. 
 - [x] Implement Combine operation in builder correctly, so that conditionals work properly.
   - [x] Fix implicit capture bug where render fails if Render is first in combine.
   - [ ] Implement Preprocess for combine

@@ -171,7 +171,7 @@ let preprocessOperations refState props =
 
         match op with
         | Control ({ PreProcess = preProcess }) -> executePreprocess preProcess
-        | Compose ({ PreProcess = preProcess }) -> executePreprocess preProcess
+        | Compose ({ PreProcess = preProcess }) -> executePreprocess (fun state -> preProcess state props)
         | ControlProps ({ Changed = changed }) ->
             if changed refState.PrevProps props
                && index < nextIndex then
@@ -293,7 +293,7 @@ let executionLoop resultCapture componentState props =
               { currentNextOp with
                   Operation = Compose(nextOpData) }
           else
-            let preProcessState = nextOpData.PreProcess(None)
+            let preProcessState = nextOpData.PreProcess None props
 
             nextOperations <-
               FSharp.Collections.Array.append
@@ -707,7 +707,12 @@ let bind<'props, 'resultType, 'x, 'y when 'props: equality and 'x: equality>
       )
   | ComposeStart (composeFirst) ->
       Compose(
-        { PreProcess = fun operationState -> None
+        { PreProcess =
+            fun operationState props ->
+              match operationState with
+              | Some (refState) -> Some((preprocessOperations (unbox refState) props) :> obj)
+              | None -> None
+
           GetResult =
             fun captureReturn operationStateOpt props ->
               let composeEffects, ended, composeReturn =
@@ -727,26 +732,7 @@ let bind<'props, 'resultType, 'x, 'y when 'props: equality and 'x: equality>
 
                 ControlNext(composeEffects, nextOperation)
               else
-                ControlWait(composeEffects)
-        // let composeCaptureReturn = executionCapture captureReturn
-        // let composeState = initialExecutionState operationStateOpt composeFirst
-        // let executionResult, nextEffects, nextLayoutEffects, _ =
-        //   execute composeCaptureReturn composeState (unbox props)
-
-        // let composeEffects = {
-        //   Effect = Some(wrapExecutionEffects composeState nextEffects)
-        //   LayoutEffect = Some(wrapExecutionEffects composeState nextLayoutEffects)
-        //   Element = executionResult.Element
-        //   OperationState = Replace(executionResult :> obj)
-        // }
-
-        // match executionResult.ComposeReturn with
-        // | Some(returnType) ->
-        //   let nextOperation = f (unbox returnType)
-        //   ControlNext(composeEffects, nextOperation)
-        // | None ->
-        //   ControlWait(composeEffects)
-        }
+                ControlWait(composeEffects) }
       )
   | _ -> failwith (sprintf "Can't bind operation %A" underlyingOperation)
 
