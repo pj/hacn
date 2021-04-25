@@ -62,7 +62,7 @@ type ErrorBoundary(props) =
 let hasException operations =
   FSharp.Collections.Array.tryFind (fun x -> x.Exception.IsSome) operations
 
-let operationsEnded refState =
+let checkStateEnded refState =
   match refState.Operations.[refState.OperationIndex]
           .Operation with
   | End -> true
@@ -188,7 +188,7 @@ let preprocessOperations refState props =
 
   nextState
 
-let execute resultCapture componentState props =
+let executionLoop resultCapture componentState props =
   let mutable currentIndex = componentState.OperationIndex
   let mutable stop = false
   let mutable renderedElement = componentState.Element
@@ -419,7 +419,7 @@ let render firstOperation props =
   runDisposers componentStateRef.current.OperationIndex componentStateRef.current.Operations
 
   let nextState, nextEffects, nextLayoutEffects, inTryWith =
-    execute captureResult componentStateRef.current props
+    executionLoop captureResult componentStateRef.current props
 
   componentStateRef.current <- nextState
 
@@ -485,7 +485,7 @@ let wrapExecutionEffects composeState effects () =
 
   Some(composeDisposer)
 
-let createCombineCapture underlyingCapture stateGetter stateSetter underlyingStateUpdater =
+let captureForState underlyingCapture stateGetter stateSetter underlyingStateUpdater =
   let captureUpdater combineStateOpt =
     let combineState =
       match combineStateOpt with
@@ -503,10 +503,11 @@ let createCombineCapture underlyingCapture stateGetter stateSetter underlyingSta
 
   underlyingCapture captureUpdater
 
-let combineExecute underlyingCapture props op existingState stateGetter stateSetter =
+// Execute state for the compose, combine, try/with constructs.
+let executeState underlyingCapture props op existingState stateGetter stateSetter =
   let underlyingExecute firstOperation =
     let capture =
-      createCombineCapture underlyingCapture stateGetter stateSetter
+      captureForState underlyingCapture stateGetter stateSetter
 
     let captureReturn = executionCapture capture
 
@@ -514,9 +515,9 @@ let combineExecute underlyingCapture props op existingState stateGetter stateSet
       initialExecutionState existingState firstOperation
 
     let executionResult, effects, layoutEffects, _ =
-      execute captureReturn executionState (unbox props)
+      executionLoop captureReturn executionState (unbox props)
 
-    let ended = operationsEnded executionResult
+    let ended = checkStateEnded executionResult
 
     ({ Effect = Some(wrapExecutionEffects executionResult effects)
        LayoutEffect = Some(wrapExecutionEffects executionResult layoutEffects)
@@ -611,7 +612,7 @@ let combine op1 op2 =
                 combineEffect
 
               let firstOperationData, firstEnded, _ =
-                combineExecute
+                executeState
                   combineCapture
                   props
                   op1
@@ -632,7 +633,7 @@ let combine op1 op2 =
 
               if firstEnded then
                 let secondOperationData, secondEnded, _ =
-                  combineExecute
+                  executeState
                     combineCapture
                     props
                     op2
@@ -710,7 +711,7 @@ let bind<'props, 'resultType, 'x, 'y when 'props: equality and 'x: equality>
           GetResult =
             fun captureReturn operationStateOpt props ->
               let composeEffects, ended, composeReturn =
-                combineExecute
+                executeState
                   captureReturn
                   props
                   (composeFirst ())
@@ -787,7 +788,7 @@ let tryWith bodyOperation handler =
             | None -> ()
 
             let exceptionEffects, ended, _ =
-              combineExecute
+              executeState
                 captureResult
                 props
                 handleOperation
@@ -822,7 +823,7 @@ let tryWith bodyOperation handler =
               ControlWait(x)
           else
             let exceptionEffects, ended, _ =
-              combineExecute
+              executeState
                 captureResult
                 props
                 bodyOperation
