@@ -543,6 +543,7 @@ let executeState underlyingCapture props op existingState stateGetter stateSette
          OperationState = Keep },
        true,
        Some(unbox value))
+  | ControlProps (data) -> underlyingExecute (fun () -> ControlProps(data))
   | _ -> failwith (sprintf "OperationType can't be used here: %A" op)
 
 let combine op1 op2 =

@@ -10,6 +10,8 @@ open Browser.Types
 open Fable.Mocha
 open Fable.Core.JS
 
+type TestProps = { message: string }
+
 let compositionTests =
   testList
     "Composition tests"
@@ -91,6 +93,34 @@ let compositionTests =
            RTL.fireEvent.click (element)
            let element = result.getByTestId "clicked"
            Expect.equal element.textContent "Hello World!" "Clicked successfully"
-           RTL.cleanup () ]
+           RTL.cleanup ()
+      testCase "Compose with props"
+      <| fun () ->
+           let propser () =
+             hacn {
+               let! x = Props
+               return x.message
+             }
+
+           let App =
+             react {
+               let! x = propser ()
+
+               do!
+                 Render
+                   Html.div
+                   [ prop.testId "test"
+                     prop.text (sprintf "%s World!" x) ]
+             }
+
+           let result = RTL.render (App { message = "Hello" })
+           let element = result.getByTestId "test"
+           Expect.equal element.textContent "Hello World!" "Message correct"
+           let element = result.getByTestId "test"
+           result.rerender (App { message = "Goodbye" })
+           Expect.equal element.textContent "Goodbye World!" "Message correct"
+           RTL.cleanup ()
+
+      ]
 
 Mocha.runTests compositionTests |> ignore
