@@ -408,16 +408,13 @@ GetResult = fun captureResult operationState ->
   - [x] Implement return for composition. 
 - [x] Implement Combine operation in builder correctly, so that conditionals work properly.
   - [x] Fix implicit capture bug where render fails if Render is first in combine.
-  - [ ] More tests for combine, including compose
 - [x] Implement error handling to allow try/catch
   - [ ] Handle errors within Wait and WaitAny
   - [ ] Preprocess for error handling
-  - [ ] More tests especially with compose and combine.
   - [ ] Error handling in dispose
-- [ ] Test dispose in combine/compose/try
+- [ ] Test combinations of combine/compose/try/with
 - [ ] Allow returning error as value (rather than try/with)
-- [ ] Implement operations like data fetching.
-- [ ] Implement operations that use type providers for things like graphql queries.
+- [ ] Graphql generation with Snowflaque 
 - [ ] See if operation state can be made typesafe.
 - [ ] Fix type of `Operation` so that it doesn't include separate Perform/Control types.
 - [ ] Create compiler that takes a hacn component and compiles a hooks based element out of it.
