@@ -400,14 +400,8 @@ GetResult = fun captureResult operationState ->
 ## Roadmap 
 
 - [ ] Fully document operations and architecture.
-- [x] Create state control wrapper operations e.g. Once, Memo, Retry etc.
-- [x] Replace the `RenderCapture` operation with props that automatically capture, will require some kind of global state to set the rendering operation.
-- [x] Create builder that makes operations that can be composed i.e. combine multiple sequence steps into a single operation.
-  - [x] Implement Preprocess for composition
-  - [x] More tests for composition. 
-  - [x] Implement return for composition. 
-- [x] Implement Combine operation in builder correctly, so that conditionals work properly.
-  - [x] Fix implicit capture bug where render fails if Render is first in combine.
+- [ ] Create website.
+- [ ] User Guide.
 - [x] Implement error handling to allow try/catch
   - [ ] Handle errors within Wait and WaitAny
   - [ ] Preprocess for error handling
