@@ -105,9 +105,9 @@ export function HomepageDetail() {
         <div className="row">
           <div className="col col--8 col--offset-2">
             <p>
-              Hacn can be thought of is a DSL for writing React components using
-              F#/Fable. It uses computation expressions to provide a unique form
-              of control flow with a number of interesting features:
+              Hacn is a DSL for writing React components using F#/Fable. It uses
+              computation expressions to provide a unique form of control flow
+              with a number of interesting features:
             </p>
             <ul>
               <li>

@@ -11,7 +11,8 @@
     "clear": "docusaurus clear",
     "serve": "docusaurus serve",
     "write-translations": "docusaurus write-translations",
-    "write-heading-ids": "docusaurus write-heading-ids"
+    "write-heading-ids": "docusaurus write-heading-ids",
+    "compile:examples": "cd examples && fable-splitter . -o ../dist/examples --commonjs -c splitter.config.js"
   },
   "dependencies": {
     "@docusaurus/core": "2.0.0-alpha.74",

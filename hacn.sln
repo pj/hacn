@@ -7,6 +7,10 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Hacn", "src\Hacn.fsproj", "
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Test", "tests\Test.fsproj", "{D99D296B-B26E-47B6-A878-ED58B635A85D}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "website", "website", "{1F43C3C1-663F-45FA-BFEC-8633A21B8A2C}"
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Examples", "website\examples\Examples.fsproj", "{62AC7919-A33D-4BD5-9249-BF4FB0CF0C01}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -44,5 +48,20 @@ Global
 		{D99D296B-B26E-47B6-A878-ED58B635A85D}.Release|x64.Build.0 = Release|Any CPU
 		{D99D296B-B26E-47B6-A878-ED58B635A85D}.Release|x86.ActiveCfg = Release|Any CPU
 		{D99D296B-B26E-47B6-A878-ED58B635A85D}.Release|x86.Build.0 = Release|Any CPU
+		{62AC7919-A33D-4BD5-9249-BF4FB0CF0C01}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{62AC7919-A33D-4BD5-9249-BF4FB0CF0C01}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{62AC7919-A33D-4BD5-9249-BF4FB0CF0C01}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{62AC7919-A33D-4BD5-9249-BF4FB0CF0C01}.Debug|x64.Build.0 = Debug|Any CPU
+		{62AC7919-A33D-4BD5-9249-BF4FB0CF0C01}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{62AC7919-A33D-4BD5-9249-BF4FB0CF0C01}.Debug|x86.Build.0 = Debug|Any CPU
+		{62AC7919-A33D-4BD5-9249-BF4FB0CF0C01}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{62AC7919-A33D-4BD5-9249-BF4FB0CF0C01}.Release|Any CPU.Build.0 = Release|Any CPU
+		{62AC7919-A33D-4BD5-9249-BF4FB0CF0C01}.Release|x64.ActiveCfg = Release|Any CPU
+		{62AC7919-A33D-4BD5-9249-BF4FB0CF0C01}.Release|x64.Build.0 = Release|Any CPU
+		{62AC7919-A33D-4BD5-9249-BF4FB0CF0C01}.Release|x86.ActiveCfg = Release|Any CPU
+		{62AC7919-A33D-4BD5-9249-BF4FB0CF0C01}.Release|x86.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{62AC7919-A33D-4BD5-9249-BF4FB0CF0C01} = {1F43C3C1-663F-45FA-BFEC-8633A21B8A2C}
 	EndGlobalSection
 EndGlobal

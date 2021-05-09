@@ -34,3 +34,10 @@ group Test
     nuget Fable.ReactTestingLibrary
     nuget Fable.Mocha
     nuget Feliz
+
+group Examples
+    source https://api.nuget.org/v3/index.json
+    nuget Fable.Browser.Dom
+    nuget Fable.Core
+    nuget Fable.React
+    nuget Feliz

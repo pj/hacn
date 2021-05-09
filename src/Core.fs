@@ -394,6 +394,9 @@ let render firstOperation props =
 
   // Capture a result to return to the flow.
   let captureResult index stateUpdater =
+    printf "capturing in core captureResult: %d" index
+    printf "current index %d" componentStateRef.current.OperationIndex
+    printf "current state %A" componentStateRef.current.Operations.[componentStateRef.current.OperationIndex]
     // Ignore captures that occur when the operation index is less than the
     // capture, since we might be rerendering something different.
     if index <= componentStateRef.current.OperationIndex then
