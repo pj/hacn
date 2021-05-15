@@ -4,7 +4,7 @@
     "test:e2e:server": "webpack-dev-server --config ./e2etests/webpack.config.js",
     "test:e2e:cypress": "cypress open -C e2etests/cypress.json",
     "pretest": "fable-splitter tests -o dist/tests --commonjs -c tests/splitter.config.js",
-    "test": "mocha --require jsdom-global/register dist/tests/Composition.test.js",
+    "test": "mocha --require jsdom-global/register dist/tests/Combine.test.js",
     "pack": "cd src && dotnet pack -c Release",
     "publish": "npm run pack && dotnet nuget push src/bin/Release/Hacn.0.0.6.nupkg --api-key $NUGET_KEY --source https://api.nuget.org/v3/index.json"
   },

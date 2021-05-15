@@ -455,9 +455,14 @@ let executionCapture captureReturn index subStateUpdater =
 
         if index <= castExistingState.OperationIndex then
           updateOperationsWith index castExistingState.Operations subStateUpdater
+
+          let nextState =
+            { castExistingState with
+                OperationIndex = index }
+
           runDisposers castExistingState.OperationIndex castExistingState.Operations
 
-          Replace(castExistingState :> obj)
+          Replace(nextState :> obj)
         else
           Keep
     | None -> failwith "should not happen"
