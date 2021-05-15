@@ -57,7 +57,7 @@ let combineTests =
            let element = result.getByTestId "clicked"
            Expect.equal element.textContent "Element Clicked!" "Clicked successfully"
            RTL.cleanup ()
-      testCase "Combine triggering"
+      testCase "Combine rerendering"
       <| fun () ->
            let rerenderTrigger, _, operation = testOperationWithTrigger ()
 
@@ -81,6 +81,8 @@ let combineTests =
            rerenderTrigger "Hello World!"
            let element = result.getByTestId "clicked"
            Expect.equal element.textContent "Hello World!" "Clicked successfully"
+           rerenderTrigger "Goodbye World!"
+           Expect.equal element.textContent "Goodbye World!" "Clicked successfully"
            RTL.cleanup () ]
 
 Mocha.runTests combineTests |> ignore

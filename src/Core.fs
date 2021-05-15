@@ -188,7 +188,7 @@ let preprocessOperations refState props =
 
   nextState
 
-let executionLoop resultCapture componentState props =
+let executionLoop rerender resultCapture componentState props =
   let mutable currentIndex = componentState.OperationIndex
   let mutable stop = false
   let mutable renderedElement = componentState.Element
@@ -342,7 +342,7 @@ let executionLoop resultCapture componentState props =
         let capture = resultCapture currentOperation.Index
 
         let invokeResult =
-          getResult capture currentOperation.State props
+          getResult rerender capture currentOperation.State props
 
         handleInvokeResult invokeResult
     | Compose ({ GetResult = getResult }) ->
@@ -350,7 +350,7 @@ let executionLoop resultCapture componentState props =
         let capture = resultCapture currentOperation.Index
 
         let invokeResult =
-          getResult capture currentOperation.State props
+          getResult rerender capture currentOperation.State props
 
         handleInvokeResult invokeResult
     | TryWith ({ GetResult = getResult }) ->
@@ -358,7 +358,7 @@ let executionLoop resultCapture componentState props =
         let capture = resultCapture currentOperation.Index
 
         let invokeResult =
-          getResult capture currentOperation.State props
+          getResult rerender capture currentOperation.State props
 
         handleInvokeResult invokeResult
     | End ->
@@ -394,9 +394,6 @@ let render firstOperation props =
 
   // Capture a result to return to the flow.
   let captureResult index stateUpdater =
-    printf "capturing in core captureResult: %d" index
-    printf "current index %d" componentStateRef.current.OperationIndex
-    printf "current state %A" componentStateRef.current.Operations.[componentStateRef.current.OperationIndex]
     // Ignore captures that occur when the operation index is less than the
     // capture, since we might be rerendering something different.
     if index <= componentStateRef.current.OperationIndex then
@@ -422,7 +419,7 @@ let render firstOperation props =
   runDisposers componentStateRef.current.OperationIndex componentStateRef.current.Operations
 
   let nextState, nextEffects, nextLayoutEffects, inTryWith =
-    executionLoop captureResult componentStateRef.current props
+    executionLoop rerender captureResult componentStateRef.current props
 
   componentStateRef.current <- nextState
 
@@ -493,7 +490,7 @@ let wrapExecutionEffects composeState effects () =
 
   Some(composeDisposer)
 
-let captureForState underlyingCapture stateGetter stateSetter underlyingStateUpdater =
+let captureForState rerender underlyingCapture stateGetter stateSetter underlyingStateUpdater =
   let captureUpdater combineStateOpt =
     let combineState =
       match combineStateOpt with
@@ -506,16 +503,18 @@ let captureForState underlyingCapture stateGetter stateSetter underlyingStateUpd
     match updateState with
     | Keep -> Keep
     | Erase -> Replace(stateSetter combineState None)
-    | Replace (state) -> Replace(stateSetter combineState (Some state))
+    | Replace (state) ->
+        rerender ()
+        Replace(stateSetter combineState (Some state))
     | SetException (_) -> failwith "Can't set exception in combine"
 
   underlyingCapture captureUpdater
 
 // Execute state for the compose, combine, try/with constructs.
-let executeState underlyingCapture props op existingState stateGetter stateSetter =
+let executeState rerender underlyingCapture props op existingState stateGetter stateSetter =
   let underlyingExecute firstOperation =
     let capture =
-      captureForState underlyingCapture stateGetter stateSetter
+      captureForState rerender underlyingCapture stateGetter stateSetter
 
     let captureReturn = executionCapture capture
 
@@ -523,7 +522,7 @@ let executeState underlyingCapture props op existingState stateGetter stateSette
       initialExecutionState existingState firstOperation
 
     let executionResult, effects, layoutEffects, _ =
-      executionLoop captureReturn executionState (unbox props)
+      executionLoop rerender captureReturn executionState (unbox props)
 
     let ended = checkStateEnded executionResult
 
@@ -561,7 +560,7 @@ let combine op1 op2 =
       Control(
         { PreProcess = fun _ -> None
           GetResult =
-            fun combineCapture combineStateOpt props ->
+            fun rerender combineCapture combineStateOpt props ->
               let combineState =
                 match combineStateOpt with
                 | Some (combineState) -> unbox combineState
@@ -622,6 +621,7 @@ let combine op1 op2 =
 
               let firstOperationData, firstEnded, _ =
                 executeState
+                  rerender
                   combineCapture
                   props
                   op1
@@ -643,6 +643,7 @@ let combine op1 op2 =
               if firstEnded then
                 let secondOperationData, secondEnded, _ =
                   executeState
+                    rerender
                     combineCapture
                     props
                     op2
@@ -704,7 +705,7 @@ let bind<'props, 'resultType, 'x, 'y when 'props: equality and 'x: equality>
       Control(
         { PreProcess = fun operationState -> underlyingOperationData.PreProcess(operationState)
           GetResult =
-            fun captureFunc operationState props ->
+            fun rerender captureFunc operationState props ->
               let operationResult =
                 underlyingOperationData.GetResult captureFunc operationState
 
@@ -723,9 +724,10 @@ let bind<'props, 'resultType, 'x, 'y when 'props: equality and 'x: equality>
               | None -> None
 
           GetResult =
-            fun captureReturn operationStateOpt props ->
+            fun rerender captureReturn operationStateOpt props ->
               let composeEffects, ended, composeReturn =
                 executeState
+                  rerender
                   captureReturn
                   props
                   (composeFirst ())
@@ -753,7 +755,7 @@ type ExceptionState<'props when 'props: equality> =
 let tryWith bodyOperation handler =
   TryWith
     { GetResult =
-        fun captureResult tryWithStateOpt props ->
+        fun rerender captureResult tryWithStateOpt props ->
           let tryWithState =
             match tryWithStateOpt with
             | Some (s) -> unbox s
@@ -784,6 +786,7 @@ let tryWith bodyOperation handler =
 
             let exceptionEffects, ended, _ =
               executeState
+                rerender
                 captureResult
                 props
                 handleOperation
@@ -819,6 +822,7 @@ let tryWith bodyOperation handler =
           else
             let exceptionEffects, ended, _ =
               executeState
+                rerender
                 captureResult
                 props
                 bodyOperation

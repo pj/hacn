@@ -24,6 +24,7 @@ type Dispose = StateUpdater option
 type Effect = unit -> Dispose
 
 type CaptureReturn = (StateUpdater -> unit)
+type Rerender = (unit -> unit)
 
 type OperationData =
   {
@@ -51,11 +52,11 @@ and ControlResult<'props when 'props: equality> =
 
 and ControlData<'props when 'props: equality> =
   { PreProcess: obj option -> obj option
-    GetResult: CaptureReturn -> obj option -> 'props -> ControlResult<'props> }
+    GetResult: Rerender -> CaptureReturn -> obj option -> 'props -> ControlResult<'props> }
 
 and ComposeData<'props when 'props: equality> =
   { PreProcess: obj option -> 'props -> obj option
-    GetResult: CaptureReturn -> obj option -> 'props -> ControlResult<'props> }
+    GetResult: Rerender -> CaptureReturn -> obj option -> 'props -> ControlResult<'props> }
 
 and ComposeSideEffects<'props when 'props: equality> =
   { Effects: (int * Effect) list
@@ -66,7 +67,7 @@ and ComposeSideEffects<'props when 'props: equality> =
 and ExceptionData<'props when 'props: equality> =
   {
     // PreProcess: obj option -> obj option;
-    GetResult: CaptureReturn -> obj option -> 'props -> ControlResult<'props> }
+    GetResult: Rerender -> CaptureReturn -> obj option -> 'props -> ControlResult<'props> }
 // and ComposeResult<'props when 'props: equality> =
 //   | ComposeWait of ComposeSideEffects<'props>
 //   | ComposeFinished of ComposeSideEffects<'props> * Operation<'props, unit>
