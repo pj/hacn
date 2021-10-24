@@ -470,21 +470,22 @@ let wrapExecutionEffects composeState effects () =
   let callEffect (index, effect) =
     let dispose = effect ()
     updateDisposer index composeState.Operations dispose
-    (index, dispose)
 
-  let disposers = List.map callEffect effects
+  List.iter callEffect effects
 
   let composeDisposer existingStateOpt =
+    printf "Compose Disposer called %A" existingStateOpt
     match existingStateOpt with
     | Some (existingState) ->
         let castExistingState = unbox existingState
 
-        let callDisposer (index, disposeOpt) =
-          match disposeOpt with
-          | Some (dispose) -> updateOperationsWith index castExistingState.Operations dispose
+
+        let callDisposer op =
+          match op.Disposer with
+          | Some (dispose) -> updateOperationsWith op.Index castExistingState.Operations dispose
           | None -> ()
 
-        List.iter callDisposer disposers
+        FSharp.Collections.Array.iter callDisposer castExistingState.Operations
         Replace(castExistingState :> obj)
     | None -> failwith "should not happen"
 
@@ -581,39 +582,44 @@ let combine op1 op2 =
                     | None -> None
 
                   let combineDisposer combineStateOpt =
+                    printf "Combined Disposer Called"
                     let combineState =
                       match combineStateOpt with
                       | Some (combineState) -> unbox combineState
                       | None -> failwith "Should not happen"
 
-                    let updatedState =
-                      match firstDisposer with
-                      | Some (disposer) ->
-                          let firstDisposeResponse = disposer combineState.FirstState
+                    // let updatedState =
+                    match firstDisposer with
+                    | Some (disposer) ->
+                        printf "First Disposer Called"
+                        disposer combineState.FirstState |> ignore
 
-                          match firstDisposeResponse with
-                          | Erase -> { combineState with FirstState = None }
-                          | Keep -> combineState
-                          | Replace (s) ->
-                              { combineState with
-                                  FirstState = Some(unbox s) }
-                          | SetException (_) -> failwith "Can't set exception in dispose"
-                      | None -> combineState
+                        // match firstDisposeResponse with
+                        // | Erase -> { combineState with FirstState = None }
+                        // | Keep -> combineState
+                        // | Replace (s) ->
+                        //     { combineState with
+                        //         FirstState = Some(unbox s) }
+                        // | SetException (_) -> failwith "Can't set exception in dispose"
+                    // | None -> combineState
+                    | None -> ()
 
                     match secondDisposer with
                     | Some (disposer) ->
-                        let disposeResponse = disposer combineState.SecondState
+                        printf "Second Disposer Called: %A" disposer
+                        disposer combineState.SecondState |> ignore
 
-                        match disposeResponse with
-                        | Erase -> Replace({ updatedState with SecondState = None })
-                        | Keep -> Replace(updatedState)
-                        | Replace (s) ->
-                            Replace(
-                              { updatedState with
-                                  SecondState = Some(unbox s) }
-                            )
-                        | SetException (_) -> failwith "Can't set exception in dispose"
-                    | None -> Replace(updatedState)
+                        // match disposeResponse with
+                        // | Erase -> Replace({ updatedState with SecondState = None })
+                        // | Keep -> Replace(updatedState)
+                        // | Replace (s) ->
+                        //     Replace(
+                        //       { updatedState with
+                        //           SecondState = Some(unbox s) }
+                        //     )
+                        // | SetException (_) -> failwith "Can't set exception in dispose"
+                    | None -> ()
+                    Replace({FirstState = None; SecondState = None})
 
                   Some(combineDisposer)
 
@@ -661,10 +667,13 @@ let combine op1 op2 =
                       { updatedState with
                           SecondState = Some(s) }
                   | SetException (_) -> failwith "Can't set exception in combine execute"
+                // printf "Updated State second operation %A" updatedState
 
                 let element =
                   Option.orElse firstOperationData.Element secondOperationData.Element
 
+                // printf "First Effect: %A " firstOperationData.Effect
+                // printf "Second Effect: %A " secondOperationData.Effect
                 let controlData =
                   { Effect = Some(createCombineEffect updatedState firstOperationData.Effect secondOperationData.Effect)
                     LayoutEffect =
@@ -682,6 +691,7 @@ let combine op1 op2 =
                 else
                   ControlWait(controlData)
               else
+                // printf "First Effect: %A " firstOperationData.Effect
                 ControlWait(
                   { Effect = Some(createCombineEffect updatedState firstOperationData.Effect None)
                     LayoutEffect = Some(createCombineEffect updatedState firstOperationData.LayoutEffect None)

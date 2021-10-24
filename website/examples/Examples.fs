@@ -8,13 +8,14 @@ open Hacn.Render
 open Browser.Types
 
 let Counter interval =
+  printf "Setting interval: %A" interval
   Perform(
     { PreProcess = fun _ -> None
       GetResult =
         fun captureResult operationState ->
           let castOperationState : int option = unbox operationState
 
-          printf "Current State: %A" castOperationState
+          // printf "Current State: %A" castOperationState
 
           match castOperationState with
           | Some (currentCount) ->
@@ -27,10 +28,11 @@ let Counter interval =
               )
           | None ->
               let timeoutEffect () =
+                printf "Counter effect called"
                 let timeoutCallback () =
                   let updateState existingState =
                     let castOperationState : int option = unbox existingState
-                    printf "Timer calling back state: %A" castOperationState
+                    // printf "Timer calling back state: %A" castOperationState
 
                     match castOperationState with
                     | Some (currentCount) -> Replace(currentCount + 1 :> obj)
@@ -43,6 +45,7 @@ let Counter interval =
 
                 Some
                   (fun _ ->
+                    printf "Counter disposed: %A" timeoutID
                     Fable.Core.JS.clearInterval timeoutID
                     Erase)
 
@@ -61,12 +64,14 @@ let ShowCount : ShowCountProps -> ReactElement =
   react {
     let! props = Props
 
+    printf "Props changed rate: %d" props.rate
+
     if props.rate <= 0 then
       do! Render Html.div [ prop.text "Pausing Count" ]
 
     printf "Changing rate: %d" props.rate
     let! count = Counter props.rate
-    printf "Count: %d" count
+    // printf "Count: %d" count
     do! Render Html.div [ prop.text (sprintf "Current count: %d" count) ]
   }
 
