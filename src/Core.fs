@@ -335,17 +335,27 @@ let rec executionRecur rerender resultCapture exState props operations =
               NextLayoutEffects = consEffect operation.Index operationData.LayoutEffect exState.NextLayoutEffects
           }
         | ControlNext (operationData, nextOperation) ->
-            let nextElement = {
-              State = None
-              Operation = nextOperation
-              Index = operation.Index + 1
-              Disposer = None
-              Exception = None
-            }
-            let next = executionRecur rerender resultCapture exState props [nextElement]
+            let nextOperationElements =
+              match rest with
+              | nextHead :: nextRest -> 
+                {
+                  nextHead with 
+                    Operation = nextOperation
+                } :: nextRest
+              // New element
+              | [] -> 
+                preprocessOperations adfsa
+                [{
+                  State = None
+                  Operation = nextOperation
+                  Index = operation.Index + 1
+                  Disposer = None
+                  Exception = None
+                }]
+
+            let next = executionRecur rerender resultCapture exState props nextOperationElements
             {
               next with
-                InTryWith = false
                 RefState = {
                   next.RefState with 
                     Operations = (updateOperationWithUpdater operation operationData.OperationState) :: next.RefState.Operations
