@@ -26,7 +26,7 @@ type RefState<'props when 'props: equality> =
     Element: (ReactElement * CaptureReturn) option
 
     // list of current operations.
-    Operations: OperationElement<'props> array
+    Operations: OperationElement<'props> list
 
     // 'current' operation to perform, get's updated as operations change it
     // e.g. props changes
@@ -35,6 +35,17 @@ type RefState<'props when 'props: equality> =
     PrevProps: 'props option
 
     ComposeReturn: obj option }
+ 
+type ExecutionResult<'props when 'props: equality> =
+  {
+    RefState: RefState<'props>
+
+    NextEffects: (int * Effect) list
+
+    NextLayoutEffects: (int * Effect) list
+
+    InTryWith: bool
+  }
 
 type CombineState<'props when 'props: equality> =
   { FirstState: obj option
@@ -106,11 +117,13 @@ let getFirstOperation delayOperation componentState =
     { componentState with
         OperationIndex = 0
         Operations =
-          [| { State = None
-               Operation = firstOperation
-               Index = 0
-               Disposer = None
-               Exception = None } |] }
+          [ { 
+              State = None
+              Operation = firstOperation
+              Index = 0
+              Disposer = None
+              Exception = None 
+            } ] }
   else
     componentState
 
@@ -120,11 +133,13 @@ let initialExecutionState operationStateOpt firstOperation : RefState<'props> =
   | None ->
       { OperationIndex = 0
         Operations =
-          [| { State = None
-               Operation = (firstOperation ())
-               Index = 0
-               Disposer = None
-               Exception = None } |]
+          [ { 
+              State = None
+              Operation = (firstOperation ())
+              Index = 0
+              Disposer = None
+              Exception = None 
+            } ]
         Element = None
         PrevProps = None
         ComposeReturn = None }
@@ -187,6 +202,209 @@ let preprocessOperations refState props =
         | _ -> failwith (sprintf "Unknown op %A" op)
 
   nextState
+
+let consEffect index headOpt rest = 
+  match headOpt with 
+  | Some(effect) -> (index, effect) :: rest
+  | None -> rest
+
+let updateOperationWithUpdater operation operationUpdater = 
+  match operationUpdater with
+  | Replace(state) -> 
+      {
+        operation with
+          State = Some(state)
+      }
+  | Erase ->
+      {
+        operation with
+          State = None
+      }
+  | Keep -> operation
+  | SetException(_exception) ->
+      {
+        operation with
+          Exception = Some(_exception)
+      }
+
+let rec executionRecur rerender resultCapture exState props operations = 
+  let updateElementAndEffects state operation rest operationData =
+    let effects = 
+      match operationData.Effect with 
+      | Some(effect) -> (operation.Index, effect) :: state.NextEffects
+      | None -> state.NextEffects
+    let layoutEffects = 
+      match operationData.LayoutEffect with 
+      | Some(effect) -> (operation.Index, effect) :: state.NextLayoutEffects
+      | None -> exState.NextLayoutEffects
+    let element = 
+      match operationData.Element with 
+      | Some(element) -> Some(element)
+      | None -> state.RefState.Element
+    let updatedOperation = 
+      match operationData.OperationState with
+      | Replace(state) -> 
+          {
+            operation with
+              State = Some(state)
+          }
+      | Erase ->
+          {
+            operation with
+              State = None
+          }
+      | Keep -> operation
+      | SetException(_exception) ->
+          {
+            operation with
+              Exception = Some(_exception)
+          }
+
+    {
+      state with
+        RefState = {
+          state.RefState with 
+            Operations = updatedOperation :: rest
+            Element = element
+        } 
+        NextEffects = effects
+        NextLayoutEffects = layoutEffects
+        
+    }
+  match operations with 
+  | operation :: rest -> 
+    if operation.Index < exState.RefState.OperationIndex then
+      let next = executionRecur rerender resultCapture exState props rest
+      { 
+        next with 
+          RefState = {
+            next.RefState with 
+              Operations = operation :: next.RefState.Operations
+            }
+        }
+    else
+      match operation.Operation with 
+      | End ->
+        {
+          exState with
+            InTryWith = true
+            RefState = {
+              exState.RefState with 
+                Operations = operation :: []
+                OperationIndex = operation.Index
+          } 
+        }
+      | ControlProps ({ Execute = execute }) ->
+        let nextOperation = execute props
+        let nextElement = {
+          State = None
+          Operation = nextOperation
+          Index = operation.Index + 1
+          Disposer = None
+          Exception = None
+        }
+        let next = executionRecur rerender resultCapture exState props [nextElement]
+        {
+          next with
+            InTryWith = false
+            RefState = {
+              next.RefState with 
+                Operations = operation :: next.RefState.Operations 
+                PrevProps = Some(props)
+                OperationIndex = operation.Index
+          } 
+        }
+      | Control ({ GetResult = getResult }) ->
+        let capture = resultCapture operation.Index
+
+        let invokeResult =
+          getResult rerender capture operation.State props
+        
+        match invokeResult with
+        | ControlWait (operationData) ->
+          {
+            exState with
+              InTryWith = false
+              RefState = {
+                exState.RefState with 
+                  Operations = (updateOperationWithUpdater operation operationData.OperationState) :: rest
+                  Element = Option.orElse exState.RefState.Element operationData.Element
+                  OperationIndex = operation.Index
+              } 
+              NextEffects = consEffect operation.Index operationData.Effect exState.NextEffects
+              NextLayoutEffects = consEffect operation.Index operationData.LayoutEffect exState.NextLayoutEffects
+          }
+        | ControlNext (operationData, nextOperation) ->
+            let nextElement = {
+              State = None
+              Operation = nextOperation
+              Index = operation.Index + 1
+              Disposer = None
+              Exception = None
+            }
+            let next = executionRecur rerender resultCapture exState props [nextElement]
+            {
+              next with
+                InTryWith = false
+                RefState = {
+                  next.RefState with 
+                    Operations = (updateOperationWithUpdater operation operationData.OperationState) :: next.RefState.Operations
+                    Element = Option.orElse exState.RefState.Element operationData.Element
+                    OperationIndex = operation.Index
+                } 
+                NextEffects = consEffect operation.Index operationData.Effect next.NextEffects
+                NextLayoutEffects = consEffect operation.Index operationData.LayoutEffect next.NextLayoutEffects
+            }
+        | Compose ({ GetResult = getResult }) ->
+          inTryWith <- false
+          let capture = resultCapture currentOperation.Index
+
+          let invokeResult =
+            getResult rerender capture currentOperation.State props
+
+          handleInvokeResult invokeResult
+        | TryWith ({ GetResult = getResult }) ->
+            inTryWith <- true
+            let capture = resultCapture currentOperation.Index
+
+            let invokeResult =
+              getResult rerender capture currentOperation.State props
+
+            handleInvokeResult invokeResult
+
+  | _ -> failwith "Implementation incorrect"
+
+let recursiveExecution rerender resultCapture componentState props = 
+  let initial = {
+      State = { componentState with Operations = [] }
+      NextEffects = []
+      NextLayoutEffects = []
+      InTryWith = false
+    }
+  
+  executionRecur rerender resultCapture initial props componentState.Operations
+
+let foldExecutionLoop rerender resultCapture componentState props = 
+  let initial = {
+      State = { componentState with Operations = [] }
+      NextEffects = []
+      NextLayoutEffects = []
+      InTryWith = false
+    }
+  
+  let executionFolder exState operation =
+    if operation.Index < exState.State.OperationIndex then
+      { 
+        exState with 
+          State = {
+            exState.State with 
+              Operations = operation :: exState.State.Operations
+          }
+      }
+    else
+      exState
+  
+  List.fold executionFolder initial componentState.Operations
 
 let executionLoop rerender resultCapture componentState props =
   let mutable currentIndex = componentState.OperationIndex
