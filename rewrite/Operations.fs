@@ -1,0 +1,53 @@
+module Rewrite.Operations
+
+open Fable
+
+let Render element =
+  Operation (
+    {
+      Run =
+        fun setResult ->
+          OperationWait (
+            { Element = Some element
+              Effect = None
+              LayoutEffect = None
+              }
+          ) 
+    }
+  )
+
+let RenderContinue element =
+  Operation (
+    {
+      Run =
+        fun setResult ->
+          OperationContinue (
+            { ReturnValue = ()
+              Element = Some element
+              Effect = None
+              LayoutEffect = None
+              }
+          ) 
+    }
+  )
+
+let Timeout time =
+  Operation (
+    {
+      Run =
+        fun setResult ->
+          let timeoutEffect () =
+            let timeoutCallback () =
+              setResult ()
+
+            Fable.Core.JS.setTimeout timeoutCallback time
+            ()
+
+          OperationWait (
+            { Element = None
+              Effect = Some(timeoutEffect)
+              LayoutEffect = None
+              }
+          ) 
+    }
+  )

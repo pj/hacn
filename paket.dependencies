@@ -41,3 +41,10 @@ group Examples
     nuget Fable.Core
     nuget Fable.React
     nuget Feliz
+
+group Rewrite
+    source https://api.nuget.org/v3/index.json
+    nuget Fable.Browser.Dom
+    nuget Fable.Core
+    nuget Fable.React
+    nuget Feliz

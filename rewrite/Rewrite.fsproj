@@ -4,12 +4,9 @@
     <TargetFramework>net5.0</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
-    <!-- <Content Include="*.fsproj; *.fs; *.js" PackagePath="fable\" /> -->
     <Compile Include="Types.fs" />
-    <Compile Include="Operations.fs" />
     <Compile Include="Core.fs" />
-    <Compile Include="Memo.fs" />
-    <Compile Include="Render.fs" />
+    <Compile Include="Operations.fs" />
 
     <None Include="paket.references" />
     <None Include="paket.template" />
