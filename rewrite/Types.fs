@@ -3,13 +3,14 @@ module Rewrite.Types
 
 open Fable.React
 
-type Effect = unit -> unit
+type Disposer = unit -> unit
+type Effect = unit -> Disposer option
 
 type OperationContents<'returnType> = {
   Run: ('returnType -> unit) -> OperationResult<'returnType>
 }
-and ExecutionContents<'returnType, 'props> = {
-  Execute: int -> NextSetter<'props> -> ExecutionResult<'returnType>
+and ExecutionContents<'returnType> = {
+  Execute: int -> NextSetter<'returnType> -> ExecutionResult<'returnType>
 }
 and ContinueContents<'returnType> = {
   ReturnValue: 'returnType
@@ -27,26 +28,27 @@ and OperationResult<'returnType> =
   | OperationContinue of ContinueContents<'returnType>
 and NextResult = {
   Element: ReactElement option
-  Effects: Effect list
-  LayoutEffects: Effect list
+  Effects: (int * Effect) list
+  LayoutEffects: (int * Effect) list
 }
 and NextValue<'props> = {
   Next: GetNext option
   PropsNext: GetNextProps<'props> option
   Index: int
 }
-and NextSetter<'props> = NextValue<'props> -> unit
-and GetNextProps<'props> = 'props -> NextResult
+and NextSetter<'returnType> = NextValue<'returnType> -> unit
+and GetNextProps<'returnType> = 'returnType -> NextResult
 and GetNext = unit -> NextResult
 and ExecutionResult<'returnType> = {
   ReturnValue: 'returnType option
   Element: ReactElement option
-  Effects: Effect list
-  LayoutEffects: Effect list
+  Effects: (int * Effect) list
+  LayoutEffects: (int * Effect) list
 }
-and Builder<'returnType, 'props> =
-  | Delay of (unit -> Builder<'returnType, 'props>)
+and Builder<'returnType> =
+  | Delay of (unit -> Builder<'returnType>)
   | Operation of OperationContents<'returnType>
-  | Execution of ExecutionContents<'returnType, 'props>
-  | Props of ExecutionContents<'returnType, 'props>
+  | Execution of ExecutionContents<'returnType>
+  | Props
+  // | PropsExecution of ExecutionContents<'returnType>
   | End

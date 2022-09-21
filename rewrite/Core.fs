@@ -2,10 +2,10 @@ module Rewrite.Core
 
 open Fable.React
 
-let ConsIf a b = 
-  match a with
-  | Some x -> x :: b
-  | None -> b
+let ConsEffect index effect effects = 
+  match effect with
+  | Some effect -> (index, effect) :: effects
+  | None -> effects
 
 let FirstOrSecond a b =
   match a with
@@ -49,8 +49,8 @@ let bind underlyingOperation f =
             {
               ReturnValue = None
               Element = element
-              Effects = ConsIf effect []
-              LayoutEffects = ConsIf layoutEffect []
+              Effects = ConsEffect index effect []
+              LayoutEffects = ConsEffect index layoutEffect []
             }
         | OperationContinue {
             ReturnValue = returnValue
@@ -66,21 +66,20 @@ let bind underlyingOperation f =
             {
               ReturnValue = executionResult.ReturnValue
               Element = FirstOrSecond executionResult.Element element
-              Effects = ConsIf effect executionResult.Effects
-              LayoutEffects = ConsIf layoutEffect executionResult.LayoutEffects
+              Effects = ConsEffect index effect executionResult.Effects
+              LayoutEffects = ConsEffect index layoutEffect executionResult.LayoutEffects
             }
           | End ->
             {
               ReturnValue = None
               Element = element
-              Effects = ConsIf effect []
-              LayoutEffects = ConsIf layoutEffect []
+              Effects = ConsEffect index effect []
+              LayoutEffects = ConsEffect index layoutEffect []
             }
           | _ -> 
             failwith (sprintf "Can't bind execution %A" nextExecution)
-            
     }
-  | Props contents ->
+  | Props ->
     Execution {
       Execute = fun index setNext -> 
         setNext ({
@@ -105,9 +104,9 @@ let bind underlyingOperation f =
             
         {
           ReturnValue = None
-          Element = element
-          Effects = ConsIf effect []
-          LayoutEffects = ConsIf layoutEffect []
+          Element = None
+          Effects = []
+          LayoutEffects = []
         }
     }
   | _ -> failwith (sprintf "Can't bind operation %A" underlyingOperation)
@@ -119,6 +118,9 @@ type ExperimentState<'props> = {
   PropsNext: ('props -> NextResult) option
   Started: bool
   Hooks: (unit -> unit) list
+  PrevProps: 'props option
+  Disposers: (int * Disposer) list
+  LayoutDisposers: (int * Disposer) list
 }
 
 let runNext (componentStateRef : IRefValue<ExperimentState<'props>>) (props: 'props) =
@@ -134,6 +136,62 @@ let runNext (componentStateRef : IRefValue<ExperimentState<'props>>) (props: 'pr
   | None -> 
     (componentStateRef.current.LastElement, [], [])
 
+
+let getFirst delayOperation setNext =
+  match delayOperation with
+  | Delay (f) ->
+    let firstOperation = f ()
+    match firstOperation with
+    | Execution executionContents ->
+      let execNext () = 
+        let executionResult = executionContents.Execute 0 setNext
+        {
+          Element = executionResult.Element
+          Effects = executionResult.Effects
+          LayoutEffects = executionResult.LayoutEffects
+        }
+      execNext
+    | _ -> failwith (sprintf "Delayed operation must be execution type, got %A" firstOperation)
+  | _ -> failwith (sprintf "First operation from builder must be of type Delay: %A" delayOperation)
+
+let disposeFrom index disposers=
+  let foldDisposer disposers indexedDisposer =
+    let (disposerIndex, disposer) = indexedDisposer
+    if disposerIndex > index then 
+      disposer ()
+      disposers
+    else
+      indexedDisposer :: disposers
+    
+  List.fold 
+    foldDisposer
+    []
+    disposers
+
+let rec processDisposers existingDisposers newDisposers =
+  match (existingDisposers, newDisposers) with
+  | ([], []) -> []
+  | ([], newDisposers) -> newDisposers
+  | (existingDisposers, []) ->
+    List.iter (fun (_, disposer) -> disposer ()) existingDisposers
+    []
+  | ((edIdx, ed) :: existingDisposersTail, (ndIdx, nd) :: newDisposersTail) ->
+    if edIdx < ndIdx then
+      (edIdx, ed) :: processDisposers existingDisposersTail newDisposers
+    else 
+      ed ()
+      (ndIdx, nd) :: processDisposers existingDisposersTail newDisposersTail
+    
+let processEffects existingDisposers effects =
+  let handleEffect effects (index, effect) =
+    match effect () with
+    | Some disposer -> (index, disposer) :: effects
+    | None -> effects
+
+  let disposers = List.fold handleEffect [] effects
+  
+  processDisposers existingDisposers disposers
+
 let interpreter delayOperation (props: 'props) = 
   let componentStateRef =
     Fable.React.HookBindings.Hooks.useRef (
@@ -144,6 +202,9 @@ let interpreter delayOperation (props: 'props) =
         PropsNext = None 
         Started = false
         Hooks = []
+        PrevProps = None
+        Disposers = []
+        LayoutDisposers = []
         }
     )
 
@@ -158,48 +219,45 @@ let interpreter delayOperation (props: 'props) =
     match componentStateRef.current.Index with
     | Some currentIndex  when nextValues.Index > currentIndex ->
         printf "Got set next greater than current index, effect not properly disposed?"
-    | _ -> 
+    | _ ->
       componentStateRef.current <- {
         componentStateRef.current with 
           Next = nextValues.Next
           PropsNext = nextValues.PropsNext
-          Index = Some nextValues.Index}
+          Index = Some nextValues.Index
+          Disposers = disposeFrom nextValues.Index componentStateRef.current.Disposers}
       rerender ()
   
   if not componentStateRef.current.Started then
-    let firstNext () = 
-      match delayOperation with
-      | Delay (f) -> 
-        let firstOperation = f ()
-        match firstOperation with
-        | Execution executionContents ->
-          let executionResult = executionContents.Execute 0 setNext
-          {
-            Element = executionResult.Element
-            Effects = executionResult.Effects
-            LayoutEffects = executionResult.LayoutEffects
-          }
-        | _ -> failwith (sprintf "Delayed operation must be execution type, got %A" firstOperation)
-      | _ -> failwith (sprintf "First operation from builder must be of type Delay: %A" delayOperation)
-
     componentStateRef.current <- {
       componentStateRef.current with 
-        Next = Some firstNext
-        Started = true
-        Index = Some 0
-      }
+        Next = Some (getFirst delayOperation setNext)
+        }
+
+  // Check props
+  
+  // Run subsequent effect disposers
+
+  // Run pre hooks
     
   let (element, effects, layoutEffects) = runNext componentStateRef props
 
   let handleEffects effects () =
-    let handleEffect effect =
-      effect ()
-    List.iter handleEffect effects
+    componentStateRef.current <- {
+      componentStateRef.current with 
+        Disposers = processEffects componentStateRef.current.Disposers effects
+    }
+
+  let handleLayoutEffects effects () =
+    componentStateRef.current <- {
+      componentStateRef.current with 
+        LayoutDisposers = processEffects componentStateRef.current.LayoutDisposers effects
+    }
     
   Fable.React.HookBindings.Hooks.useEffect (handleEffects effects)
-  Fable.React.HookBindings.Hooks.useLayoutEffect (handleEffects layoutEffects)
+  Fable.React.HookBindings.Hooks.useLayoutEffect (handleLayoutEffects layoutEffects)
 
-  Option.defaultWith (fun () -> null) element
+  Option.defaultValue null element
 
 type ReactBuilder () =
   member _.Bind(operation, f) = bind operation f

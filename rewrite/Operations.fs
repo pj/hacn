@@ -40,8 +40,10 @@ let Timeout time =
             let timeoutCallback () =
               setResult ()
 
-            Fable.Core.JS.setTimeout timeoutCallback time
-            ()
+            let timeout = Fable.Core.JS.setTimeout timeoutCallback time
+            Some (fun () -> 
+              Fable.Core.JS.clearTimeout timeout
+            )
 
           OperationWait (
             { Element = None
