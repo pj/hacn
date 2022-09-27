@@ -6,14 +6,14 @@ open Fable.React
 type Disposer = unit -> unit
 type Effect = unit -> Disposer option
 
-type OperationContents<'returnType> = {
-  Run: ('returnType -> unit) -> OperationResult<'returnType>
+type OperationContents<'opContents> = {
+  Run: ('opContents -> unit) -> OperationResult<'opContents>
 }
-and ExecutionContents<'returnType> = {
-  Execute: int -> NextSetter<'returnType> -> ExecutionResult<'returnType>
+and ExecutionContents<'opContents> = {
+  Execute: int -> obj -> NextSetter -> ExecutionResult<'opContents>
 }
-and ContinueContents<'returnType> = {
-  ReturnValue: 'returnType
+and ContinueContents<'opContents> = {
+  ReturnValue: 'opContents
   Element: ReactElement option
   Effect: Effect option
   LayoutEffect: Effect option
@@ -23,32 +23,30 @@ and WaitContents = {
   Effect: Effect option
   LayoutEffect: Effect option
 }
-and OperationResult<'returnType> =
+and OperationResult<'opContents> =
   | OperationWait of WaitContents
-  | OperationContinue of ContinueContents<'returnType>
+  | OperationContinue of ContinueContents<'opContents>
 and NextResult = {
   Element: ReactElement option
   Effects: (int * Effect) list
   LayoutEffects: (int * Effect) list
 }
-and NextValue<'props> = {
+and NextValue = {
   Next: GetNext option
-  PropsNext: GetNextProps<'props> option
   Index: int
 }
-and NextSetter<'returnType> = NextValue<'returnType> -> unit
-and GetNextProps<'returnType> = 'returnType -> NextResult
-and GetNext = unit -> NextResult
-and ExecutionResult<'returnType> = {
-  ReturnValue: 'returnType option
+and NextSetter = NextValue -> unit
+and GetNext = obj -> NextResult
+and ExecutionResult<'opContents> = {
+  ReturnValue: 'opContents option
   Element: ReactElement option
   Effects: (int * Effect) list
   LayoutEffects: (int * Effect) list
+  PropsNext: (int * GetNext) option
 }
-and Builder<'returnType> =
-  | Delay of (unit -> Builder<'returnType>)
-  | Operation of OperationContents<'returnType>
-  | Execution of ExecutionContents<'returnType>
+and Builder<'opContents> =
+  | Delay of (unit -> Builder<'opContents>)
+  | Operation of OperationContents<'opContents>
+  | Execution of ExecutionContents<'opContents>
   | Props
-  // | PropsExecution of ExecutionContents<'returnType>
   | End

@@ -1,6 +1,11 @@
 module Rewrite.Core
 
 open Fable.React
+open Fable.Core.Util
+open Fable.Core
+
+[<ImportMember("./propsCompare.js")>]
+let shallowEqualObjects (x: obj) (y: obj) : bool = jsNative
 
 let ConsEffect index effect effects = 
   match effect with
@@ -12,22 +17,21 @@ let FirstOrSecond a b =
   | Some x -> a
   | None -> b
 
-let bind underlyingOperation f =
+let bind (underlyingOperation: Builder<'a>) (f: 'a -> Builder<'b>) : Builder<'b> =
   match underlyingOperation with
   | Operation (underlyingOperationData) ->
     Execution {
-      Execute = fun index setNext -> 
+      Execute = fun index props setNext -> 
         // Take a return value from an effect and set the next execution to a function that
         // will call the rest of the flow.
         let setResult returnValue = 
           setNext ({
-              PropsNext = None
-              Next = Some (fun () ->
+              Next = Some (fun props ->
                 let nextExecution = f returnValue
 
                 match nextExecution with
                 | Execution contents -> 
-                  let executionResult = contents.Execute (index+1) setNext
+                  let executionResult = contents.Execute (index+1) props setNext
                   {
                     Element = None
                     Effects = executionResult.Effects
@@ -51,6 +55,7 @@ let bind underlyingOperation f =
               Element = element
               Effects = ConsEffect index effect []
               LayoutEffects = ConsEffect index layoutEffect []
+              PropsNext = None
             }
         | OperationContinue {
             ReturnValue = returnValue
@@ -62,12 +67,13 @@ let bind underlyingOperation f =
 
           match nextExecution with
           | Execution contents -> 
-            let executionResult = contents.Execute (index+1) setNext
+            let executionResult = contents.Execute (index+1) props setNext
             {
               ReturnValue = executionResult.ReturnValue
               Element = FirstOrSecond executionResult.Element element
               Effects = ConsEffect index effect executionResult.Effects
               LayoutEffects = ConsEffect index layoutEffect executionResult.LayoutEffects
+              PropsNext = None
             }
           | End ->
             {
@@ -75,47 +81,58 @@ let bind underlyingOperation f =
               Element = element
               Effects = ConsEffect index effect []
               LayoutEffects = ConsEffect index layoutEffect []
+              PropsNext = None
             }
           | _ -> 
             failwith (sprintf "Can't bind execution %A" nextExecution)
     }
   | Props ->
     Execution {
-      Execute = fun index setNext -> 
-        setNext ({
-          Next = None
-          PropsNext = Some (fun props ->
-            let nextExecution = f props
+      Execute = fun index props setNext -> 
+        let propsNext = fun props ->
+          let nextExecution = f (unbox<'a> props)
 
-            match nextExecution with
-            | Execution contents -> 
-              let executionResult = contents.Execute (index+1) setNext
-              {
-                Element = None
-                Effects = executionResult.Effects
-                LayoutEffects = executionResult.LayoutEffects
-              }
-            | _ -> 
-              failwith (sprintf "Can't bind execution %A" nextExecution)
+          match nextExecution with
+          | Execution contents -> 
+            let executionResult = contents.Execute (index+1) props setNext
+            {
+              Element = None
+              Effects = executionResult.Effects
+              LayoutEffects = executionResult.LayoutEffects
+            }
+          | _ -> 
+            failwith (sprintf "Can't bind execution %A" nextExecution)
 
-          )
-          Index = index
-        })
-            
-        {
-          ReturnValue = None
-          Element = None
-          Effects = []
-          LayoutEffects = []
-        }
+        let nextExecution = f (unbox<'a> props)
+
+        match nextExecution with
+        | Execution contents -> 
+          let executionResult = contents.Execute (index+1) props setNext
+          {
+            ReturnValue = executionResult.ReturnValue
+            Element = executionResult.Element
+            Effects = executionResult.Effects
+            LayoutEffects = executionResult.LayoutEffects
+            PropsNext = Some (index, propsNext)
+          }
+        | End ->
+          {
+            ReturnValue = None
+            Element = None
+            Effects = []
+            LayoutEffects = []
+            PropsNext = Some (index, propsNext)
+          }
+        | _ -> 
+          failwith (sprintf "Can't bind execution %A" nextExecution)
     }
   | _ -> failwith (sprintf "Can't bind operation %A" underlyingOperation)
 
 type ExperimentState<'props> = {
   LastElement: ReactElement option
-  Next: (unit -> NextResult) option
+  Next: GetNext option
   Index: int option
-  PropsNext: ('props -> NextResult) option
+  PropsNext: (int * GetNext) option
   Started: bool
   Hooks: (unit -> unit) list
   PrevProps: 'props option
@@ -126,7 +143,7 @@ type ExperimentState<'props> = {
 let runNext (componentStateRef : IRefValue<ExperimentState<'props>>) (props: 'props) =
   match componentStateRef.current.Next with
   | Some(nextFunc) -> 
-    let result = nextFunc ()
+    let result = nextFunc props 
     componentStateRef.current <- {
       componentStateRef.current with 
         Next = None
@@ -143,8 +160,8 @@ let getFirst delayOperation setNext =
     let firstOperation = f ()
     match firstOperation with
     | Execution executionContents ->
-      let execNext () = 
-        let executionResult = executionContents.Execute 0 setNext
+      let execNext props = 
+        let executionResult = executionContents.Execute 0 props setNext
         {
           Element = executionResult.Element
           Effects = executionResult.Effects
@@ -192,7 +209,7 @@ let processEffects existingDisposers effects =
   
   processDisposers existingDisposers disposers
 
-let interpreter delayOperation (props: 'props) = 
+let interpreter delayOperation props = 
   let componentStateRef =
     Fable.React.HookBindings.Hooks.useRef (
       { 
@@ -215,7 +232,7 @@ let interpreter delayOperation (props: 'props) =
     let asdf = Fable.Core.JS.Math.random ()
     state.update (sprintf "blah%f" asdf)
   
-  let setNext (nextValues: NextValue<'props>) =
+  let setNext (nextValues: NextValue) =
     match componentStateRef.current.Index with
     | Some currentIndex  when nextValues.Index > currentIndex ->
         printf "Got set next greater than current index, effect not properly disposed?"
@@ -223,7 +240,6 @@ let interpreter delayOperation (props: 'props) =
       componentStateRef.current <- {
         componentStateRef.current with 
           Next = nextValues.Next
-          PropsNext = nextValues.PropsNext
           Index = Some nextValues.Index
           Disposers = disposeFrom nextValues.Index componentStateRef.current.Disposers}
       rerender ()
@@ -235,12 +251,19 @@ let interpreter delayOperation (props: 'props) =
         }
 
   // Check props
-  
-  // Run subsequent effect disposers
-
-  // Run pre hooks
-    
-  let (element, effects, layoutEffects) = runNext componentStateRef props
+  let (element, effects, layoutEffects) = 
+    match componentStateRef.current.PropsNext with
+    | Some (propsIndex, propsFunc) when (not (shallowEqualObjects componentStateRef.current.PrevProps props)) ->
+      componentStateRef.current <- {
+        componentStateRef.current with 
+          Next = None
+          Index = None
+          Disposers = disposeFrom propsIndex componentStateRef.current.Disposers}
+      
+      let result = propsFunc props 
+      (result.Element, result.Effects, result.LayoutEffects)
+    | _ -> 
+      runNext componentStateRef props
 
   let handleEffects effects () =
     componentStateRef.current <- {
@@ -265,6 +288,6 @@ type ReactBuilder () =
   member _.Delay(f) = Delay f
 
   member _.Run(firstOperation) =
-    Fable.React.FunctionComponent.Of (fun (props: 'props) -> interpreter firstOperation props)
+    Fable.React.FunctionComponent.Of (fun props -> interpreter firstOperation props)
 
 let react = ReactBuilder()
