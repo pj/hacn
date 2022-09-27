@@ -36,6 +36,8 @@ let bind (underlyingOperation: Builder<'a>) (f: 'a -> Builder<'b>) : Builder<'b>
                     Element = None
                     Effects = executionResult.Effects
                     LayoutEffects = executionResult.LayoutEffects
+                    Hooks = executionResult.Hooks
+                    PropsNext = executionResult.PropsNext
                   }
                 | _ -> 
                   failwith (sprintf "Can't bind execution %A" nextExecution)
@@ -49,6 +51,7 @@ let bind (underlyingOperation: Builder<'a>) (f: 'a -> Builder<'b>) : Builder<'b>
             Element = element 
             Effect = effect 
             LayoutEffect = layoutEffect
+            Hook = hook
           } -> 
             {
               ReturnValue = None
@@ -56,12 +59,14 @@ let bind (underlyingOperation: Builder<'a>) (f: 'a -> Builder<'b>) : Builder<'b>
               Effects = ConsEffect index effect []
               LayoutEffects = ConsEffect index layoutEffect []
               PropsNext = None
+              Hooks = ConsEffect index hook []
             }
         | OperationContinue {
             ReturnValue = returnValue
             Element = element 
             Effect = effect 
             LayoutEffect = layoutEffect
+            Hook = hook
           } -> 
           let nextExecution = f returnValue
 
@@ -74,6 +79,7 @@ let bind (underlyingOperation: Builder<'a>) (f: 'a -> Builder<'b>) : Builder<'b>
               Effects = ConsEffect index effect executionResult.Effects
               LayoutEffects = ConsEffect index layoutEffect executionResult.LayoutEffects
               PropsNext = None
+              Hooks = ConsEffect index hook []
             }
           | End ->
             {
@@ -82,6 +88,7 @@ let bind (underlyingOperation: Builder<'a>) (f: 'a -> Builder<'b>) : Builder<'b>
               Effects = ConsEffect index effect []
               LayoutEffects = ConsEffect index layoutEffect []
               PropsNext = None
+              Hooks = ConsEffect index hook []
             }
           | _ -> 
             failwith (sprintf "Can't bind execution %A" nextExecution)
@@ -99,6 +106,8 @@ let bind (underlyingOperation: Builder<'a>) (f: 'a -> Builder<'b>) : Builder<'b>
               Element = None
               Effects = executionResult.Effects
               LayoutEffects = executionResult.LayoutEffects
+              Hooks = executionResult.Hooks
+              PropsNext = executionResult.PropsNext
             }
           | _ -> 
             failwith (sprintf "Can't bind execution %A" nextExecution)
@@ -114,6 +123,7 @@ let bind (underlyingOperation: Builder<'a>) (f: 'a -> Builder<'b>) : Builder<'b>
             Effects = executionResult.Effects
             LayoutEffects = executionResult.LayoutEffects
             PropsNext = Some (index, propsNext)
+            Hooks = executionResult.Hooks
           }
         | End ->
           {
@@ -122,6 +132,7 @@ let bind (underlyingOperation: Builder<'a>) (f: 'a -> Builder<'b>) : Builder<'b>
             Effects = []
             LayoutEffects = []
             PropsNext = Some (index, propsNext)
+            Hooks = []
           }
         | _ -> 
           failwith (sprintf "Can't bind execution %A" nextExecution)
@@ -134,7 +145,7 @@ type ExperimentState<'props> = {
   Index: int option
   PropsNext: (int * GetNext) option
   Started: bool
-  Hooks: (unit -> unit) list
+  Hooks: (int * (unit -> unit)) list
   PrevProps: 'props option
   Disposers: (int * Disposer) list
   LayoutDisposers: (int * Disposer) list
@@ -149,9 +160,9 @@ let runNext (componentStateRef : IRefValue<ExperimentState<'props>>) (props: 'pr
         Next = None
         Index = None
     }
-    (result.Element, result.Effects, result.LayoutEffects)
+    Some result
   | None -> 
-    (componentStateRef.current.LastElement, [], [])
+    None
 
 
 let getFirst delayOperation setNext =
@@ -166,6 +177,8 @@ let getFirst delayOperation setNext =
           Element = executionResult.Element
           Effects = executionResult.Effects
           LayoutEffects = executionResult.LayoutEffects
+          Hooks = executionResult.Hooks
+          PropsNext = executionResult.PropsNext
         }
       execNext
     | _ -> failwith (sprintf "Delayed operation must be execution type, got %A" firstOperation)
@@ -251,7 +264,7 @@ let interpreter delayOperation props =
         }
 
   // Check props
-  let (element, effects, layoutEffects) = 
+  let result = 
     match componentStateRef.current.PropsNext with
     | Some (propsIndex, propsFunc) when (not (shallowEqualObjects componentStateRef.current.PrevProps props)) ->
       componentStateRef.current <- {
@@ -260,27 +273,39 @@ let interpreter delayOperation props =
           Index = None
           Disposers = disposeFrom propsIndex componentStateRef.current.Disposers}
       
-      let result = propsFunc props 
-      (result.Element, result.Effects, result.LayoutEffects)
+      Some (propsFunc props)
     | _ -> 
       runNext componentStateRef props
 
-  let handleEffects effects () =
-    componentStateRef.current <- {
-      componentStateRef.current with 
-        Disposers = processEffects componentStateRef.current.Disposers effects
-    }
+  match result with
+  | Some (result) -> 
+    if not componentStateRef.current.Started then
+      componentStateRef.current <- {
+        componentStateRef.current with 
+          Started = true
+          PropsNext = result.PropsNext
+          Hooks = result.Hooks
+          }
+    let handleEffects effects () =
+      componentStateRef.current <- {
+        componentStateRef.current with 
+          Disposers = processEffects componentStateRef.current.Disposers effects
+      }
 
-  let handleLayoutEffects effects () =
-    componentStateRef.current <- {
-      componentStateRef.current with 
-        LayoutDisposers = processEffects componentStateRef.current.LayoutDisposers effects
-    }
-    
-  Fable.React.HookBindings.Hooks.useEffect (handleEffects effects)
-  Fable.React.HookBindings.Hooks.useLayoutEffect (handleLayoutEffects layoutEffects)
+    let handleLayoutEffects effects () =
+      componentStateRef.current <- {
+        componentStateRef.current with 
+          LayoutDisposers = processEffects componentStateRef.current.LayoutDisposers effects
+      }
+      
+    Fable.React.HookBindings.Hooks.useEffect (handleEffects result.Effects)
+    Fable.React.HookBindings.Hooks.useLayoutEffect (handleLayoutEffects result.LayoutEffects)
 
-  Option.defaultValue null element
+    Option.defaultValue null result.Element
+  | None -> 
+    if not componentStateRef.current.Started then
+      failwith "component not started and result empty"
+    null
 
 type ReactBuilder () =
   member _.Bind(operation, f) = bind operation f

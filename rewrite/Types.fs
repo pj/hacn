@@ -17,11 +17,13 @@ and ContinueContents<'opContents> = {
   Element: ReactElement option
   Effect: Effect option
   LayoutEffect: Effect option
+  Hook: (unit -> unit) option
 }
 and WaitContents = {
   Element: ReactElement option
   Effect: Effect option
   LayoutEffect: Effect option
+  Hook: (unit -> unit) option
 }
 and OperationResult<'opContents> =
   | OperationWait of WaitContents
@@ -30,6 +32,8 @@ and NextResult = {
   Element: ReactElement option
   Effects: (int * Effect) list
   LayoutEffects: (int * Effect) list
+  PropsNext: (int * GetNext) option
+  Hooks: (int * (unit -> unit)) list
 }
 and NextValue = {
   Next: GetNext option
@@ -43,6 +47,7 @@ and ExecutionResult<'opContents> = {
   Effects: (int * Effect) list
   LayoutEffects: (int * Effect) list
   PropsNext: (int * GetNext) option
+  Hooks: (int * (unit -> unit)) list
 }
 and Builder<'opContents> =
   | Delay of (unit -> Builder<'opContents>)
