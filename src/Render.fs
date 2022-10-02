@@ -14,11 +14,11 @@ open Browser.Types
 
 type CaptureEvent () = 
   member val Capture = None with get, set
-  member this.CaptureValue value = 
+  member this.CaptureValue (value: obj) = 
     match this.Capture with
     | None -> failwith "Capture must be set"
     | Some(captureFunc) -> 
-      captureFunc (fun _ -> (Replace(value :> obj)))
+      captureFunc value
 
 let mutable captureObjects: CaptureEvent array = [||]
 
@@ -59,80 +59,47 @@ let bindCapture captureResult =
     captureObj.Capture <- Some(captureResult)
   captureObjects <- [||]
 
-let Render (element: IReactProperty list -> ReactElement) (props: IReactProperty list) =
-  Perform({ 
-    PreProcess = fun _ -> None;
-    GetResult = fun captureResult operationState -> 
-      let eraseCapturedResult _ =
-        Some(fun _ -> Erase)
-      bindCapture captureResult
-      match operationState with
-      | Some(result) -> 
-        let castReturn: 'returnType = unbox result
-        PerformContinue(
+let Render<'returnType> (element: IReactProperty list -> ReactElement) (props: IReactProperty list) =
+  Operation ({ 
+    Run = 
+      fun (setResult: 'returnType -> unit) _ -> 
+        bindCapture setResult
+        OperationWait (
           {
-            Element = Some(((element props), captureResult))
-            Effect = Some(eraseCapturedResult)
-            LayoutEffect = None
-            OperationState = Keep
-          }, 
-          castReturn
-        )
-      | _ ->
-        PerformWait(
-          {
-            Element = Some(((element props), captureResult))
+            Element = Some (element props)
             Effect = None
             LayoutEffect = None
-            OperationState = Keep
+            Hook = None
           }
         )
   })
 
 let RenderContinue element (props: IReactProperty list) =
-  Perform({ 
-    PreProcess = fun _ -> None;
-    GetResult = fun captureResult operationState -> 
-      bindCapture captureResult
-      PerformContinue(
-        {
-          Element = Some(((element props), captureResult))
-          Effect = None
-          LayoutEffect = None
-          OperationState = Keep
-        }, 
-        ()
-      )
-  })
-
-let RenderCapture<'returnType> captureElement =
-  Perform({ 
-    PreProcess = fun _ -> None;
-    GetResult = fun captureResult operationState -> 
-      let captureResultInternal v =
-        captureResult (fun _ -> Replace(v))
-      let eraseCapturedResult _ =
-        Some(fun _ -> Erase)
-      bindCapture captureResult
-      match operationState with
-      | Some(result) -> 
-        let castReturn: 'returnType = unbox result
-        PerformContinue(
+  Operation ({ 
+    Run = 
+      fun setResult _ -> 
+        bindCapture setResult
+        OperationContinue (
           {
-            Element = Some((captureElement captureResultInternal, captureResult))
-            Effect = Some(eraseCapturedResult)
-            LayoutEffect = None
-            OperationState = Keep
-          }, 
-          castReturn
-        )
-      | _ ->
-        PerformWait(
-          {
-            Element = Some((captureElement captureResultInternal, captureResult))
+            ReturnValue = ()
+            Element = Some (element props)
             Effect = None
             LayoutEffect = None
-            OperationState = Keep
+            Hook = None
           }
         )
+  })
+
+let RenderCapture captureElement =
+  Operation ({ 
+    Run = fun setResult props -> 
+      bindCapture setResult
+      OperationWait (
+        {
+          Element = Some (captureElement setResult)
+          Effect = None
+          LayoutEffect = None
+          Hook = None
+        }
+      )
   })
