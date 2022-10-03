@@ -52,12 +52,11 @@ and ExecutionResult<'opContents> = {
   Element: ReactElement option
   Effects: (int * Effect) list
   LayoutEffects: (int * Effect) list
-  // PropsNext: (int * GetNext) option
   Hooks: (int * GetNextHook) list
 }
 and Builder<'opContents> =
   | Delay of (unit -> Builder<'opContents>)
   | Operation of OperationContents<'opContents>
   | Execution of ExecutionContents<'opContents>
-  // | Props
+  | Return of 'opContents
   | End

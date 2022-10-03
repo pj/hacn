@@ -13,24 +13,24 @@ type PropsOperationState<'props> =
   { Props: 'props
     PrevProps: 'props option }
 
-// let Props<'props when 'props: equality> : Operation<'props, 'props> =
-let Props =
+let Props<'returnType > =
   let mutable prevProps = None
   Operation({
       Run = 
         fun _ props ->
           let propsHook props =
+            let unboxedProps = unbox<'returnType> props
             match prevProps with
-            | None -> Some(props)
+            | None -> Some(unboxedProps)
             | Some (prevPropsValue) ->
               if not (shallowEqualObjects props prevPropsValue) then
-                prevProps <- Some (props)
-                Some props
+                prevProps <- Some (unboxedProps)
+                Some (unboxedProps)
               else
                 None
           
           OperationContinue({
-            ReturnValue = props
+            ReturnValue = (unbox<'returnType> props)
             Element = None
             Effect = None
             LayoutEffect = None
@@ -51,12 +51,11 @@ let State<'state> (initialState: 'state) =
         fun _ __ ->
           let state = Hooks.useState(initialState)
 
-          let StateSetOperation setState (newState: 'state)=
+          let StateSetOperation setState (newState: 'state) : Builder<unit> =
             Operation (
               { 
-                // PreProcess = fun _ -> None
                 Run =
-                  fun _ _ ->
+                  fun _ __ ->
                     let stateSetEffect () =
                       setState newState
                       None

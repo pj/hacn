@@ -1,11 +1,6 @@
 module Hacn.Core
 
 open Fable.React
-open Fable.Core.Util
-open Fable.Core
-
-[<ImportMember("./propsCompare.js")>]
-let shallowEqualObjects (x: obj) (y: obj) : bool = jsNative
 
 let ConsEffect index effect effects = 
   match effect with
@@ -37,7 +32,6 @@ let bind (underlyingOperation: Builder<'a>) (f: 'a -> Builder<'b>) : Builder<'b>
                     Effects = executionResult.Effects
                     LayoutEffects = executionResult.LayoutEffects
                     Hooks = executionResult.Hooks
-                    // PropsNext = executionResult.PropsNext
                   }
                 | _ -> 
                   failwith (sprintf "Can't bind execution %A" nextExecution)
@@ -59,7 +53,6 @@ let bind (underlyingOperation: Builder<'a>) (f: 'a -> Builder<'b>) : Builder<'b>
                 Effects = executionResult.Effects
                 LayoutEffects = executionResult.LayoutEffects
                 Hooks = executionResult.Hooks
-                // PropsNext = executionResult.PropsNext
               })
             | _ -> 
               failwith (sprintf "Can't bind execution %A" nextExecution)
@@ -78,7 +71,6 @@ let bind (underlyingOperation: Builder<'a>) (f: 'a -> Builder<'b>) : Builder<'b>
               Element = element
               Effects = ConsEffect index effect []
               LayoutEffects = ConsEffect index layoutEffect []
-              // PropsNext = None
               Hooks = ConsEffect index (Option.map wrapHook hook) []
             }
         | OperationContinue {
@@ -98,7 +90,6 @@ let bind (underlyingOperation: Builder<'a>) (f: 'a -> Builder<'b>) : Builder<'b>
               Element = FirstOrSecond executionResult.Element element
               Effects = ConsEffect index effect executionResult.Effects
               LayoutEffects = ConsEffect index layoutEffect executionResult.LayoutEffects
-              // PropsNext = None
               Hooks = ConsEffect index (Option.map wrapHook hook) []
             }
           | End ->
@@ -107,7 +98,6 @@ let bind (underlyingOperation: Builder<'a>) (f: 'a -> Builder<'b>) : Builder<'b>
               Element = element
               Effects = ConsEffect index effect []
               LayoutEffects = ConsEffect index layoutEffect []
-              // PropsNext = None
               Hooks = ConsEffect index (Option.map wrapHook hook) []
             }
           | _ -> 
@@ -116,8 +106,17 @@ let bind (underlyingOperation: Builder<'a>) (f: 'a -> Builder<'b>) : Builder<'b>
   | _ -> failwith (sprintf "Can't bind operation %A" underlyingOperation)
 
 let combine firstOperation secondOperation = 
-  None
-
+  Execution {
+    Execute =
+      fun index setNext props ->
+        {
+          ReturnValue = Some (())
+          Element = None
+          Effects = []
+          LayoutEffects = []
+          Hooks = []
+        }
+  }
 
 type ExperimentState<'props> = {
   LastElement: ReactElement option
@@ -201,7 +200,6 @@ let getFirst delayOperation setNext =
       execNext
     | _ -> failwith (sprintf "Delayed operation must be execution type, got %A" firstOperation)
   | _ -> failwith (sprintf "First operation from builder must be of type Delay: %A" delayOperation)
-
 
 let rec processDisposers existingDisposers newDisposers =
   match (existingDisposers, newDisposers) with
@@ -317,6 +315,7 @@ type HacnBuilder () =
   member _.Zero() = End
   member _.Delay(f) = Delay f
   member _.Combine (f1, f2) = combine f1 f2
+  member _.Return (value) = Return (value)
 
   // member _.Run(firstOperation) = Fable.React.FunctionComponent.Of (fun props -> interpreter firstOperation props)
 

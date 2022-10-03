@@ -13,37 +13,23 @@ let testOperationWithTrigger<'result> () =
   let mutable internalRerender = None
   let callCount = ref 0
   let operation = Operation({
-    Run = fun setResult props ->
+    Run = fun (setResult: 'result -> unit) props ->
       callCount := !callCount + 1
       let effectFunc () =
-        internalRerender <- Some(capture)
-        Some(fun _ -> Erase)
-      // match operationState with
-      // | None -> 
-      //   PerformWait(
-      //     {
-      //       Element = None
-      //       Effect = Some(effectFunc)
-      //       LayoutEffect = None
-      //       OperationState = Keep
-      //     }
-      //   )
-      // | Some(result) -> 
-      //   let castResult: 'result = unbox result
-      //   PerformContinue(
-      //     {
-      //       Element = None
-      //       Effect = None
-      //       LayoutEffect = None
-      //       OperationState = Keep
-      //     },
-      //     castResult
-      //   )
+        internalRerender <- Some(setResult)
+        None
+      
+      OperationWait ({
+        Element = None
+        Effect = Some(effectFunc)
+        LayoutEffect = None
+        Hook = None
+      })
   })
 
   let rerenderTrigger (value: 'result) =
     match internalRerender with
-    | Some(rerender) -> rerender(fun _ -> Replace(value :> obj))
+    | Some(rerender) -> rerender(value)
     | None -> failwith "internalRerender should have been set"
   
   rerenderTrigger, callCount, operation
