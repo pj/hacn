@@ -103,3 +103,20 @@ let RenderCapture captureElement =
         }
       )
   })
+
+// type HacnML =
+//   static member inline div (props: IReactProperty list) =
+//     Operation ({ 
+//       Run = 
+//         fun setResult _ -> 
+//           bindCapture setResult
+//           OperationContinue (
+//             {
+//               ReturnValue = ()
+//               Element = Some (Html.div props)
+//               Effect = None
+//               LayoutEffect = None
+//               Hook = None
+//             }
+//           )
+//     })

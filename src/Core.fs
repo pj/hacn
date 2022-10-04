@@ -122,7 +122,6 @@ type ExperimentState<'props> = {
   LastElement: ReactElement option
   Next: GetNext option
   Index: int option
-  // PropsNext: (int * GetNext) option
   Started: bool
   Hooks: (int * GetNextHook) list
   PrevProps: 'props option
