@@ -9,6 +9,7 @@
     <Compile Include="Operations.fs" />
     <Compile Include="Core.fs" />
     <Compile Include="Memo.fs" />
+    <Compile Include="ElementExpressions.fs" />
     <Compile Include="Render.fs" />
 
     <None Include="paket.references" />
