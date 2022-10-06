@@ -3,6 +3,7 @@ module RenderTest
 open Hacn.Core
 open Hacn.Operations
 open Hacn.Render
+open Hacn.ElementExpressions
 open Fable.Jester
 open Fable.ReactTestingLibrary
 open Feliz
@@ -21,10 +22,11 @@ let renderTests =
       let mutable clicked = false
       let App = 
         react {
-          do! Render Html.div [
-            prop.testId "test"
-            prop.captureClick ()
-          ]
+          do! Render (
+              div {
+                testId "test"
+                captureClick ()
+              })
           clicked <- true
         }
       let result = RTL.render(App ())
@@ -39,10 +41,11 @@ let renderTests =
         react {
           let! props = Props
           let! state, setState = State ""
-          do! Render Html.div [
-            prop.testId "test"
-            prop.captureClick ()
-          ]
+          do! Render (
+              div {
+                testId "test"
+                captureClick ()
+              })
           clicked <- true
         }
       let result = RTL.render(App ())
@@ -57,20 +60,35 @@ let renderTests =
         react {
           let! props = Props
           let! state, setState = State ""
-          let! value = Render Html.div [
-            prop.id "asdf"
-            prop.children [
-              Html.main [
-                prop.children [
-                  Html.input [
-                    prop.testId "test"
-                    prop.type' "text"
-                    prop.captureValueChange
+          let! value = Render div {
+              id "test"
+              children [
+                main {
+                  children [
+                    input {
+                      testId "test"
+                      type' "text"
+                      captureValueChange
+                    }
                   ]
-                ]
-              ]
-            ]
-          ]
+                }
+              ] 
+            }
+
+          // Html.div [
+          //   prop.id "asdf"
+          //   prop.children [
+          //     Html.main [
+          //       prop.children [
+          //         Html.input [
+          //           prop.testId "test"
+          //           prop.type' "text"
+          //           prop.captureValueChange
+          //         ]
+          //       ]
+          //     ]
+          //   ]
+          // ]
           setValue <- value
         }
       let result = RTL.render(App ())
@@ -88,22 +106,39 @@ let renderTests =
       let mutable clickedButton = Nothing
       let App = 
         react {
-          let! click = Render Html.div [
-            prop.children [
-              Html.button [
-                prop.testId "One"
-                prop.captureClick One
+          let! click = Render div {
+              children [
+                button {
+                  testId "One"
+                  captureClick One
+                }
+                button {
+                  testId "Two"
+                  captureClick Two
+                }
+                button {
+                  testId "Three"
+                  captureClick Three
+                }
               ]
-              Html.button [
-                prop.testId "Two"
-                prop.captureClick Two
-              ]
-              Html.button [
-                prop.testId "Three"
-                prop.captureClick Three
-              ]
-            ]
-          ]
+            }
+          
+          // Html.div [
+          //   prop.children [
+          //     Html.button [
+          //       prop.testId "One"
+          //       prop.captureClick One
+          //     ]
+          //     Html.button [
+          //       prop.testId "Two"
+          //       prop.captureClick Two
+          //     ]
+          //     Html.button [
+          //       prop.testId "Three"
+          //       prop.captureClick Three
+          //     ]
+          //   ]
+          // ]
           clickedButton <- click
         }
       let result = RTL.render(App ())
@@ -129,21 +164,35 @@ let renderTests =
     testCase "Render sequential captures and renders" <| fun () ->
       let App = 
         react {
-          do! Render Html.div [
-            prop.testId "click"
-            prop.captureClick ()
-          ]
+          do! Render div {
+            testId "click"
+            captureClick ()
+          }
+          
+          // Html.div [
+          //   prop.testId "click"
+          //   prop.captureClick ()
+          // ]
 
-          let! value = Render Html.input [
-            prop.testId "change"
-            prop.type' "text"
-            prop.captureValueChange
-          ]
+          let! value = Render input {
+            testId "change"
+            type' "text"
+            captureValueChange
+          } 
+          // Html.input [
+          //   prop.testId "change"
+          //   prop.type' "text"
+          //   prop.captureValueChange
+          // ]
 
-          do! Render Html.div [
-            prop.testId "finished"
-            prop.text (sprintf "Finished %s" value)
-          ]
+          do! Render div {
+            testId "finished"
+            text (sprintf "Finished %s" value)
+          }
+          // Html.div [
+          //   prop.testId "finished"
+          //   prop.text (sprintf "Finished %s" value)
+          // ]
         }
       let result = RTL.render(App ())
 
@@ -180,10 +229,14 @@ let renderTests =
               ]
           )
         if changedValue = "Hello" then
-          do! Render Html.div [
-              prop.testId "test"
-              prop.text "Hi there!"
-            ]
+          do! Render div {
+            testId "test"
+            text "Hi there!"
+          }
+          // Html.div [
+          //     prop.testId "test"
+          //     prop.text "Hi there!"
+          //   ]
       }
 
       let result = RTL.render(element ())
