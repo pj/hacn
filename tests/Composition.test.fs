@@ -9,6 +9,7 @@ open Feliz
 open Browser.Types
 open Fable.Mocha
 open Fable.Core.JS
+open Hacn.ElementExpressions
 
 type TestProps = { message: string }
 
@@ -19,11 +20,10 @@ let compositionTests =
       <| fun () ->
            let clickBlocker () =
              hacn {
-               do!
-                 Render
-                   Html.div
-                   [ prop.testId "test"
-                     prop.captureClick () ]
+               do! Render (div { 
+                    testId "test"
+                    captureClick () 
+                  })
              }
 
            let App =
@@ -31,11 +31,10 @@ let compositionTests =
                let! props = Props
                do! clickBlocker ()
 
-               do!
-                 Render
-                   Html.div
-                   [ prop.testId "clicked"
-                     prop.text "Element Clicked!" ]
+               do! Render (div {
+                  testId "clicked"
+                  text "Element Clicked!" 
+                })
              }
 
            let result = RTL.render (App())
@@ -53,11 +52,10 @@ let compositionTests =
                let! props = Props
                let! x = returner ()
 
-               do!
-                 Render
-                   Html.div
-                   [ prop.testId "test"
-                     prop.text (sprintf "%s World!" x) ]
+               do! Render (div { 
+                  testId "test"
+                  text (sprintf "%s World!" x) 
+                })
              }
 
            let result = RTL.render (App())
@@ -68,11 +66,10 @@ let compositionTests =
       <| fun () ->
            let returner () =
              hacn {
-               do!
-                 Render
-                   Html.div
-                   [ prop.testId "test"
-                     prop.captureClick () ]
+               do! Render (div { 
+                    testId "test"
+                    captureClick () 
+                  })
 
                return "Hello"
              }
@@ -81,11 +78,10 @@ let compositionTests =
              react {
                let! x = returner ()
 
-               do!
-                 Render
-                   Html.div
-                   [ prop.testId "clicked"
-                     prop.text (sprintf "%s World!" x) ]
+               do! Render (div { 
+                  testId "clicked"
+                  text (sprintf "%s World!" x) 
+                })
              }
 
            let result = RTL.render (App())
@@ -106,11 +102,10 @@ let compositionTests =
              react {
                let! x = propser ()
 
-               do!
-                 Render
-                   Html.div
-                   [ prop.testId "test"
-                     prop.text (sprintf "%s World!" x) ]
+               do! Render (div { 
+                  testId "test"
+                  text (sprintf "%s World!" x) 
+                })
              }
 
            let result = RTL.render (App { message = "Hello" })

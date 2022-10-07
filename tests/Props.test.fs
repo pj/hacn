@@ -6,6 +6,7 @@ open Feliz
 open Fable.Mocha
 open Hacn.Render
 open Browser.Types
+open Hacn.ElementExpressions
 
 [<CustomEquality; NoComparison>]
 type HeaderProps = { TestFunc: string -> unit }
@@ -16,25 +17,27 @@ type HeaderProps = { TestFunc: string -> unit }
 let Header = 
   react {
     let! props = Props
-    let! ref = Ref None
-    let! key = Render Html.header [
-        prop.className "header"
-        prop.children [
-          Html.h1 "todos"
-          Html.input [
-            prop.ref ref
-            prop.className "new-todo"
-            prop.testId "test"
-            prop.placeholder "What needs to be done?"
-            prop.captureKeyDown
-            prop.autoFocus true
-            prop.type' "text"
-              ]
-          ]
+    let! elementRef = Ref None
+    let! key = Render (header {
+      className "header"
+      children [
+        h1 {
+          text "todos"
+        }
+        input {
+          ref elementRef
+          className "new-todo"
+          testId "test"
+          placeholder "What needs to be done?"
+          captureKeyDown
+          autoFocus true
+          type' "text"
+        }
       ]
+    })
 
     if key = "Enter" then
-      match ref.current with
+      match elementRef.current with
       | Some(element) -> 
         let inputElement = box element :?> HTMLInputElement
         do! Call (fun () -> (props.TestFunc inputElement.value) )

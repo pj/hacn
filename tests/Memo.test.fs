@@ -11,6 +11,7 @@ open Browser.Types
 open Fable.Core.JS
 open Fable.Mocha
 open Hacn.Render
+open Hacn.ElementExpressions
 
 type MemoTestProps = {
   TestValue: string
@@ -33,28 +34,28 @@ let memoTests =
     testCase "No underlying effect" <| fun () ->
       let mutable insideOperationCount = 0
       let TestOperation = 
-        Perform({
-          PreProcess = fun _ -> None
-          GetResult = fun _ __ ->
-            insideOperationCount <- insideOperationCount + 1
-            PerformContinue(
-              {
-                Element = None
-                Effect = None
-                LayoutEffect = None
-                OperationState = Keep
-              }, 
-              "Hello World!"
-            )
-        })
+        Operation({
+          Run = 
+            fun _ __ ->
+              insideOperationCount <- insideOperationCount + 1
+              OperationContinue(
+                {
+                  ReturnValue = "Hello World!"
+                  Element = None
+                  Effect = None
+                  LayoutEffect = None
+                  Hook = None
+                } 
+              )
+          })
       let App = 
         react {
           let! props = Props
           let! message = Memo.Once(TestOperation)
-          do! Render Html.div [
-            prop.testId "test"
-            prop.text message
-          ]
+          do! Render (div {
+            testId "test"
+            text message
+          })
         }
       let result = RTL.render(App {TestValue = "first"})
       let testElement = result.getByTestId "test"
@@ -70,10 +71,10 @@ let memoTests =
         react {
           let! props = Props
           let! message = Memo.Once(operation)
-          do! Render Html.div [
-            prop.testId "test"
-            prop.text(sprintf "%A" message)
-          ]
+          do! Render (div {
+            testId "test"
+            text (sprintf "%A" message)
+          })
         }
       let result = RTL.render(App {TestValue = "first"})
       let testElement = result.queryByTestId "test"
@@ -92,11 +93,11 @@ let memoTests =
       let App = 
         react {
           let! props = Props
-          let! message = Memo.Memo operation (Some(fun _ -> props.TestValue = "Bust"))
-          do! Render Html.div [
-            prop.testId "test"
-            prop.text(sprintf "%A" message)
-          ]
+          let! message = Memo.Memo operation (fun _ -> props.TestValue = "Bust")
+          do! Render (div {
+            testId "test"
+            text (sprintf "%A" message)
+          })
         }
       let result = RTL.render(App {TestValue = "Something"})
       let testElement = result.queryByTestId "test"

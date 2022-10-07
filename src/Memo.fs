@@ -6,7 +6,7 @@ open Fable.React
 
 // This is mostly for underlying operations that have a simple PerformContinue 
 // result, or PerformWait then PerformContinue process
-let Memo<'returnType> wrappedOperation (changed: 'state -> bool) = 
+let Memo<'returnType> (wrappedOperation: Builder<'returnType>) (changed: 'returnType -> bool) = 
   Operation ({ 
     Run = 
       fun setResult props -> 
@@ -54,4 +54,4 @@ let Memo<'returnType> wrappedOperation (changed: 'state -> bool) =
           runChanged ()
   })
 
-let Once wrappedOperation = Memo wrappedOperation (fun _ -> true)
+let Once (wrappedOperation: Builder<'returnType>) = Memo wrappedOperation (fun (rt: 'returnType) -> true)

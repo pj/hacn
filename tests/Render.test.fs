@@ -60,7 +60,7 @@ let renderTests =
         react {
           let! props = Props
           let! state, setState = State ""
-          let! value = Render div {
+          let! value = Render (div {
               id "test"
               children [
                 main {
@@ -73,7 +73,7 @@ let renderTests =
                   ]
                 }
               ] 
-            }
+            })
 
           // Html.div [
           //   prop.id "asdf"
@@ -106,7 +106,7 @@ let renderTests =
       let mutable clickedButton = Nothing
       let App = 
         react {
-          let! click = Render div {
+          let! click = Render (div {
               children [
                 button {
                   testId "One"
@@ -121,7 +121,7 @@ let renderTests =
                   captureClick Three
                 }
               ]
-            }
+            })
           
           // Html.div [
           //   prop.children [
@@ -164,35 +164,21 @@ let renderTests =
     testCase "Render sequential captures and renders" <| fun () ->
       let App = 
         react {
-          do! Render div {
+          do! Render (div {
             testId "click"
             captureClick ()
-          }
+          })
           
-          // Html.div [
-          //   prop.testId "click"
-          //   prop.captureClick ()
-          // ]
-
-          let! value = Render input {
+          let! value = Render (input {
             testId "change"
             type' "text"
             captureValueChange
-          } 
-          // Html.input [
-          //   prop.testId "change"
-          //   prop.type' "text"
-          //   prop.captureValueChange
-          // ]
+          })
 
-          do! Render div {
+          do! Render (div {
             testId "finished"
             text (sprintf "Finished %s" value)
-          }
-          // Html.div [
-          //   prop.testId "finished"
-          //   prop.text (sprintf "Finished %s" value)
-          // ]
+          })
         }
       let result = RTL.render(App ())
 
@@ -229,10 +215,10 @@ let renderTests =
               ]
           )
         if changedValue = "Hello" then
-          do! Render div {
+          do! Render (div {
             testId "test"
             text "Hi there!"
-          }
+          })
           // Html.div [
           //     prop.testId "test"
           //     prop.text "Hi there!"

@@ -1,18 +1,17 @@
 module Hacn.Render
 
-open Fable.React
-// open Utils
 open Feliz
-open Fable.Core.JsInterop
 open FSharp.Core
 
 let Render<'returnType> (builder: Ref<('returnType -> unit) option> -> ReactElement) =
   Operation ({ 
     Run = 
       fun (setResult: 'returnType -> unit) _ -> 
+        let captureRef = ref (Some (setResult))
+        let element = builder captureRef
         OperationWait (
           {
-            Element = Some (builder (ref (Some setResult)))
+            Element = Some (element)
             Effect = None
             LayoutEffect = None
             Hook = None

@@ -2,6 +2,8 @@ module Hacn.ElementExpressions
 
 open Fable.React.Props
 open Fable.React
+open Fable.Core.JsInterop
+open Fable.Core
 
 type ElementSequence<'returnType> =
   | ElementSequence of IHTMLProp list * ReactElement list * Ref<('returnType -> unit) option>
@@ -31,10 +33,25 @@ type ElementBuilder(elementConstructor) =
   member _.Text(ElementSequence(props, children, captureRef), text) =
     ElementSequence(props, List.append children [str text], captureRef)
 
+  [<CustomOperation("placeholder")>]
+  member _.PlaceHolder(ElementSequence(props, children, captureRef), text) =
+    let placeholderProp = HTMLAttr.Placeholder text :> IHTMLProp
+    ElementSequence(placeholderProp :: props, children, captureRef)
+
+  [<CustomOperation("autoFocus")>]
+  member _.AutoFocus(ElementSequence(props, children, captureRef), autofocus) =
+    let autofocusProp = HTMLAttr.AutoFocus autofocus :> IHTMLProp
+    ElementSequence(autofocusProp :: props, children, captureRef)
+
   [<CustomOperation("children")>]
   member _.Children(ElementSequence(props, children, captureRef), moreChildren) =
     let refChildren = List.map (fun c -> c captureRef) moreChildren
     ElementSequence(props, List.append children refChildren, captureRef)
+
+  [<CustomOperation("ref")>]
+  member _.Ref(ElementSequence(props, children, captureRef), ref) =
+    let refProp = unbox ("ref", ref) :> IHTMLProp
+    ElementSequence(refProp :: props, children, captureRef)
 
   [<CustomOperation("captureClick")>]
   member _.CaptureClick(ElementSequence(props, children, captureRef), value) =
@@ -49,6 +66,11 @@ type ElementBuilder(elementConstructor) =
   [<CustomOperation("captureValueChange")>]
   member _.CaptureValueChange(ElementSequence(props, children, captureRef)) =
     let captureClickProp = DOMAttr.OnChange (fun event -> (Option.get captureRef.contents) event.Value) :> IHTMLProp
+    ElementSequence(captureClickProp :: props, children, captureRef)
+
+  [<CustomOperation("captureKeyDown")>]
+  member _.CaptureKeyDown(ElementSequence(props, children, captureRef)) =
+    let captureClickProp = DOMAttr.OnKeyDown (fun event -> (Option.get captureRef.contents) event.key) :> IHTMLProp
     ElementSequence(captureClickProp :: props, children, captureRef)
 
   member _.Yield(value) = 
@@ -80,7 +102,10 @@ type ElementBuilder(elementConstructor) =
 let div = ElementBuilder(div)
 let a = ElementBuilder(a)
 let main = ElementBuilder(main)
+let header = ElementBuilder(header)
 let input = ElementBuilder(fun props _ -> input props)
+let button = ElementBuilder(button)
+let h1 = ElementBuilder(h1)
 
 // let asdf = 
 //   div {
