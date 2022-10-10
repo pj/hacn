@@ -155,9 +155,9 @@ let tuple2SetResult waitRef setResult index =
   fun returnValue -> 
     let existingFirst, existingSecond = !waitRef
     if index = 0 then
-      waitRef := (existingFirst, Some (returnValue))
-    else
       waitRef := (Some (returnValue), existingSecond)
+    else
+      waitRef := (existingFirst, Some (returnValue))
     let first, second = !waitRef
 
     let mappedWait = Option.map2 (fun a b -> (a, b)) first second

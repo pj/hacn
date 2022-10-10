@@ -1,5 +1,0 @@
-group Rewrite
-  Fable.Browser.Dom
-  Fable.Core
-  Fable.React
-  Feliz

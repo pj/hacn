@@ -34,7 +34,9 @@ let props () =
           prop.testId "rerenderWrapper"
           prop.onChange (fun event -> setState(event))
         ]
-        yield! [element {Message = state}]
+        yield! [
+          element {Message = state}
+        ]
       ]
     )
 

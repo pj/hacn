@@ -28,7 +28,7 @@ let bind (underlyingOperation: Builder<'a>) (f: 'a -> Builder<'b>) : Builder<'b>
                 | Execution contents -> 
                   let executionResult = contents.Execute (index+1) props setNext
                   {
-                    Element = None
+                    Element = executionResult.Element
                     Effects = executionResult.Effects
                     LayoutEffects = executionResult.LayoutEffects
                     Hooks = executionResult.Hooks
@@ -49,7 +49,7 @@ let bind (underlyingOperation: Builder<'a>) (f: 'a -> Builder<'b>) : Builder<'b>
             | Execution contents -> 
               let executionResult = contents.Execute (index+1) props setNext
               Some({
-                Element = None
+                Element = executionResult.Element
                 Effects = executionResult.Effects
                 LayoutEffects = executionResult.LayoutEffects
                 Hooks = executionResult.Hooks
@@ -155,8 +155,6 @@ let rec runHooks hooks props =
       runHooks t props
 
 let runNext (componentStateRef : IRefValue<ExperimentState<'props>>) (props: 'props) =
-  // Run hooks and see if there are any results we should trigger off
-    
   let foundHook = runHooks componentStateRef.current.Hooks props
 
   match foundHook with
@@ -194,7 +192,6 @@ let getFirst delayOperation setNext =
           Effects = executionResult.Effects
           LayoutEffects = executionResult.LayoutEffects
           Hooks = executionResult.Hooks
-          // PropsNext = executionResult.PropsNext
         }
       execNext
     | _ -> failwith (sprintf "Delayed operation must be execution type, got %A" firstOperation)
@@ -260,7 +257,7 @@ let interpreter delayOperation props =
       rerender ()
   
   if not componentStateRef.current.Started then
-    componentStateRef.current <- {
+      componentStateRef.current <- {
       componentStateRef.current with 
         Next = Some (getFirst delayOperation setNext)
         }
@@ -305,7 +302,8 @@ type ReactBuilder () =
   member _.Combine (f1, f2) = combine f1 f2
 
   member _.Run(firstOperation) =
-    Fable.React.FunctionComponent.Of (fun props -> interpreter firstOperation props)
+    // Fable.React.FunctionComponent.Of (fun props -> interpreter firstOperation props)
+    Feliz.React.functionComponent (fun props -> interpreter firstOperation props)
 
 let react = ReactBuilder()
 

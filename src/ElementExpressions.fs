@@ -74,7 +74,6 @@ type ElementBuilder(elementConstructor) =
     ElementSequence(captureClickProp :: props, children, captureRef)
 
   member _.Yield(value) = 
-    printf "Yield: %A" value
     ElementSequence([], [], ref None)
 
   // member _.For(value) =
@@ -82,14 +81,21 @@ type ElementBuilder(elementConstructor) =
   //   ElementSequence([], [])
   
   member _.Zero () =
-    printf "Yield"
     ElementSequence([], [], ref None)
   
+  member _.Delay (f) = 
+    f
+
   // abstract Run: ElementSequence<'returnType> -> (Ref<('returnType -> unit) option> -> ReactElement)
-  member _.Run(ElementSequence(props, children, captureRef)) =
+  member _.Run(getElementSequence: (unit -> ElementSequence<'returnType>)) =
+    // printf "In run"
     fun (setResultRef: Ref<('returnType -> unit) option>) -> 
-      captureRef := setResultRef.contents
-      elementConstructor props children
+      // printf "In call to element sequence"
+      let elementSequence = getElementSequence ()
+      match elementSequence with 
+      | ElementSequence(props, children, captureRef) ->
+        captureRef := setResultRef.contents
+        elementConstructor props children
 
 // type InputBuilder(elementConstructor) =
 //   inherit ElementBuilder(elementConstructor)
@@ -106,17 +112,3 @@ let header = ElementBuilder(header)
 let input = ElementBuilder(fun props _ -> input props)
 let button = ElementBuilder(button)
 let h1 = ElementBuilder(h1)
-
-// let asdf = 
-//   div {
-//     children [
-//       div {
-//         childText "asdf"
-//       }
-//       div {
-//         childText "asdfasdf"
-//         captureClickEvent
-//       }
-//     ] 
-//     testId "erer"
-//   }
