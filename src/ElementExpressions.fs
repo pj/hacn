@@ -6,96 +6,90 @@ open Fable.Core.JsInterop
 open Fable.Core
 
 type ElementSequence<'returnType> =
-  | ElementSequence of IHTMLProp list * ReactElement list * Ref<('returnType -> unit) option>
+  | ElementSequence of IHTMLProp list * (('returnType -> unit) -> IHTMLProp) list * (('returnType -> unit) -> ReactElement) list
 
 type ElementBuilder(elementConstructor) =
   [<CustomOperation("id")>]
-  member _.Id(ElementSequence(props, children, captureRef), id) =
+  member _.Id(ElementSequence(props, captures, children), id) =
     let idProp = Id(id) :> IHTMLProp
-    ElementSequence(idProp :: props, children, captureRef)
+    ElementSequence(idProp :: props, captures, children)
 
   [<CustomOperation("className")>]
-  member _.ClassName(ElementSequence(props, children, captureRef), name) =
+  member _.ClassName(ElementSequence(props, captures, children), name) =
     let classNameProp = ClassName(name) :> IHTMLProp
-    ElementSequence(classNameProp :: props, children, captureRef)
+    ElementSequence(classNameProp :: props, captures, children)
 
   [<CustomOperation("type'")>]
-  member _.Type(ElementSequence(props, children, captureRef), type') =
+  member _.Type(ElementSequence(props, captures, children), type') =
     let typeProp = Type(type') :> IHTMLProp
-    ElementSequence(typeProp :: props, children, captureRef)
+    ElementSequence(typeProp :: props, captures, children)
 
   [<CustomOperation("testId")>]
-  member _.TestId(ElementSequence(props, children, captureRef), name) =
+  member _.TestId(ElementSequence(props, captures, children), name) =
     let classNameProp = HTMLAttr.Custom("data-testid", name) :> IHTMLProp
-    ElementSequence(classNameProp :: props, children, captureRef)
+    ElementSequence(classNameProp :: props, captures, children)
 
   [<CustomOperation("text")>]
-  member _.Text(ElementSequence(props, children, captureRef), text) =
-    ElementSequence(props, List.append children [str text], captureRef)
+  member _.Text(ElementSequence(props, captures, children), text) =
+    ElementSequence(props, captures, List.append children [(fun _ -> str text)])
 
   [<CustomOperation("placeholder")>]
-  member _.PlaceHolder(ElementSequence(props, children, captureRef), text) =
+  member _.PlaceHolder(ElementSequence(props, captures, children), text) =
     let placeholderProp = HTMLAttr.Placeholder text :> IHTMLProp
-    ElementSequence(placeholderProp :: props, children, captureRef)
+    ElementSequence(placeholderProp :: props, captures, children)
 
   [<CustomOperation("autoFocus")>]
-  member _.AutoFocus(ElementSequence(props, children, captureRef), autofocus) =
+  member _.AutoFocus(ElementSequence(props, captures, children), autofocus) =
     let autofocusProp = HTMLAttr.AutoFocus autofocus :> IHTMLProp
-    ElementSequence(autofocusProp :: props, children, captureRef)
+    ElementSequence(autofocusProp :: props, captures, children)
 
   [<CustomOperation("children")>]
-  member _.Children(ElementSequence(props, children, captureRef), moreChildren) =
-    let refChildren = List.map (fun c -> c captureRef) moreChildren
-    ElementSequence(props, List.append children refChildren, captureRef)
+  member _.Children(ElementSequence(props, captures, children), moreChildren) =
+    // let refChildren = List.map (fun c -> c captureRef) moreChildren
+    ElementSequence(props, captures, List.append children moreChildren)
 
   [<CustomOperation("ref")>]
-  member _.Ref(ElementSequence(props, children, captureRef), ref) =
+  member _.Ref(ElementSequence(props, captures, children), ref) =
     let refProp = unbox ("ref", ref) :> IHTMLProp
-    ElementSequence(refProp :: props, children, captureRef)
+    ElementSequence(refProp :: props, captures, children)
 
   [<CustomOperation("captureClick")>]
-  member _.CaptureClick(ElementSequence(props, children, captureRef), value) =
-    let captureClickProp = DOMAttr.OnClick (fun _ -> (Option.get captureRef.contents) value) :> IHTMLProp
-    ElementSequence(captureClickProp :: props, children, captureRef)
+  member _.CaptureClick(ElementSequence(props, captures, children), value) =
+    let captureClickProp = fun setResult -> DOMAttr.OnClick (fun _ -> setResult value) :> IHTMLProp
+    ElementSequence(props, captureClickProp :: captures, children)
 
   [<CustomOperation("captureClickEvent")>]
-  member _.CaptureClickEvent(ElementSequence(props, children, captureRef)) =
-    let captureClickProp = DOMAttr.OnClick (fun event -> (Option.get captureRef.contents) event) :> IHTMLProp
-    ElementSequence(captureClickProp :: props, children, captureRef)
+  member _.CaptureClickEvent(ElementSequence(props, captures, children)) =
+    let captureClickProp = fun setResult -> DOMAttr.OnClick (fun event -> setResult event) :> IHTMLProp
+    ElementSequence(props, captureClickProp :: captures, children)
 
   [<CustomOperation("captureValueChange")>]
-  member _.CaptureValueChange(ElementSequence(props, children, captureRef)) =
-    let captureClickProp = DOMAttr.OnChange (fun event -> (Option.get captureRef.contents) event.Value) :> IHTMLProp
-    ElementSequence(captureClickProp :: props, children, captureRef)
+  member _.CaptureValueChange(ElementSequence(props, captures, children)) =
+    let captureClickProp = fun setResult -> DOMAttr.OnChange (fun event -> setResult event.Value) :> IHTMLProp
+    ElementSequence(props, captureClickProp :: captures, children)
 
   [<CustomOperation("captureKeyDown")>]
-  member _.CaptureKeyDown(ElementSequence(props, children, captureRef)) =
-    let captureClickProp = DOMAttr.OnKeyDown (fun event -> (Option.get captureRef.contents) event.key) :> IHTMLProp
-    ElementSequence(captureClickProp :: props, children, captureRef)
+  member _.CaptureKeyDown(ElementSequence(props, captures, children)) =
+    let captureClickProp = fun setResult -> DOMAttr.OnKeyDown (fun event -> setResult event.key) :> IHTMLProp
+    ElementSequence(props, captureClickProp :: captures, children)
 
   member _.Yield(value) = 
-    ElementSequence([], [], ref None)
+    ElementSequence([], [], [])
 
-  // member _.For(value) =
-  //   printf "For: %A" value
-  //   ElementSequence([], [])
-  
   member _.Zero () =
-    ElementSequence([], [], ref None)
-  
+    ElementSequence([], [], [])
+
   member _.Delay (f) = 
     f
 
-  // abstract Run: ElementSequence<'returnType> -> (Ref<('returnType -> unit) option> -> ReactElement)
   member _.Run(getElementSequence: (unit -> ElementSequence<'returnType>)) =
-    // printf "In run"
-    fun (setResultRef: Ref<('returnType -> unit) option>) -> 
-      // printf "In call to element sequence"
+    fun (setResult: 'returnType -> unit) -> 
       let elementSequence = getElementSequence ()
       match elementSequence with 
-      | ElementSequence(props, children, captureRef) ->
-        captureRef := setResultRef.contents
-        elementConstructor props children
+      | ElementSequence(props, captures, children) ->
+        let allProps = List.append props (List.map (fun c -> c setResult) captures)
+        let captureChildren = List.map (fun c -> c setResult) children
+        elementConstructor allProps captureChildren
 
 // type InputBuilder(elementConstructor) =
 //   inherit ElementBuilder(elementConstructor)

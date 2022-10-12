@@ -3,12 +3,11 @@ module Hacn.Render
 open Feliz
 open FSharp.Core
 
-let Render<'returnType> (builder: Ref<('returnType -> unit) option> -> ReactElement) =
+let Render<'returnType> (builder: ('returnType -> unit) -> ReactElement) =
   Operation ({ 
     Run = 
       fun (setResult: 'returnType -> unit) _ -> 
-        let captureRef = ref (Some (setResult))
-        let element = builder captureRef
+        let element = builder setResult
         OperationWait (
           {
             Element = Some (element)
