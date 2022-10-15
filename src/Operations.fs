@@ -48,7 +48,7 @@ let State<'state> (initialState: 'state) =
   Operation(
     { 
       Run =
-        fun _ __ ->
+        fun () ->
           let state = Hooks.useState(initialState)
 
           let StateSetOperation setState (newState: 'state) : Builder<unit> =

@@ -4,55 +4,46 @@ module Hacn.Types
 open Fable.React
 
 type Disposer = unit -> unit
-type Effect = unit -> Disposer option
 
-type OperationContents<'opContents> = {
-  Run: ('opContents -> unit) -> obj -> OperationResult<'opContents>
-}
-and ExecutionContents<'opContents> = {
-  Execute: int -> obj -> NextSetter -> ExecutionResult<'opContents>
-}
-and HookFunc<'opContents> = obj -> 'opContents option
-and ContinueContents<'opContents> = {
-  ReturnValue: 'opContents
-  Element: ReactElement option
-  Effect: Effect option
-  LayoutEffect: Effect option
-  Hook: HookFunc<'opContents> option
-}
-and WaitContents<'opContents> = {
-  Element: ReactElement option
-  Effect: Effect option
-  LayoutEffect: Effect option
-  Hook: HookFunc<'opContents> option
+type HookFunc<'opContents> = obj -> 'opContents option
+and SetResult<'opContents> = 'opContents -> unit
+
+and OperationContents<'opContents> = {
+  Run: unit -> OperationResult<'opContents>
 }
 and OperationResult<'opContents> =
   | OperationWait of WaitContents<'opContents>
   | OperationContinue of ContinueContents<'opContents>
-and NextResult = {
-  Element: ReactElement option
-  Effects: (int * Effect) list
-  LayoutEffects: (int * Effect) list
-  // PropsNext: (int * GetNext) option
-  Hooks: (int * GetNextHook) list
+and ContinueContents<'opContents> = {
+  ReturnValue: 'opContents
+  Element: (SetResult<'opContents> -> ReactElement) option
+  Effect: ((SetResult<'opContents> -> unit) * Disposer option) option
+  LayoutEffect: ((SetResult<'opContents> -> unit) * Disposer option) option
+  Hook: HookFunc<'opContents> option
 }
-and NextValue = {
-  Next: GetNext option
-  Index: int
+and WaitContents<'opContents> = {
+  Element: (SetResult<'opContents> -> ReactElement) option
+  Effect: ((SetResult<'opContents> -> unit) * Disposer option) option
+  LayoutEffect: ((SetResult<'opContents> -> unit) * Disposer option) option
+  Hook: HookFunc<'opContents> option
 }
-and NextValueHooks = {
-  Next: GetNext
-  Index: int
+
+and GetNext = obj -> (ExecutionStuff list)
+and Effect = (((unit -> ExecutionStuff list) -> unit) -> unit) * (Disposer option)
+and GetElement = ((unit -> ExecutionStuff list) -> unit) -> ReactElement
+and ExecutionContents<'opContents> = {
+  Execute: unit -> ExecutionResult<'opContents>
 }
-and NextSetter = NextValue -> unit
-and GetNext = obj -> NextResult
-and GetNextHook = obj -> NextResult option
+and ExecutionStuff = {
+  Element: GetElement option
+  Effect: Effect option
+  LayoutEffect: Effect option
+  Hook: GetNext option
+}
+
 and ExecutionResult<'opContents> = {
   ReturnValue: 'opContents option
-  Element: ReactElement option
-  Effects: (int * Effect) list
-  LayoutEffects: (int * Effect) list
-  Hooks: (int * GetNextHook) list
+  ThingsToCapture: ExecutionStuff list
 }
 and Builder<'opContents> =
   | Delay of (unit -> Builder<'opContents>)

@@ -6,11 +6,10 @@ open FSharp.Core
 let Render<'returnType> (builder: ('returnType -> unit) -> ReactElement) =
   Operation ({ 
     Run = 
-      fun (setResult: 'returnType -> unit) _ -> 
-        let element = builder setResult
+      fun () ->
         OperationWait (
           {
-            Element = Some (element)
+            Element = Some (fun setResult -> builder setResult)
             Effect = None
             LayoutEffect = None
             Hook = None
@@ -36,13 +35,14 @@ let Render<'returnType> (builder: ('returnType -> unit) -> ReactElement) =
 
 let RenderCapture captureElement =
   Operation ({ 
-    Run = fun setResult props -> 
-      OperationWait (
-        {
-          Element = Some (captureElement setResult)
-          Effect = None
-          LayoutEffect = None
-          Hook = None
-        }
-      )
+    Run = 
+      fun () -> 
+        OperationWait (
+          {
+            Element = Some (fun setResult -> captureElement setResult)
+            Effect = None
+            LayoutEffect = None
+            Hook = None
+          }
+        )
   })
