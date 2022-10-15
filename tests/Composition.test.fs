@@ -43,6 +43,7 @@ let compositionTests =
            let element = result.getByTestId "clicked"
            Expect.equal element.textContent "Element Clicked!" "Clicked successfully"
            RTL.cleanup ()
+
       testCase "Compose simple return"
       <| fun () ->
            let returner () = hacn { return "Hello" }
@@ -62,6 +63,7 @@ let compositionTests =
            let element = result.getByTestId "test"
            Expect.equal element.textContent "Hello World!" "Clicked successfully"
            RTL.cleanup ()
+
       testCase "Compose with render"
       <| fun () ->
            let returner () =
@@ -90,6 +92,7 @@ let compositionTests =
            let element = result.getByTestId "clicked"
            Expect.equal element.textContent "Hello World!" "Clicked successfully"
            RTL.cleanup ()
+
       testCase "Compose with props"
       <| fun () ->
            let propser () =
