@@ -9,7 +9,7 @@ type HookFunc<'opContents> = obj -> 'opContents option
 and SetResult<'opContents> = 'opContents -> unit
 
 and OperationContents<'opContents> = {
-  Run: unit -> OperationResult<'opContents>
+  Run: obj -> OperationResult<'opContents>
 }
 and OperationResult<'opContents> =
   | OperationWait of WaitContents<'opContents>
@@ -28,11 +28,11 @@ and WaitContents<'opContents> = {
   Hook: HookFunc<'opContents> option
 }
 
-and GetNext = obj -> (ExecutionStuff list)
+and GetNext = obj -> (ExecutionStuff list) option
 and Effect = (((unit -> ExecutionStuff list) -> unit) -> unit) * (Disposer option)
 and GetElement = ((unit -> ExecutionStuff list) -> unit) -> ReactElement
 and ExecutionContents<'opContents> = {
-  Execute: unit -> ExecutionResult<'opContents>
+  Execute: obj -> ExecutionResult<'opContents>
 }
 and ExecutionStuff = {
   Element: GetElement option

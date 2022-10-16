@@ -17,7 +17,7 @@ let Props<'returnType > =
   let mutable prevProps = None
   Operation({
       Run = 
-        fun _ props ->
+        fun props ->
           let propsHook props =
             let unboxedProps = unbox<'returnType> props
             match prevProps with
@@ -48,21 +48,20 @@ let State<'state> (initialState: 'state) =
   Operation(
     { 
       Run =
-        fun () ->
+        fun _ ->
           let state = Hooks.useState(initialState)
 
           let StateSetOperation setState (newState: 'state) : Builder<unit> =
             Operation (
               { 
                 Run =
-                  fun _ __ ->
-                    let stateSetEffect () =
+                  fun _ ->
+                    let stateSetEffect _ =
                       setState newState
-                      None
 
                     OperationWait (
                       { Element = None
-                        Effect = Some (stateSetEffect)
+                        Effect = Some (stateSetEffect, None)
                         LayoutEffect = None
                         Hook = None 
                       }
@@ -190,7 +189,7 @@ let Wait2 op1 op2 =
   Operation (
     { 
       Run =
-        fun setResult props ->
+        fun props ->
           let opResult1 = getOperationResult op1 (tuple2SetResult waitRef setResult 0) props
           let opResult2 = getOperationResult op2 (tuple2SetResult waitRef setResult 1) props
 
@@ -261,7 +260,7 @@ let WaitAny2 op1 op2 =
   Operation (
     { 
       Run =
-        fun setResult props ->
+        fun props ->
           let indexedSetResult setResult index =
             fun returnValue -> 
               if not complete then
@@ -272,12 +271,12 @@ let WaitAny2 op1 op2 =
 
           let opResult1 =
             match op1 with
-            | Operation (pd1) -> pd1.Run (indexedSetResult setResult 0) props
+            | Operation (pd1) -> pd1.Run props
             | _ -> failwith "Can only work with Operation types"
 
           let opResult2 =
             match op2 with
-            | Operation (pd2) -> pd2.Run (indexedSetResult setResult 1) props
+            | Operation (pd2) -> pd2.Run props
             | _ -> failwith "Can only work with Operation types"
 
           match opResult1, opResult2 with
@@ -339,26 +338,24 @@ let NextAny = End
 
 // time operations
 let Timeout time =
+  let mutable timeoutID = None
   Operation(
     { 
       Run =
-        fun setResult _ ->
-          let timeoutEffect () =
+        fun _ ->
+          let timeoutEffect setResult =
             let timeoutCallback () =
               setResult ()
 
-            let timeoutID =
-              Fable.Core.JS.setTimeout timeoutCallback time
+            timeoutID <- Some (Fable.Core.JS.setTimeout timeoutCallback time)
 
-            Some
-              (fun () ->
-                Fable.Core.JS.clearTimeout timeoutID
-              )
+          let timeoutDispose () =
+            Option.iter Fable.Core.JS.clearTimeout timeoutID
 
           OperationWait(
             { 
               Element = None
-              Effect = Some(timeoutEffect)
+              Effect = Some(timeoutEffect, Some(timeoutDispose))
               LayoutEffect = None
               Hook = None
             }
@@ -367,26 +364,24 @@ let Timeout time =
   )
 
 let Interval interval =
+  let mutable timeoutID = None
   Operation(
     { 
       Run =
-        fun setResult _ ->
-          let timeoutEffect () =
+        fun _ ->
+          let timeoutEffect setResult =
             let timeoutCallback () =
               setResult ()
 
-            let timeoutID =
-              Fable.Core.JS.setInterval timeoutCallback interval
+            timeoutID <- Some (Fable.Core.JS.setInterval timeoutCallback interval)
 
-            Some
-              (fun () ->
-                Fable.Core.JS.clearInterval timeoutID
-              )
+          let timeoutDispose () =
+            Option.iter Fable.Core.JS.clearInterval timeoutID
 
           OperationContinue(
             { ReturnValue = ()
               Element = None
-              Effect = Some(timeoutEffect)
+              Effect = Some(timeoutEffect, Some(timeoutDispose))
               LayoutEffect = None
               Hook = None
             }
@@ -406,7 +401,7 @@ let ContextCore<'returnType when 'returnType: equality>
   Operation(
     { 
       Run =
-        fun _ __ ->
+        fun _ ->
           let contextHook _ =
             let currentContext = useContext (context)
             match prevContext with
@@ -439,7 +434,7 @@ let Ref (initialValue: 'returnType option) =
   Operation(
     { 
       Run =
-        fun _ __ ->
+        fun _ ->
           let currentRef = Hooks.useRef (initialValue)
 
           OperationContinue(
@@ -463,16 +458,15 @@ let Call callable =
   Operation(
     { 
       Run =
-        fun _ __ ->
+        fun _ ->
           let callCallable _ =
             callable ()
-            None
 
           OperationContinue(
             { 
               ReturnValue = ()
               Element = None
-              Effect = Some(callCallable)
+              Effect = Some(callCallable, None)
               LayoutEffect = None
               Hook = None
               }
@@ -483,17 +477,16 @@ let CallLayout callable =
   Operation(
     { 
       Run =
-        fun _ __ ->
+        fun _ ->
           let callCallable _ =
             callable ()
-            None
 
           OperationContinue(
             { 
               ReturnValue = ()
               Element = None
               Effect = None
-              LayoutEffect = Some(callCallable)
+              LayoutEffect = Some(callCallable, None)
               Hook = None
               }
           ) }

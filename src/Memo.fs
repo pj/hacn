@@ -9,20 +9,20 @@ open Fable.React
 let Memo<'returnType> (wrappedOperation: Builder<'returnType>) (changed: 'returnType -> bool) = 
   Operation ({ 
     Run = 
-      fun setResult props -> 
+      fun props -> 
         let stateHook = Hooks.useState None
 
         let hook _ =
           Hooks.useState None
           None
 
-        let setMemoResult returnValue =
-          stateHook.update (fun _ -> Some (returnValue))
+        // let setMemoResult returnValue =
+        //   stateHook.update (fun _ -> Some (returnValue))
         
         let runChanged () =
           let result = 
             match wrappedOperation with
-            | Operation (opContents) -> opContents.Run setMemoResult props
+            | Operation (opContents) -> opContents.Run props
             | _ -> failwith "Only works with Operation types"
           
           let (element, effect, layoutEffect) =

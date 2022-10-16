@@ -6,7 +6,7 @@ open FSharp.Core
 let Render<'returnType> (builder: ('returnType -> unit) -> ReactElement) =
   Operation ({ 
     Run = 
-      fun () ->
+      fun _ ->
         OperationWait (
           {
             Element = Some (fun setResult -> builder setResult)
@@ -36,7 +36,7 @@ let Render<'returnType> (builder: ('returnType -> unit) -> ReactElement) =
 let RenderCapture captureElement =
   Operation ({ 
     Run = 
-      fun () -> 
+      fun _ -> 
         OperationWait (
           {
             Element = Some (fun setResult -> captureElement setResult)
