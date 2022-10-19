@@ -96,12 +96,6 @@ let State<'state> (initialState: 'state) =
 
 let uFunc x = x ()
 
-// let mapEither eff1Opt eff2Opt f =
-//   match eff1Opt, eff2Opt with
-//   | None, None -> None
-//   | eff1Opt, eff2Opt ->
-//     f eff1Opt eff2Opt
-
 let createCombinedDispose disposeOpt1 disposeOpt2 =
   let combinedDisposer () =
     Option.iter uFunc disposeOpt1
@@ -111,78 +105,66 @@ let createCombinedDispose disposeOpt1 disposeOpt2 =
   | None, None -> None
   | _ -> Some(combinedDisposer)
 
-let createCombinedEffect eff1Opt eff2Opt =
+let createCombinedEffect (waitRef: (option<'a> * option<'b>) ref) eff1Opt eff2Opt =
   match eff1Opt, eff2Opt with
-  | None, None -> None
-  | eff1Opt, eff2Opt ->
-      let combinedEffect () =
-        let disposeOpt1 = Option.flatten (Option.map uFunc eff1Opt)
-        let disposeOpt2 = Option.flatten (Option.map uFunc eff2Opt)
-
-        createCombinedDispose disposeOpt1 disposeOpt2
-
-      Some(combinedEffect)
+  | Some (eff1, dispose1), Some (eff2, dispose2) -> 
+    let combinedEffect setResult = 
+      eff1 (
+          fun value1 -> 
+            match waitRef.contents with 
+            | (_, Some(value2)) ->
+              setResult (Some value1, Some value2)
+            | _ -> ()
+        )
+      eff2 (
+          fun value2 -> 
+            match waitRef.contents with 
+            | (Some(value1), _) ->
+              setResult (Some value1, Some value2)
+            | _ -> ()
+        )
+    Some (combinedEffect, createCombinedDispose dispose1 dispose2)
+  | Some (eff1, dispose1), None ->
+    let combinedEffect setResult = 
+      eff1 (
+          fun value1 -> 
+            match waitRef.contents with 
+            | (_, Some(value2)) ->
+              setResult (Some value1, Some value2)
+            | _ -> ()
+        )
+    Some (combinedEffect, dispose1)
+  | None, Some (eff2, dispose2) -> 
+    let combinedEffect setResult = 
+      eff2 (
+          fun value2 -> 
+            match waitRef.contents with 
+            | (Some(value1), _) ->
+              setResult (Some value1, Some value2)
+            | _ -> ()
+        )
+    Some (combinedEffect, dispose2)
+  | None, None -> 
+    None
 
 let getElement elementOpt1 elementOpt2 =
   match elementOpt1, elementOpt2 with
-  | Some (element1), Some (_) -> Some(element1)
-  | Some (element1), None -> Some(element1)
-  | None, Some (element2) -> Some(element2)
+  | Some (element1), Some (_) -> 
+    Some (
+      fun setResult -> element1 (fun returnValue -> setResult (Some(returnValue), None))
+    )
+  | Some (element1), None ->
+    Some (
+      fun setResult -> element1 (fun returnValue -> setResult (Some(returnValue), None))
+    )
+  | None, Some (element2) -> 
+    Some (fun setResult -> element2 (fun returnValue -> setResult (None, Some(returnValue))))
   | None, None -> None
 
-// let indexedCapture capture index stateUpdater =
-//   let indexUpdater underlyingState =
-//     let castUnderlyingState : (obj option) array =
-//       match underlyingState with
-//       | Some (x) -> unbox x
-//       | None -> [| None; None |]
-
-//     let updatedState = stateUpdater castUnderlyingState.[index]
-
-//     match updatedState with
-//     | Replace (state) ->
-//         FSharp.Collections.Array.set castUnderlyingState index (Some state)
-//         Replace(castUnderlyingState)
-//     | Erase ->
-//         FSharp.Collections.Array.set castUnderlyingState index None
-//         Replace(castUnderlyingState)
-//     | keepOrException -> keepOrException
-
-//   capture indexUpdater
-
-let tuple2SetResult waitRef setResult index =
-  fun returnValue -> 
-    let existingFirst, existingSecond = !waitRef
-    if index = 0 then
-      waitRef := (Some (returnValue), existingSecond)
-    else
-      waitRef := (existingFirst, Some (returnValue))
-    let first, second = !waitRef
-
-    let mappedWait = Option.map2 (fun a b -> (a, b)) first second
-
-    Option.iter (fun result -> setResult result) mappedWait
-
-let listSetResult waitRef setResult index =
-  fun returnValue -> 
-    waitRef := (List.updateAt index (Some (returnValue)) !waitRef)
-
-    if List.forall (fun item -> (Option.isSome item)) !waitRef then
-      setResult List.map (fun item -> Option.get item) !waitRef
-
-let getOperationResult op setResult props =
+let getOperationResult op props =
   match op with
-  | Operation (opContents) -> opContents.Run setResult props
+  | Operation (opContents) -> opContents.Run props
   | _ -> failwith "Can only work with Perform operations"
-
-// FIXME: Not sure if hooks really make sense here
-// let createCombinedHook hook1 hook2 =
-//   fun props ->
-//     let hookResult1 = hook1 props
-//     let hookResult2 = hook2 props
-
-//     match hookResult1, hookResult2 then
-//     | None, None -> None
 
 let Wait2 op1 op2 =
   let waitRef = ref (None, None)
@@ -190,8 +172,8 @@ let Wait2 op1 op2 =
     { 
       Run =
         fun props ->
-          let opResult1 = getOperationResult op1 (tuple2SetResult waitRef setResult 0) props
-          let opResult2 = getOperationResult op2 (tuple2SetResult waitRef setResult 1) props
+          let opResult1 = getOperationResult op1  props
+          let opResult2 = getOperationResult op2  props
 
           match opResult1, opResult2 with
           | OperationWait ({ Element = element1; Effect = effect1; LayoutEffect = layoutEffect1; Hook = hook1 }),
@@ -202,8 +184,8 @@ let Wait2 op1 op2 =
                 failwith "Hooks can't be used with Wait"
               OperationWait (
                 { Element = (getElement element1 element2)
-                  Effect = (createCombinedEffect effect1 effect2)
-                  LayoutEffect = (createCombinedEffect layoutEffect1 layoutEffect2)
+                  Effect = (createCombinedEffect waitRef effect1 effect2)
+                  LayoutEffect = (createCombinedEffect waitRef layoutEffect1 layoutEffect2)
                   Hook = None }
               )
 
@@ -217,8 +199,8 @@ let Wait2 op1 op2 =
               waitRef := (first, Some returnValue)
               OperationWait (
                 { Element = (getElement element1 element2)
-                  Effect = (createCombinedEffect effect1 effect2)
-                  LayoutEffect = (createCombinedEffect layoutEffect1 layoutEffect2)
+                  Effect = (createCombinedEffect waitRef effect1 effect2)
+                  LayoutEffect = (createCombinedEffect waitRef layoutEffect1 layoutEffect2)
                   Hook = None
                   }
               )
@@ -233,8 +215,8 @@ let Wait2 op1 op2 =
               waitRef := (Some returnValue, second)
               OperationWait (
                 { Element = (getElement element1 element2)
-                  Effect = (createCombinedEffect effect1 effect2)
-                  LayoutEffect = (createCombinedEffect layoutEffect1 layoutEffect2)
+                  Effect = (createCombinedEffect waitRef effect1 effect2)
+                  LayoutEffect = (createCombinedEffect waitRef layoutEffect1 layoutEffect2)
                   Hook = None
                   }
               )
@@ -246,29 +228,37 @@ let Wait2 op1 op2 =
               if Option.isSome hook2 then
                 failwith "Hooks can't be used with Wait"
               OperationContinue (
-                { ReturnValue = (returnValue1, returnValue2)
+                { ReturnValue = (Some returnValue1, Some returnValue2)
                   Element = (getElement element1 element2)
-                  Effect = (createCombinedEffect effect1 effect2)
-                  LayoutEffect = (createCombinedEffect layoutEffect1 layoutEffect2)
+                  Effect = (createCombinedEffect waitRef effect1 effect2)
+                  LayoutEffect = (createCombinedEffect waitRef layoutEffect1 layoutEffect2)
                   Hook = None
                   }
               ) }
   )
 
-let WaitAny2 op1 op2 =
-  let mutable complete = false
+let WaitAny2 (op1: Builder<'a>) (op2: Builder<'b>) : Builder<option<'a> * option<'b>> =
   Operation (
     { 
       Run =
         fun props ->
-          let indexedSetResult setResult index =
-            fun returnValue -> 
-              if not complete then
-                if index = 0 then
-                  setResult (Some (returnValue), None)
-                else
-                  setResult (None, Some (returnValue))
-
+          let combinedEffect eff1Opt eff2Opt =
+            match eff1Opt, eff2Opt with
+            | Some (eff1, dispose1), Some (eff2, dispose2) -> 
+              let combinedEffect setResult = 
+                eff1 (fun value1 -> setResult (Some value1, None))
+                eff2 (fun value2 -> setResult (None, Some value2))
+              Some (combinedEffect, createCombinedDispose dispose1 dispose2)
+            | Some (eff1, dispose1), None ->
+              let combinedEffect setResult = 
+                eff1 (fun value1 -> setResult (Some value1, None))
+              Some (combinedEffect, dispose1)
+            | None, Some (eff2, dispose2) -> 
+              let combinedEffect setResult = 
+                eff2 (fun value2 -> setResult (None, Some value2))
+              Some (combinedEffect, dispose2)
+            | None, None -> 
+              None
           let opResult1 =
             match op1 with
             | Operation (pd1) -> pd1.Run props
@@ -284,8 +274,8 @@ let WaitAny2 op1 op2 =
             OperationWait ({ Element = element2; Effect = effect2; LayoutEffect = layoutEffect2 }) ->
               OperationWait (
                 { Element = (getElement element1 element2)
-                  Effect = (createCombinedEffect effect1 effect2)
-                  LayoutEffect = (createCombinedEffect layoutEffect1 layoutEffect2)
+                  Effect = (combinedEffect effect1 effect2)
+                  LayoutEffect = (combinedEffect layoutEffect1 layoutEffect2)
                   Hook = None
                   }
               )
