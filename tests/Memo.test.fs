@@ -36,7 +36,7 @@ let memoTests =
       let TestOperation = 
         Operation({
           Run = 
-            fun _ __ ->
+            fun _ ->
               insideOperationCount <- insideOperationCount + 1
               OperationContinue(
                 {

@@ -13,15 +13,14 @@ let testOperationWithTrigger<'result> () =
   let mutable internalRerender = None
   let callCount = ref 0
   let operation = Operation({
-    Run = fun (setResult: 'result -> unit) props ->
+    Run = fun _ ->
       callCount := !callCount + 1
-      let effectFunc () =
+      let effectFunc setResult =
         internalRerender <- Some(setResult)
-        None
       
       OperationWait ({
         Element = None
-        Effect = Some(effectFunc)
+        Effect = Some(effectFunc, None)
         LayoutEffect = None
         Hook = None
       })

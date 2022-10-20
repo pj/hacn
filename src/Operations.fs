@@ -105,7 +105,7 @@ let createCombinedDispose disposeOpt1 disposeOpt2 =
   | None, None -> None
   | _ -> Some(combinedDisposer)
 
-let createCombinedEffect (waitRef: (option<'a> * option<'b>) ref) eff1Opt eff2Opt =
+let createCombinedEffect waitRef eff1Opt eff2Opt =
   match eff1Opt, eff2Opt with
   | Some (eff1, dispose1), Some (eff2, dispose2) -> 
     let combinedEffect setResult = 
@@ -113,14 +113,14 @@ let createCombinedEffect (waitRef: (option<'a> * option<'b>) ref) eff1Opt eff2Op
           fun value1 -> 
             match waitRef.contents with 
             | (_, Some(value2)) ->
-              setResult (Some value1, Some value2)
+              setResult (value1, value2)
             | _ -> ()
         )
       eff2 (
           fun value2 -> 
             match waitRef.contents with 
             | (Some(value1), _) ->
-              setResult (Some value1, Some value2)
+              setResult (value1, value2)
             | _ -> ()
         )
     Some (combinedEffect, createCombinedDispose dispose1 dispose2)
@@ -130,7 +130,7 @@ let createCombinedEffect (waitRef: (option<'a> * option<'b>) ref) eff1Opt eff2Op
           fun value1 -> 
             match waitRef.contents with 
             | (_, Some(value2)) ->
-              setResult (Some value1, Some value2)
+              setResult (value1, value2)
             | _ -> ()
         )
     Some (combinedEffect, dispose1)
@@ -140,7 +140,7 @@ let createCombinedEffect (waitRef: (option<'a> * option<'b>) ref) eff1Opt eff2Op
           fun value2 -> 
             match waitRef.contents with 
             | (Some(value1), _) ->
-              setResult (Some value1, Some value2)
+              setResult (value1, value2)
             | _ -> ()
         )
     Some (combinedEffect, dispose2)
@@ -166,7 +166,7 @@ let getOperationResult op props =
   | Operation (opContents) -> opContents.Run props
   | _ -> failwith "Can only work with Perform operations"
 
-let Wait2 op1 op2 =
+let Wait2<'a, 'b> (op1: Builder<'a>) (op2: Builder<'b>) : Builder<'a * 'b> =
   let waitRef = ref (None, None)
   Operation (
     { 
@@ -228,7 +228,7 @@ let Wait2 op1 op2 =
               if Option.isSome hook2 then
                 failwith "Hooks can't be used with Wait"
               OperationContinue (
-                { ReturnValue = (Some returnValue1, Some returnValue2)
+                { ReturnValue = (returnValue1, returnValue2)
                   Element = (getElement element1 element2)
                   Effect = (createCombinedEffect waitRef effect1 effect2)
                   LayoutEffect = (createCombinedEffect waitRef layoutEffect1 layoutEffect2)
