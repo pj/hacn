@@ -29,8 +29,8 @@ and WaitContents<'opContents> = {
 }
 
 and GetNext = obj -> (ExecutionStuff list) option
-and Effect = (((unit -> ExecutionStuff list) -> unit) -> unit) * (Disposer option)
-and GetElement = ((unit -> ExecutionStuff list) -> unit) -> ReactElement
+and Effect = (((obj -> ExecutionStuff list) -> unit) -> unit) * (Disposer option)
+and GetElement = ((obj -> ExecutionStuff list) -> unit) -> ReactElement
 and ExecutionContents<'opContents> = {
   Execute: obj -> ExecutionResult<'opContents>
 }

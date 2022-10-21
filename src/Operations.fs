@@ -114,14 +114,16 @@ let createCombinedEffect waitRef eff1Opt eff2Opt =
             match waitRef.contents with 
             | (_, Some(value2)) ->
               setResult (value1, value2)
-            | _ -> ()
+            | _ -> 
+              waitRef := (Some(value1), None)
         )
       eff2 (
           fun value2 -> 
             match waitRef.contents with 
             | (Some(value1), _) ->
               setResult (value1, value2)
-            | _ -> ()
+            | _ -> 
+              waitRef := (None, Some(value2))
         )
     Some (combinedEffect, createCombinedDispose dispose1 dispose2)
   | Some (eff1, dispose1), None ->
@@ -131,7 +133,8 @@ let createCombinedEffect waitRef eff1Opt eff2Opt =
             match waitRef.contents with 
             | (_, Some(value2)) ->
               setResult (value1, value2)
-            | _ -> ()
+            | _ -> 
+              waitRef := (Some(value1), None)
         )
     Some (combinedEffect, dispose1)
   | None, Some (eff2, dispose2) -> 
@@ -141,13 +144,14 @@ let createCombinedEffect waitRef eff1Opt eff2Opt =
             match waitRef.contents with 
             | (Some(value1), _) ->
               setResult (value1, value2)
-            | _ -> ()
+            | _ -> 
+              waitRef := (None, Some(value2))
         )
     Some (combinedEffect, dispose2)
   | None, None -> 
     None
 
-let getElement elementOpt1 elementOpt2 =
+let getElementAny elementOpt1 elementOpt2 =
   match elementOpt1, elementOpt2 with
   | Some (element1), Some (_) -> 
     Some (
@@ -159,6 +163,32 @@ let getElement elementOpt1 elementOpt2 =
     )
   | None, Some (element2) -> 
     Some (fun setResult -> element2 (fun returnValue -> setResult (None, Some(returnValue))))
+  | None, None -> None
+
+let getElement waitRef elementOpt1 elementOpt2 =
+  match elementOpt1, elementOpt2 with
+  | Some (element1), _ ->
+    Some (
+      fun setResult -> element1 (
+          fun value1 -> 
+            match waitRef.contents with 
+            | (_, Some(value2)) ->
+              setResult (value1, value2)
+            | _ -> 
+              waitRef := (Some(value1), None)
+      )
+    )
+  | None, Some (element2) -> 
+    Some (
+      fun setResult -> element2 (
+          fun value2 -> 
+            match waitRef.contents with 
+            | (Some(value1), _) ->
+              setResult (value1, value2)
+            | _ -> 
+              waitRef := (None, Some(value2))
+      )
+    )
   | None, None -> None
 
 let getOperationResult op props =
@@ -183,7 +213,7 @@ let Wait2<'a, 'b> (op1: Builder<'a>) (op2: Builder<'b>) : Builder<'a * 'b> =
               if Option.isSome hook2 then
                 failwith "Hooks can't be used with Wait"
               OperationWait (
-                { Element = (getElement element1 element2)
+                { Element = (getElement waitRef element1 element2)
                   Effect = (createCombinedEffect waitRef effect1 effect2)
                   LayoutEffect = (createCombinedEffect waitRef layoutEffect1 layoutEffect2)
                   Hook = None }
@@ -198,7 +228,7 @@ let Wait2<'a, 'b> (op1: Builder<'a>) (op2: Builder<'b>) : Builder<'a * 'b> =
               let first, _ = !waitRef
               waitRef := (first, Some returnValue)
               OperationWait (
-                { Element = (getElement element1 element2)
+                { Element = (getElement waitRef element1 element2)
                   Effect = (createCombinedEffect waitRef effect1 effect2)
                   LayoutEffect = (createCombinedEffect waitRef layoutEffect1 layoutEffect2)
                   Hook = None
@@ -214,7 +244,7 @@ let Wait2<'a, 'b> (op1: Builder<'a>) (op2: Builder<'b>) : Builder<'a * 'b> =
               let _, second = !waitRef
               waitRef := (Some returnValue, second)
               OperationWait (
-                { Element = (getElement element1 element2)
+                { Element = (getElement waitRef element1 element2)
                   Effect = (createCombinedEffect waitRef effect1 effect2)
                   LayoutEffect = (createCombinedEffect waitRef layoutEffect1 layoutEffect2)
                   Hook = None
@@ -229,7 +259,7 @@ let Wait2<'a, 'b> (op1: Builder<'a>) (op2: Builder<'b>) : Builder<'a * 'b> =
                 failwith "Hooks can't be used with Wait"
               OperationContinue (
                 { ReturnValue = (returnValue1, returnValue2)
-                  Element = (getElement element1 element2)
+                  Element = (getElement waitRef element1 element2)
                   Effect = (createCombinedEffect waitRef effect1 effect2)
                   LayoutEffect = (createCombinedEffect waitRef layoutEffect1 layoutEffect2)
                   Hook = None
@@ -273,7 +303,7 @@ let WaitAny2 (op1: Builder<'a>) (op2: Builder<'b>) : Builder<option<'a> * option
           | OperationWait ({ Element = element1; Effect = effect1; LayoutEffect = layoutEffect1 }),
             OperationWait ({ Element = element2; Effect = effect2; LayoutEffect = layoutEffect2 }) ->
               OperationWait (
-                { Element = (getElement element1 element2)
+                { Element = (getElementAny element1 element2)
                   Effect = (combinedEffect effect1 effect2)
                   LayoutEffect = (combinedEffect layoutEffect1 layoutEffect2)
                   Hook = None
@@ -284,7 +314,7 @@ let WaitAny2 (op1: Builder<'a>) (op2: Builder<'b>) : Builder<option<'a> * option
             OperationContinue ({ ReturnValue = returnValue; Element = element2 }) ->
               OperationContinue(
                 { ReturnValue = (None, Some (returnValue))
-                  Element = (getElement element1 element2)
+                  Element = (getElementAny element1 element2)
                   Effect = None
                   LayoutEffect = None
                   Hook = None
@@ -296,7 +326,7 @@ let WaitAny2 (op1: Builder<'a>) (op2: Builder<'b>) : Builder<option<'a> * option
               OperationContinue(
                 { 
                   ReturnValue = (Some(returnValue), None)
-                  Element = (getElement element1 element2)
+                  Element = (getElementAny element1 element2)
                   Effect = None
                   LayoutEffect = None
                   Hook = None
@@ -308,7 +338,7 @@ let WaitAny2 (op1: Builder<'a>) (op2: Builder<'b>) : Builder<option<'a> * option
               OperationContinue(
                 { 
                   ReturnValue = (Some(returnValue1), Some(returnValue2))
-                  Element = (getElement element1 element2)
+                  Element = (getElementAny element1 element2)
                   Effect = None
                   LayoutEffect = None
                   Hook = None

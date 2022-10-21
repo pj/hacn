@@ -17,9 +17,9 @@ let bind (underlyingOperation: Builder<'a>) (f: 'a -> Builder<'b>) : Builder<'b>
   | Operation (underlyingOperationData) ->
     Execution {
       Execute = fun props -> 
-        let setResult (setNext: (unit -> ExecutionStuff list) -> unit) returnValue = 
+        let setResult (setNext: (obj -> ExecutionStuff list) -> unit) returnValue = 
           setNext (
-            fun () ->
+            fun props ->
               let nextExecution = f returnValue
 
               match nextExecution with
@@ -99,7 +99,7 @@ let combine firstOperation secondOperation =
 
 type ExperimentState<'props> = {
   LastElement: ReactElement option
-  Next: (unit -> ExecutionStuff list) option
+  Next: (obj -> ExecutionStuff list) option
   Started: bool
   Hooks: (obj -> ((ExecutionStuff list) option)) list
   PrevProps: 'props option
@@ -121,7 +121,7 @@ let rec runHooks hooks props =
     let hooksResult = runHooks t props
     Option.orElse hooksResult result
 
-let rec processResults setNext started (results: ExecutionStuff list) =
+let rec processResults (setNext: (Disposer list) -> (obj -> ExecutionStuff list) -> unit) started (results: ExecutionStuff list) =
   match results with
   | [] -> 
     {
@@ -184,7 +184,7 @@ let rec processResults setNext started (results: ExecutionStuff list) =
       Hooks = hooks
     }
 
-let runNext setNext (componentStateRef : IRefValue<ExperimentState<'props>>) (props: 'props) =
+let runNext (setNext: (Disposer list) -> (obj -> ExecutionStuff list) -> unit) (componentStateRef : IRefValue<ExperimentState<'props>>) (props: 'props) =
   let foundHook = runHooks componentStateRef.current.Hooks props
 
   match foundHook with
@@ -193,7 +193,7 @@ let runNext setNext (componentStateRef : IRefValue<ExperimentState<'props>>) (pr
   | None -> 
     match componentStateRef.current.Next with
     | Some(nextFunc) -> 
-      processResults setNext componentStateRef.current.Started (nextFunc ())
+      processResults setNext componentStateRef.current.Started (nextFunc props)
     | None -> 
       {
         Element = None
@@ -236,7 +236,7 @@ let interpreter delayOperation props =
     let asdf = Fable.Core.JS.Math.random ()
     state.update (sprintf "blah%f" asdf)
   
-  let setNext disposers (nextValues: unit -> ExecutionStuff list) =
+  let setNext disposers (nextValues: obj -> ExecutionStuff list) =
     List.iter (fun d -> d ()) disposers
     componentStateRef.current <- {
       componentStateRef.current with 
@@ -261,7 +261,7 @@ let interpreter delayOperation props =
     componentStateRef.current <- {
       componentStateRef.current with 
         Started = true
-        Hooks = [] // result.Hooks
+        Hooks = result.Hooks
         }
 
   let handleEffects effects () =
