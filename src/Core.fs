@@ -79,7 +79,26 @@ let checkStateEnded refState =
   | End -> true
   | _ -> false
 
-let updateOperationsWith index (operations: OperationElement<'props> array) stateUpdater =
+let updateOperationWithUpdater operation operationUpdater = 
+  match operationUpdater with
+  | Replace(state) -> 
+      {
+        operation with
+          State = Some(state)
+      }
+  | Erase ->
+      {
+        operation with
+          State = None
+      }
+  | Keep -> operation
+  | SetException(_exception) ->
+      {
+        operation with
+          Exception = Some(_exception)
+      }
+
+let updateOperationsWith index (operations: OperationElement<'props> list) stateUpdater =
   let op = operations.[index]
   let updatedState = stateUpdater op.State
 
@@ -94,18 +113,19 @@ let updateOperationsWith index (operations: OperationElement<'props> array) stat
         ({ op with
              Exception = Some(exceptionDetails) })
 
-let updateDisposer index (operations: OperationElement<'props> array) disposer =
+let updateDisposer index (operations: OperationElement<'props> list) disposer =
   let op = operations.[index]
   let updatedOp = { op with Disposer = disposer }
   FSharp.Collections.Array.set operations index updatedOp
 
-let runDisposers operationIndex (operations: OperationElement<'props> array) =
-  for i in (operationIndex + 1) .. (operations.Length - 1) do
-    let op = operations.[i]
+let runDisposers lastIndex operations =
+  let dispose operation =
+    match operation.Disposer with
+    | Some (dispose) when operation.Index > lastIndex+1 -> 
+      updateOperationWithUpdater operation (dispose operation.State)
+    | _ -> operation
 
-    match op.Disposer with
-    | Some (dispose) -> updateOperationsWith i operations dispose
-    | _ -> ()
+  List.map dispose operations
 
 let getFirstOperation delayOperation componentState =
   if componentState.OperationIndex = -1 then
@@ -150,82 +170,122 @@ let throwIfException operations =
     | Some (details) -> raise details.Exception
     | None -> ()
 
+let rec preProcessRecur props refState operations =
+  let executePreprocess preProcess operation refState operations =
+    let result = preProcess operation.State
+    let nextState = preProcessRecur props refState operations
+
+    match result with
+    | Some (newOpState) ->
+        if operation.Index < refState.OperationIndex then
+          { 
+            nextState with
+              OperationIndex = operation.Index
+              Operations = {operation with State = Some(newOpState)} :: nextState.Operations
+             }
+         else
+          { 
+            nextState with
+              Operations = {operation with State = Some(newOpState)} :: nextState.Operations
+             }
+    | None ->
+      { nextState with
+          Operations = operation :: nextState.Operations }
+  match operations with
+  | operation :: rest -> 
+    match operation.Operation with
+    | Control ({ PreProcess = preProcess }) -> executePreprocess preProcess operation refState rest
+    | Compose ({ PreProcess = preProcess }) -> executePreprocess (fun state -> preProcess state props) operation refState rest
+    | ControlProps ({ Changed = changed }) ->
+        let nextState = preProcessRecur props refState operations
+        if changed refState.PrevProps props && operation.Index < refState.OperationIndex then
+            { 
+              nextState with 
+                OperationIndex = operation.Index 
+                Operations = operation :: nextState.Operations
+            }
+         else
+          { 
+            nextState with 
+              Operations = operation :: nextState.Operations
+          }
+    | TryWith (_) ->
+      // TODO: preprocess for TryWith
+      let nextState = preProcessRecur props refState operations
+      { 
+        nextState with 
+          Operations = operation :: nextState.Operations
+      }
+    | End ->
+      { 
+        refState with 
+          Operations = operation :: refState.Operations
+      }
+    | _ -> failwith (sprintf "Unknown op %A" operation)
+  | _ -> failwith "Implementation incorrect"
+
+let recursivePreProcess props refState =
+  let initial = { refState with Operations = [] }
+  
+  preProcessRecur props initial refState.Operations
+
 // Preprocess operations e.g. props, context, refs
-let preprocessOperations refState props =
-  let mutable nextIndex = refState.OperationIndex
-  let mutable nextState = refState
+// let preprocessOperations refState props =
+//   let mutable nextIndex = refState.OperationIndex
+//   let mutable nextState = refState
 
-  for item in refState.Operations do
-    match item with
-    | { State = opState
-        Operation = op
-        Index = index } ->
-        let executePreprocess preProcess =
-          // let processOpState: obj option = getOperationState refState operationType opState props
+//   for item in refState.Operations do
+//     match item with
+//     | { State = opState
+//         Operation = op
+//         Index = index } ->
+//         let executePreprocess preProcess =
+//           // let processOpState: obj option = getOperationState refState operationType opState props
 
-          let result = preProcess opState
+//           let result = preProcess opState
 
-          match result with
-          | Some (newOpState) ->
-              FSharp.Collections.Array.set
-                nextState.Operations
-                index
-                { State = Some(newOpState)
-                  Operation = op
-                  Index = index
-                  Disposer = None
-                  Exception = None }
+//           match result with
+//           | Some (newOpState) ->
+//               FSharp.Collections.Array.set
+//                 nextState.Operations
+//                 index
+//                 { State = Some(newOpState)
+//                   Operation = op
+//                   Index = index
+//                   Disposer = None
+//                   Exception = None }
 
-              if index < nextIndex then
-                nextState <-
-                  { nextState with
-                      OperationIndex = index }
+//               if index < nextIndex then
+//                 nextState <-
+//                   { nextState with
+//                       OperationIndex = index }
 
-                nextIndex <- index
-          | None -> ()
+//                 nextIndex <- index
+//           | None -> ()
 
-        match op with
-        | Control ({ PreProcess = preProcess }) -> executePreprocess preProcess
-        | Compose ({ PreProcess = preProcess }) -> executePreprocess (fun state -> preProcess state props)
-        | ControlProps ({ Changed = changed }) ->
-            if changed refState.PrevProps props
-               && index < nextIndex then
-              nextState <-
-                { nextState with
-                    OperationIndex = index }
+//         match op with
+//         | Control ({ PreProcess = preProcess }) -> executePreprocess preProcess
+//         | Compose ({ PreProcess = preProcess }) -> executePreprocess (fun state -> preProcess state props)
+//         | ControlProps ({ Changed = changed }) ->
+//             if changed refState.PrevProps props
+//                && index < nextIndex then
+//               nextState <-
+//                 { nextState with
+//                     OperationIndex = index }
 
-              nextIndex <- index
-        | TryWith (_) ->
-            // TODO: preprocess for TryWith
-            ()
-        | End -> ()
-        | _ -> failwith (sprintf "Unknown op %A" op)
+//               nextIndex <- index
+//         | TryWith (_) ->
+//             // TODO: preprocess for TryWith
+//             ()
+//         | End -> ()
+//         | _ -> failwith (sprintf "Unknown op %A" op)
 
-  nextState
+//   nextState
 
 let consEffect index headOpt rest = 
   match headOpt with 
   | Some(effect) -> (index, effect) :: rest
   | None -> rest
-
-let updateOperationWithUpdater operation operationUpdater = 
-  match operationUpdater with
-  | Replace(state) -> 
-      {
-        operation with
-          State = Some(state)
-      }
-  | Erase ->
-      {
-        operation with
-          State = None
-      }
-  | Keep -> operation
-  | SetException(_exception) ->
-      {
-        operation with
-          Exception = Some(_exception)
-      }
 
 let rec executionRecur rerender resultCapture exState props operations = 
   let updateElementAndEffects state operation rest operationData =
@@ -365,28 +425,36 @@ let rec executionRecur rerender resultCapture exState props operations =
                 NextEffects = consEffect operation.Index operationData.Effect next.NextEffects
                 NextLayoutEffects = consEffect operation.Index operationData.LayoutEffect next.NextLayoutEffects
             }
-        | Compose ({ GetResult = getResult }) ->
-          inTryWith <- false
+      | Compose ({ GetResult = getResult }) ->
+        inTryWith <- false
+        let capture = resultCapture currentOperation.Index
+
+        let invokeResult =
+          getResult rerender capture currentOperation.State props
+
+        handleInvokeResult invokeResult
+      | ComposeReturn () ->
+        inTryWith <- false
+        let capture = resultCapture currentOperation.Index
+
+        let invokeResult =
+          getResult rerender capture currentOperation.State props
+
+        handleInvokeResult invokeResult
+      | TryWith ({ GetResult = getResult }) ->
+          inTryWith <- true
           let capture = resultCapture currentOperation.Index
 
           let invokeResult =
             getResult rerender capture currentOperation.State props
 
           handleInvokeResult invokeResult
-        | TryWith ({ GetResult = getResult }) ->
-            inTryWith <- true
-            let capture = resultCapture currentOperation.Index
-
-            let invokeResult =
-              getResult rerender capture currentOperation.State props
-
-            handleInvokeResult invokeResult
 
   | _ -> failwith "Implementation incorrect"
 
 let recursiveExecution rerender resultCapture componentState props = 
   let initial = {
-      State = { componentState with Operations = [] }
+      RefState = { componentState with Operations = [] }
       NextEffects = []
       NextLayoutEffects = []
       InTryWith = false
@@ -394,220 +462,198 @@ let recursiveExecution rerender resultCapture componentState props =
   
   executionRecur rerender resultCapture initial props componentState.Operations
 
-let foldExecutionLoop rerender resultCapture componentState props = 
-  let initial = {
-      State = { componentState with Operations = [] }
-      NextEffects = []
-      NextLayoutEffects = []
-      InTryWith = false
-    }
-  
-  let executionFolder exState operation =
-    if operation.Index < exState.State.OperationIndex then
-      { 
-        exState with 
-          State = {
-            exState.State with 
-              Operations = operation :: exState.State.Operations
-          }
-      }
-    else
-      exState
-  
-  List.fold executionFolder initial componentState.Operations
+// let executionLoop rerender resultCapture componentState props =
+//   let mutable currentIndex = componentState.OperationIndex
+//   let mutable stop = false
+//   let mutable renderedElement = componentState.Element
+//   let mutable nextOperations = componentState.Operations
+//   let mutable nextEffects = []
+//   let mutable nextLayoutEffects = []
+//   let mutable nextProps = componentState.PrevProps
+//   let mutable composeReturn = None
+//   let mutable inTryWith = false
 
-let executionLoop rerender resultCapture componentState props =
-  let mutable currentIndex = componentState.OperationIndex
-  let mutable stop = false
-  let mutable renderedElement = componentState.Element
-  let mutable nextOperations = componentState.Operations
-  let mutable nextEffects = []
-  let mutable nextLayoutEffects = []
-  let mutable nextProps = componentState.PrevProps
-  let mutable composeReturn = None
-  let mutable inTryWith = false
+//   while not stop do
+//     let currentOperation = nextOperations.[currentIndex]
 
-  while not stop do
-    let currentOperation = nextOperations.[currentIndex]
+//     let setElement element =
+//       match element with
+//       | Some (element) -> renderedElement <- Some(element)
+//       | _ -> ()
 
-    let setElement element =
-      match element with
-      | Some (element) -> renderedElement <- Some(element)
-      | _ -> ()
+//     let setEffect effect =
+//       match effect with
+//       | Some (effect) -> nextEffects <- nextEffects @ [ (currentOperation.Index, effect) ]
+//       | _ -> ()
 
-    let setEffect effect =
-      match effect with
-      | Some (effect) -> nextEffects <- nextEffects @ [ (currentOperation.Index, effect) ]
-      | _ -> ()
+//     let setLayoutEffect layoutEffect =
+//       match layoutEffect with
+//       | Some (effect) ->
+//           nextLayoutEffects <-
+//             nextLayoutEffects
+//             @ [ (currentOperation.Index, effect) ]
+//       | _ -> ()
 
-    let setLayoutEffect layoutEffect =
-      match layoutEffect with
-      | Some (effect) ->
-          nextLayoutEffects <-
-            nextLayoutEffects
-            @ [ (currentOperation.Index, effect) ]
-      | _ -> ()
+//     let setOperationState operationState =
+//       match operationState with
+//       | Some (state) ->
+//           FSharp.Collections.Array.set
+//             nextOperations
+//             currentIndex
+//             { nextOperations.[currentIndex] with
+//                 State = state }
+//       | _ -> ()
 
-    let setOperationState operationState =
-      match operationState with
-      | Some (state) ->
-          FSharp.Collections.Array.set
-            nextOperations
-            currentIndex
-            { nextOperations.[currentIndex] with
-                State = state }
-      | _ -> ()
+//     let updateElementAndEffects (operationData: OperationData) =
+//       setElement operationData.Element
+//       setEffect operationData.Effect
+//       setLayoutEffect operationData.LayoutEffect
+//       updateOperationsWith currentIndex nextOperations (fun _ -> operationData.OperationState)
 
-    let updateElementAndEffects (operationData: OperationData) =
-      setElement operationData.Element
-      setEffect operationData.Effect
-      setLayoutEffect operationData.LayoutEffect
-      updateOperationsWith currentIndex nextOperations (fun _ -> operationData.OperationState)
+//     let updateComposeElementAndEffects (composeEffects: ComposeSideEffects<'props>) =
+//       setElement composeEffects.Element
+//       nextEffects <- nextEffects @ composeEffects.Effects
+//       nextLayoutEffects <- nextLayoutEffects @ composeEffects.LayoutEffects
+//       setOperationState composeEffects.OperationState
 
-    let updateComposeElementAndEffects (composeEffects: ComposeSideEffects<'props>) =
-      setElement composeEffects.Element
-      nextEffects <- nextEffects @ composeEffects.Effects
-      nextLayoutEffects <- nextLayoutEffects @ composeEffects.LayoutEffects
-      setOperationState composeEffects.OperationState
+//     let handleNextOperation nextOperation =
+//       match nextOperation with
+//       | End ->
+//           if (currentIndex + 1) < componentState.Operations.Length then
+//             let currentNextOp = nextOperations.[currentIndex + 1]
 
-    let handleNextOperation nextOperation =
-      match nextOperation with
-      | End ->
-          if (currentIndex + 1) < componentState.Operations.Length then
-            let currentNextOp = nextOperations.[currentIndex + 1]
+//             FSharp.Collections.Array.set nextOperations (currentIndex + 1) { currentNextOp with Operation = End }
+//           else
+//             nextOperations <-
+//               FSharp.Collections.Array.append
+//                 nextOperations
+//                 [| { State = None
+//                      Operation = End
+//                      Index = currentIndex + 1
+//                      Disposer = None
+//                      Exception = None } |]
 
-            FSharp.Collections.Array.set nextOperations (currentIndex + 1) { currentNextOp with Operation = End }
-          else
-            nextOperations <-
-              FSharp.Collections.Array.append
-                nextOperations
-                [| { State = None
-                     Operation = End
-                     Index = currentIndex + 1
-                     Disposer = None
-                     Exception = None } |]
+//           currentIndex <- currentIndex + 1
+//           stop <- true
+//       | Control (nextOpData) ->
+//           if (currentIndex + 1) < componentState.Operations.Length then
+//             let currentNextOp = nextOperations.[currentIndex + 1]
 
-          currentIndex <- currentIndex + 1
-          stop <- true
-      | Control (nextOpData) ->
-          if (currentIndex + 1) < componentState.Operations.Length then
-            let currentNextOp = nextOperations.[currentIndex + 1]
+//             FSharp.Collections.Array.set
+//               nextOperations
+//               (currentIndex + 1)
+//               { currentNextOp with
+//                   Operation = Control(nextOpData) }
+//           else
+//             let preProcessState = nextOpData.PreProcess(None)
 
-            FSharp.Collections.Array.set
-              nextOperations
-              (currentIndex + 1)
-              { currentNextOp with
-                  Operation = Control(nextOpData) }
-          else
-            let preProcessState = nextOpData.PreProcess(None)
+//             nextOperations <-
+//               FSharp.Collections.Array.append
+//                 nextOperations
+//                 [| { State = preProcessState
+//                      Operation = Control(nextOpData)
+//                      Index = currentIndex + 1
+//                      Disposer = None
+//                      Exception = None } |]
 
-            nextOperations <-
-              FSharp.Collections.Array.append
-                nextOperations
-                [| { State = preProcessState
-                     Operation = Control(nextOpData)
-                     Index = currentIndex + 1
-                     Disposer = None
-                     Exception = None } |]
+//           currentIndex <- currentIndex + 1
+//       | Compose (nextOpData) ->
+//           if (currentIndex + 1) < componentState.Operations.Length then
+//             let currentNextOp = nextOperations.[currentIndex + 1]
 
-          currentIndex <- currentIndex + 1
-      | Compose (nextOpData) ->
-          if (currentIndex + 1) < componentState.Operations.Length then
-            let currentNextOp = nextOperations.[currentIndex + 1]
+//             FSharp.Collections.Array.set
+//               nextOperations
+//               (currentIndex + 1)
+//               { currentNextOp with
+//                   Operation = Compose(nextOpData) }
+//           else
+//             let preProcessState = nextOpData.PreProcess None props
 
-            FSharp.Collections.Array.set
-              nextOperations
-              (currentIndex + 1)
-              { currentNextOp with
-                  Operation = Compose(nextOpData) }
-          else
-            let preProcessState = nextOpData.PreProcess None props
+//             nextOperations <-
+//               FSharp.Collections.Array.append
+//                 nextOperations
+//                 [| { State = preProcessState
+//                      Operation = Compose(nextOpData)
+//                      Index = currentIndex + 1
+//                      Disposer = None
+//                      Exception = None } |]
 
-            nextOperations <-
-              FSharp.Collections.Array.append
-                nextOperations
-                [| { State = preProcessState
-                     Operation = Compose(nextOpData)
-                     Index = currentIndex + 1
-                     Disposer = None
-                     Exception = None } |]
+//           currentIndex <- currentIndex + 1
+//       | ComposeReturn (returnType) ->
+//           composeReturn <- Some(returnType :> obj)
 
-          currentIndex <- currentIndex + 1
-      | ComposeReturn (returnType) ->
-          composeReturn <- Some(returnType :> obj)
+//           nextOperations <-
+//             FSharp.Collections.Array.append
+//               nextOperations
+//               [| { State = None
+//                    Operation = End
+//                    Index = currentIndex + 1
+//                    Disposer = None
+//                    Exception = None } |]
 
-          nextOperations <-
-            FSharp.Collections.Array.append
-              nextOperations
-              [| { State = None
-                   Operation = End
-                   Index = currentIndex + 1
-                   Disposer = None
-                   Exception = None } |]
+//           currentIndex <- currentIndex + 1
 
-          currentIndex <- currentIndex + 1
+//           stop <- true
 
-          stop <- true
+//     let handleInvokeResult invokeResult =
+//       match invokeResult with
+//       // | Continue(_, __) -> failwith "Continue should only be passed into bind, not into execution."
+//       | ControlWait (operationData) ->
+//           updateElementAndEffects operationData
+//           stop <- true
+//       | ControlNext (operationData, nextOperation) ->
+//           updateElementAndEffects operationData
+//           handleNextOperation nextOperation
 
-    let handleInvokeResult invokeResult =
-      match invokeResult with
-      // | Continue(_, __) -> failwith "Continue should only be passed into bind, not into execution."
-      | ControlWait (operationData) ->
-          updateElementAndEffects operationData
-          stop <- true
-      | ControlNext (operationData, nextOperation) ->
-          updateElementAndEffects operationData
-          handleNextOperation nextOperation
+//     match currentOperation.Operation with
+//     | ControlProps ({ Execute = execute }) ->
+//         inTryWith <- false
+//         let nextOperation = execute props
+//         nextProps <- Some(props)
+//         handleNextOperation nextOperation
+//     | Control ({ GetResult = getResult }) ->
+//         inTryWith <- false
+//         let capture = resultCapture currentOperation.Index
 
-    match currentOperation.Operation with
-    | ControlProps ({ Execute = execute }) ->
-        inTryWith <- false
-        let nextOperation = execute props
-        nextProps <- Some(props)
-        handleNextOperation nextOperation
-    | Control ({ GetResult = getResult }) ->
-        inTryWith <- false
-        let capture = resultCapture currentOperation.Index
+//         let invokeResult =
+//           getResult rerender capture currentOperation.State props
 
-        let invokeResult =
-          getResult rerender capture currentOperation.State props
+//         handleInvokeResult invokeResult
+//     | Compose ({ GetResult = getResult }) ->
+//         inTryWith <- false
+//         let capture = resultCapture currentOperation.Index
 
-        handleInvokeResult invokeResult
-    | Compose ({ GetResult = getResult }) ->
-        inTryWith <- false
-        let capture = resultCapture currentOperation.Index
+//         let invokeResult =
+//           getResult rerender capture currentOperation.State props
 
-        let invokeResult =
-          getResult rerender capture currentOperation.State props
+//         handleInvokeResult invokeResult
+//     | TryWith ({ GetResult = getResult }) ->
+//         inTryWith <- true
+//         let capture = resultCapture currentOperation.Index
 
-        handleInvokeResult invokeResult
-    | TryWith ({ GetResult = getResult }) ->
-        inTryWith <- true
-        let capture = resultCapture currentOperation.Index
+//         let invokeResult =
+//           getResult rerender capture currentOperation.State props
 
-        let invokeResult =
-          getResult rerender capture currentOperation.State props
+//         handleInvokeResult invokeResult
+//     | End ->
+//         inTryWith <- true
+//         stop <- true
+//     | _ -> failwith (sprintf "Unknown op %A" currentOperation)
 
-        handleInvokeResult invokeResult
-    | End ->
-        inTryWith <- true
-        stop <- true
-    | _ -> failwith (sprintf "Unknown op %A" currentOperation)
-
-  ({ OperationIndex = currentIndex
-     Operations = nextOperations
-     Element = renderedElement
-     PrevProps = nextProps
-     ComposeReturn = composeReturn },
-   nextEffects,
-   nextLayoutEffects,
-   inTryWith)
+//   ({ OperationIndex = currentIndex
+//      Operations = nextOperations
+//      Element = renderedElement
+//      PrevProps = nextProps
+//      ComposeReturn = composeReturn },
+//    nextEffects,
+//    nextLayoutEffects,
+//    inTryWith)
 
 let render firstOperation props =
   let componentStateRef : IRefValue<RefState<'props>> =
     Hooks.useRef (
       { Element = None
-        Operations = [||]
+        Operations = []
         OperationIndex = -1
         PrevProps = None
         ComposeReturn = None }
@@ -625,13 +671,12 @@ let render firstOperation props =
     // Ignore captures that occur when the operation index is less than the
     // capture, since we might be rerendering something different.
     if index <= componentStateRef.current.OperationIndex then
-      updateOperationsWith index componentStateRef.current.Operations stateUpdater
+      let operations = updateOperationsWith index componentStateRef.current.Operations stateUpdater
 
       componentStateRef.current <-
         { componentStateRef.current with
-            OperationIndex = index }
-
-      runDisposers componentStateRef.current.OperationIndex componentStateRef.current.Operations
+            OperationIndex = index
+            Operations = runDisposers index operations }
 
       rerender ()
 
@@ -643,30 +688,33 @@ let render firstOperation props =
 
   throwIfException componentStateRef.current.Operations
 
-  componentStateRef.current <- preprocessOperations componentStateRef.current props
-  runDisposers componentStateRef.current.OperationIndex componentStateRef.current.Operations
+  componentStateRef.current <- recursivePreProcess props componentStateRef.current
+  componentStateRef.current <- {
+    componentStateRef.current with 
+      Operations = runDisposers componentStateRef.current.OperationIndex componentStateRef.current.Operations
+    }
 
-  let nextState, nextEffects, nextLayoutEffects, inTryWith =
-    executionLoop rerender captureResult componentStateRef.current props
+  let executionResult =
+    recursiveExecution rerender captureResult componentStateRef.current props
 
-  componentStateRef.current <- nextState
+  componentStateRef.current <- executionResult.RefState
 
   // run any effects.
   Hooks.useEffect
     (fun () ->
-      List.iter (fun (index, eff) -> callEffect index eff) nextEffects
+      List.iter (fun (index, eff) -> callEffect index eff) executionResult.NextEffects
       ())
 
   // run any layout effect.
   React.useLayoutEffect
     (fun () ->
-      List.iter (fun (index, eff) -> callEffect index eff) nextLayoutEffects
+      List.iter (fun (index, eff) -> callEffect index eff) executionResult.NextLayoutEffects
       ())
 
   // Render current element
   match componentStateRef.current.Element with
   | Some ((element, capture)) ->
-      if inTryWith then
+      if executionResult.InTryWith then
         ofType<ErrorBoundary, _, _> { Inner = element; OnError = capture } []
       else
         element
