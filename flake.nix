@@ -11,14 +11,8 @@
         let
             pkgs = nixpkgs.legacyPackages.${system};
             deps = with pkgs; [
-                #kubectl
-                #kubernetes-helm
-                #(google-cloud-sdk.withExtraComponents ([pkgs.google-cloud-sdk.components.gke-gcloud-auth-plugin]))
-                #terraform
-                #go
-                #cue
-                #devspace
-                #postgresql_13
+                dotnet-sdk
+                dotnet-runtime
                 nodejs-16_x
             ];
         in {

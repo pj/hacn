@@ -296,3 +296,6 @@ __pycache__/
 dist
 .vscode
 src/temp
+
+# Direnv
+.direnv
