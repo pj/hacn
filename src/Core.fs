@@ -232,17 +232,16 @@ let interpreter delayOperation props =
   // Force an update when an effect completes
   let state = Fable.React.HookBindings.Hooks.useState ("asdf")
 
-  let rerender () =
-    let asdf = Fable.Core.JS.Math.random ()
-    state.update (sprintf "blah%f" asdf)
-  
   let setNext disposers (nextValues: obj -> ExecutionStuff list) =
     List.iter (fun d -> d ()) disposers
     componentStateRef.current <- {
       componentStateRef.current with 
         Next = Some (nextValues)
     }
-    rerender ()
+
+    // Trigger rerender
+    let asdf = Fable.Core.JS.Math.random ()
+    state.update (sprintf "blah%f" asdf)
   
   if not componentStateRef.current.Started then
     componentStateRef.current <- {
