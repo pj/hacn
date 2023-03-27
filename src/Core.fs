@@ -17,7 +17,7 @@ let bind (underlyingOperation: Builder<'a>) (f: 'a -> Builder<'b>) : Builder<'b>
   | Operation (underlyingOperationData) ->
     Execution {
       Execute = fun props -> 
-        let setResult (setNext: (obj -> ExecutionStuff list) -> unit) returnValue = 
+        let bindSetNext (setNext: SetNext) returnValue = 
           setNext (
             fun props ->
               let nextExecution = f returnValue
@@ -25,39 +25,43 @@ let bind (underlyingOperation: Builder<'a>) (f: 'a -> Builder<'b>) : Builder<'b>
               match nextExecution with
               | Execution contents -> 
                 let executionResult = contents.Execute props
-                executionResult.ThingsToCapture
+                executionResult.OperationsToBind
               | _ -> 
                 failwith (sprintf "Can't bind execution %A" nextExecution)
             )
         
-        let wrapHook hook = 
-          fun props ->
-            let returnValue = hook props
-            match returnValue with
-            | Some (returnValue) -> 
-              let nextExecution = f returnValue
+        // let wrapHook hook = 
+        //   fun props ->
+        //     let returnValue = hook props
+        //     match returnValue with
+        //     | Some (returnValue) -> 
+        //       let nextExecution = f returnValue
 
-              match nextExecution with
-              | Execution contents -> 
-                let executionResult = contents.Execute props
-                Some (executionResult.ThingsToCapture)
-              | _ -> 
-                failwith (sprintf "Can't bind execution %A" nextExecution)
-            | None -> None
+        //       match nextExecution with
+        //       | Execution contents -> 
+        //         let executionResult = contents.Execute props
+        //         Some (executionResult.ThingsToCapture)
+        //       | _ -> 
+        //         failwith (sprintf "Can't bind execution %A" nextExecution)
+        //     | None -> None
 
         let result = underlyingOperationData.Run props
         match result with 
-        | OperationWait { Element = element; Effect = effect; LayoutEffect = layoutEffect; Hook = hook } -> 
+        | OperationWait {SideEffects = sideEffects} -> // { Element = element; Effect = effect} -> //; LayoutEffect = layoutEffect; Hook = hook } -> 
           {
             ReturnValue = None
-            ThingsToCapture = ( {
-              Element = Option.map (fun e -> (fun setNext -> e (setResult setNext))) element
-              Effect = Option.map (fun (e, d) -> ((fun setNext -> e (setResult setNext)), d)) effect
-              LayoutEffect = Option.map (fun (e, d) -> ((fun setNext -> e (setResult setNext)), d)) layoutEffect
-              Hook = Option.map wrapHook hook
-            }) :: []
+            OperationsToBind = (
+              fun setNext ->  
+                let setResult = bindSetNext setNext
+                sideEffects setResult
+            ) :: []
           }
-        | OperationContinue { ReturnValue = returnValue; Element = element; Effect = effect; LayoutEffect = layoutEffect; Hook = hook } -> 
+            // ThingsToCapture = fun e -> (fun setNext -> e (setResult setNext))) element
+            //   Effect = Option.map (fun (e, d) -> ((fun setNext -> e (setResult setNext)), d)) effect
+            //   LayoutEffect = Option.map (fun (e, d) -> ((fun setNext -> e (setResult setNext)), d)) layoutEffect
+            //   Hook = Option.map wrapHook hook
+            // }) :: []
+        | OperationContinue {ReturnValue = returnValue; SideEffects = sideEffects} -> // { ReturnValue = returnValue; Element = element; Effect = effect; LayoutEffect = layoutEffect; Hook = hook } -> 
           let nextExecution = f returnValue
 
           match nextExecution with
@@ -65,23 +69,33 @@ let bind (underlyingOperation: Builder<'a>) (f: 'a -> Builder<'b>) : Builder<'b>
             let executionResult = contents.Execute props
             {
               ReturnValue = executionResult.ReturnValue
-              ThingsToCapture = ( {
-                Element = Option.map (fun e -> (fun setNext -> e (setResult setNext))) element
-                Effect = Option.map (fun (e, d) -> ((fun setNext -> e (setResult setNext)), d)) effect
-                LayoutEffect = Option.map (fun (e, d) -> ((fun setNext -> e (setResult setNext)), d)) layoutEffect
-                Hook = Option.map wrapHook hook
-              }) :: executionResult.ThingsToCapture
+              OperationsToBind = (
+                fun setNext ->  
+                  let setResult = bindSetNext setNext
+                  sideEffects setResult
+              ) :: []
             }
+              // ThingsToCapture = ( {
+              //   Element = Option.map (fun e -> (fun setNext -> e (setResult setNext))) element
+              //   Effect = Option.map (fun (e, d) -> ((fun setNext -> e (setResult setNext)), d)) effect
+              //   LayoutEffect = Option.map (fun (e, d) -> ((fun setNext -> e (setResult setNext)), d)) layoutEffect
+              //   Hook = Option.map wrapHook hook
+              // }) :: executionResult.ThingsToCapture
           | End ->
             {
               ReturnValue = None
-              ThingsToCapture = ( {
-                Element = Option.map (fun e -> (fun setNext -> e (setResult setNext))) element
-                Effect = Option.map (fun (e, d) -> ((fun setNext -> e (setResult setNext)), d)) effect
-                LayoutEffect = Option.map (fun (e, d) -> ((fun setNext -> e (setResult setNext)), d)) layoutEffect
-                Hook = Option.map wrapHook hook
-              }) :: []
+              OperationsToBind = (
+                fun setNext ->  
+                  let setResult = bindSetNext setNext
+                  sideEffects setResult
+              ) :: []
             }
+            // ThingsToCapture = ( {
+            //   Element = Option.map (fun e -> (fun setNext -> e (setResult setNext))) element
+            //   Effect = Option.map (fun (e, d) -> ((fun setNext -> e (setResult setNext)), d)) effect
+            //   LayoutEffect = Option.map (fun (e, d) -> ((fun setNext -> e (setResult setNext)), d)) layoutEffect
+            //   Hook = Option.map wrapHook hook
+            // }) :: []
           | _ -> 
             failwith (sprintf "Can't bind execution %A" nextExecution)
     }
