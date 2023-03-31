@@ -12,22 +12,16 @@ and SetResult<'opContents> = 'opContents -> unit
 and OperationSideEffects = {
   Element: ReactElement option
   Effect: (unit -> Disposer option) option
+  LayoutEffect: (unit -> Disposer option) option
 }
-and ContinueContents<'opContents> = {
-  ReturnValue: 'opContents
-  SideEffects: SetResult<'opContents> -> OperationSideEffects
-
+and SideEffectsFunction<'opContents> = SetResult<'opContents> -> OperationSideEffects
   // Element: (SetResult<'opContents> -> ReactElement) option
   // Effect: (SetResult<'opContents> -> Disposer option) option
   // LayoutEffect: ((SetResult<'opContents> -> unit) * Disposer option) option
   // Hook: HookFunc<'opContents> option
-}
-and WaitContents<'opContents> = {
-  SideEffects: SetResult<'opContents> -> OperationSideEffects
-}
 and OperationResult<'opContents> =
-  | OperationWait of WaitContents<'opContents>
-  | OperationContinue of ContinueContents<'opContents>
+  | OperationWait of SideEffectsFunction<'opContents>
+  | OperationContinue of (SetResult<'opContents> -> OperationSideEffects) * 'opContents
 and OperationContents<'opContents> = {
   Run: obj -> OperationResult<'opContents>
 }
@@ -48,11 +42,13 @@ and OperationContents<'opContents> = {
 //   Hook: GetNext option
 // }
 
-and SetNext = (obj -> OperationSideEffects list) -> unit
-and BindOperation = SetNext -> OperationSideEffects
+and NextResult = {
+  OperationsToBind: (SetNext -> OperationSideEffects) list
+}
+and SetNext = (obj -> NextResult) -> unit
 and ExecutionResult<'opContents> = {
   ReturnValue: 'opContents option
-  OperationsToBind: BindOperation list
+  OperationsToBind: (SetNext -> OperationSideEffects) list
 }
 and ExecutionContents<'opContents> = {
   Execute: obj -> ExecutionResult<'opContents>

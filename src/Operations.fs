@@ -33,8 +33,8 @@ let Props<'returnType > =
             ReturnValue = (unbox<'returnType> props)
             Element = None
             Effect = None
-            LayoutEffect = None
-            Hook = Some(propsHook)
+            // LayoutEffect = None
+            // Hook = Some(propsHook)
           })
     }
   )
@@ -62,8 +62,8 @@ let State<'state> (initialState: 'state) =
                     OperationWait (
                       { Element = None
                         Effect = Some (stateSetEffect, None)
-                        LayoutEffect = None
-                        Hook = None 
+                        // LayoutEffect = None
+                        // Hook = None 
                       }
                       ) 
                 }
@@ -358,53 +358,60 @@ let NextAny = End
 
 // time operations
 let Timeout time =
-  let mutable timeoutID = None
   Operation(
     { 
       Run =
         fun _ ->
-          let timeoutEffect setResult =
-            let timeoutCallback () =
-              setResult ()
+          let bindSetResult setResult =
+            let timeoutEffect () = 
+              let timeoutCallback () =
+                setResult ()
 
-            timeoutID <- Some (Fable.Core.JS.setTimeout timeoutCallback time)
+              let timeoutID = Fable.Core.JS.setTimeout timeoutCallback time
 
-          let timeoutDispose () =
-            Option.iter Fable.Core.JS.clearTimeout timeoutID
+              Some(fun () -> Fable.Core.JS.clearTimeout timeoutID)
+            timeoutEffect
 
           OperationWait(
-            { 
+            fun setResult -> {
               Element = None
-              Effect = Some(timeoutEffect, Some(timeoutDispose))
-              LayoutEffect = None
-              Hook = None
+              Effect = Some(bindSetResult setResult)
             }
+              // LayoutEffect = None
+              // Hook = None
           )
     }
   )
 
 let Interval interval =
-  let mutable timeoutID = None
   Operation(
     { 
       Run =
         fun _ ->
-          let timeoutEffect setResult =
-            let timeoutCallback () =
-              setResult ()
+          let bindSetResult setResult =
+            let timeoutEffect () =
+              let timeoutCallback () =
+                setResult ()
 
-            timeoutID <- Some (Fable.Core.JS.setInterval timeoutCallback interval)
+              let timeoutID = Fable.Core.JS.setInterval timeoutCallback interval
 
-          let timeoutDispose () =
-            Option.iter Fable.Core.JS.clearInterval timeoutID
+              Some(fun () -> Fable.Core.JS.clearInterval timeoutID)
+            timeoutEffect
 
           OperationContinue(
-            { ReturnValue = ()
-              Element = None
-              Effect = Some(timeoutEffect, Some(timeoutDispose))
-              LayoutEffect = None
-              Hook = None
-            }
+            (
+              fun setResult -> {
+                Element = None
+                Effect = Some(bindSetResult setResult)
+              },
+              ()
+            )
+            // { ReturnValue = ()
+            //   Element = None
+            //   Effect = Some(timeoutEffect, Some(timeoutDispose))
+            //   LayoutEffect = None
+            //   Hook = None
+            // }
           )
     }
   )

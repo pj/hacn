@@ -8,12 +8,12 @@ let Render<'returnType> (builder: ('returnType -> unit) -> ReactElement) =
     Run = 
       fun _ ->
         OperationWait (
-          {
-            Element = Some (fun setResult -> builder setResult)
-            Effect = None
-            LayoutEffect = None
-            Hook = None
-          }
+            fun setResult -> {
+              Element = Some (builder setResult)
+              Effect = None
+            }
+            // LayoutEffect = None
+            // Hook = None
         )
   })
 
@@ -38,11 +38,11 @@ let RenderCapture captureElement =
     Run = 
       fun _ -> 
         OperationWait (
-          {
-            Element = Some (fun setResult -> captureElement setResult)
-            Effect = None
-            LayoutEffect = None
-            Hook = None
-          }
+            fun setResult -> {
+              Element = Some (captureElement setResult)
+              Effect = None
+            }
+            // LayoutEffect = None
+            // Hook = None
         )
   })

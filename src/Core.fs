@@ -25,7 +25,9 @@ let bind (underlyingOperation: Builder<'a>) (f: 'a -> Builder<'b>) : Builder<'b>
               match nextExecution with
               | Execution contents -> 
                 let executionResult = contents.Execute props
-                executionResult.OperationsToBind
+                {
+                  OperationsToBind = executionResult.OperationsToBind
+                }
               | _ -> 
                 failwith (sprintf "Can't bind execution %A" nextExecution)
             )
@@ -47,7 +49,7 @@ let bind (underlyingOperation: Builder<'a>) (f: 'a -> Builder<'b>) : Builder<'b>
 
         let result = underlyingOperationData.Run props
         match result with 
-        | OperationWait {SideEffects = sideEffects} -> // { Element = element; Effect = effect} -> //; LayoutEffect = layoutEffect; Hook = hook } -> 
+        | OperationWait sideEffects -> // { Element = element; Effect = effect} -> //; LayoutEffect = layoutEffect; Hook = hook } -> 
           {
             ReturnValue = None
             OperationsToBind = (
@@ -61,7 +63,7 @@ let bind (underlyingOperation: Builder<'a>) (f: 'a -> Builder<'b>) : Builder<'b>
             //   LayoutEffect = Option.map (fun (e, d) -> ((fun setNext -> e (setResult setNext)), d)) layoutEffect
             //   Hook = Option.map wrapHook hook
             // }) :: []
-        | OperationContinue {ReturnValue = returnValue; SideEffects = sideEffects} -> // { ReturnValue = returnValue; Element = element; Effect = effect; LayoutEffect = layoutEffect; Hook = hook } -> 
+        | OperationContinue (sideEffects, returnValue) -> // { ReturnValue = returnValue; Element = element; Effect = effect; LayoutEffect = layoutEffect; Hook = hook } -> 
           let nextExecution = f returnValue
 
           match nextExecution with
@@ -107,24 +109,25 @@ let combine firstOperation secondOperation =
       fun props ->
         {
           ReturnValue = Some (())
-          ThingsToCapture = []
+          OperationsToBind = []
         }
   }
 
 type ExperimentState<'props> = {
   LastElement: ReactElement option
-  Next: (obj -> ExecutionStuff list) option
+  Next: (obj -> NextResult) option
   Started: bool
-  Hooks: (obj -> ((ExecutionStuff list) option)) list
+  // Hooks: (obj -> ((ExecutionStuff list) option)) list
   PrevProps: 'props option
+  Disposers: array<Disposer option>
+  LayoutDisposers: array<Disposer option>
 }
 
 type Result = {
   Element: ReactElement option
-  Effects: (unit -> unit) list
-  LayoutEffects: (unit -> unit) list
-  Disposers: Disposer list
-  Hooks: GetNext list
+  Effects: (unit -> Disposer option) list
+  LayoutEffects: (unit -> Disposer option) list
+  // Hooks: GetNext list
 }
 
 let rec runHooks hooks props =
@@ -135,86 +138,90 @@ let rec runHooks hooks props =
     let hooksResult = runHooks t props
     Option.orElse hooksResult result
 
-let rec processResults (setNext: (Disposer list) -> (obj -> ExecutionStuff list) -> unit) started (results: ExecutionStuff list) =
+let rec processResults disposerIndex (setNext: int -> (obj -> NextResult) -> unit) started (results: (SetNext -> OperationSideEffects) list) =
   match results with
   | [] -> 
     {
       Element = None
       Effects = []
       LayoutEffects = []
-      Disposers = []
-      Hooks = []
+      // Hooks = []
     }
   | head :: tail ->
-    let processedResults = processResults setNext started tail
+    let processedResults = processResults (disposerIndex + 1) setNext started tail
 
-    let setResult = setNext processedResults.Disposers
+    let boundSetNext = setNext disposerIndex
+
+    let sideEffects = head boundSetNext
 
     let element = 
-      if (Option.isSome processedResults.Element) then
-        processedResults.Element
+      if (Option.isSome sideEffects.Element) then
+        sideEffects.Element
       else 
-        match head.Element with
-        | Some (element) -> Some (element setResult)
+        match sideEffects.Element with
+        | Some (element) -> Some element
         | None -> None
     
-    let effects, effectDisposers =
-      match head.Effect with
-      | Some((effect, disposer)) -> 
-        (
-          (fun () -> effect setResult) :: processedResults.Effects,
-          ConsOpt disposer processedResults.Disposers
-        )
-      | None -> 
-        (
-          processedResults.Effects,
-          processedResults.Disposers
-        )
+    let effects =
+      match sideEffects.Effect with
+      | Some(effect) -> 
+        effect :: processedResults.Effects
+      | None -> processedResults.Effects
 
-    let layoutEffects, disposers =
-      match head.LayoutEffect with
-      | Some((effect, disposer)) -> 
-        (
-          (fun () -> effect setResult) :: processedResults.LayoutEffects,
-          ConsOpt disposer effectDisposers
-        )
-      | None -> 
-        (
-          processedResults.LayoutEffects,
-          processedResults.Disposers
-        )
+    let layoutEffects =
+      match sideEffects.LayoutEffect with
+      | Some(effect) -> 
+        effect :: processedResults.LayoutEffects
+      | None -> processedResults.LayoutEffects
+
+    // let layoutEffects, disposers =
+    //   match head.LayoutEffect with
+    //   | Some((effect, disposer)) -> 
+    //     (
+    //       (fun () -> effect setResult) :: processedResults.LayoutEffects,
+    //       ConsOpt disposer effectDisposers
+    //     )
+    //   | None -> 
+    //     (
+    //       processedResults.LayoutEffects,
+    //       processedResults.Disposers
+    //     )
     
-    let hooks = 
-      if not started then
-        ConsOpt head.Hook processedResults.Hooks
-      else 
-        []
+    // let hooks = 
+    //   if not started then
+    //     ConsOpt head.Hook processedResults.Hooks
+    //   else 
+    //     []
 
     {
       Element = element
       Effects = effects
+      // Disposers = ref (Some({Disposer = ref None; Next = processedResults.Disposers}))
       LayoutEffects = layoutEffects
-      Disposers = disposers
-      Hooks = hooks
+      // Disposers = disposers
+      // Hooks = hooks
+
     }
 
-let runNext (setNext: (Disposer list) -> (obj -> ExecutionStuff list) -> unit) (componentStateRef : IRefValue<ExperimentState<'props>>) (props: 'props) =
-  let foundHook = runHooks componentStateRef.current.Hooks props
+let runNext (setNext: int -> (obj -> NextResult) -> unit) (componentStateRef : IRefValue<ExperimentState<'props>>) (props: 'props) =
+  // let foundHook = runHooks componentStateRef.current.Hooks props
 
-  match foundHook with
-  | Some (result) ->
-    processResults setNext componentStateRef.current.Started result
-  | None -> 
+  // match foundHook with
+  // | Some (result) ->
+  //   processResults setNext componentStateRef.current.Started result
+  // | None -> 
     match componentStateRef.current.Next with
     | Some(nextFunc) -> 
-      processResults setNext componentStateRef.current.Started (nextFunc props)
+      let results = nextFunc props
+      processResults (Array.length componentStateRef.current.Disposers+1) setNext componentStateRef.current.Started results.OperationsToBind
     | None -> 
       {
         Element = None
         Effects = []
+        // Disposers = ref None
         LayoutEffects = []
-        Disposers = []
-        Hooks = []
+        // Disposers = []
+        // Hooks = []
       }
 
 let getFirst delayOperation =
@@ -225,11 +232,12 @@ let getFirst delayOperation =
     | Execution executionContents ->
       let execNext props = 
         let executionResult = executionContents.Execute props
-        executionResult.ThingsToCapture
+        {
+          OperationsToBind = executionResult.OperationsToBind
+        }
       execNext
     | _ -> failwith (sprintf "Delayed operation must be execution type, got %A" firstOperation)
   | _ -> failwith (sprintf "First operation from builder must be of type Delay: %A" delayOperation)
-
 
 let interpreter delayOperation props = 
   let componentStateRef =
@@ -238,19 +246,38 @@ let interpreter delayOperation props =
         LastElement = None
         Next = None
         Started = false
-        Hooks = []
+        // Hooks = []
         PrevProps = None
+        Disposers = [||]
+        LayoutDisposers = [||]
       }
     )
 
   // Force an update when an effect completes
   let state = Fable.React.HookBindings.Hooks.useState ("asdf")
 
-  let setNext disposers (nextValues: obj -> ExecutionStuff list) =
-    List.iter (fun d -> d ()) disposers
+  let setNext (disposerIndex: int) (nextValues: obj -> NextResult) =
+    let disposerLength = Array.length componentStateRef.current.Disposers
+    let (updatedDisposers, updatedLayoutDisposers) =
+      if disposerIndex < disposerLength then
+        for i in disposerIndex .. (Array.length componentStateRef.current.Disposers) do
+          Option.iter (fun d -> d ()) componentStateRef.current.Disposers.[i]
+          Option.iter (fun d -> d ()) componentStateRef.current.LayoutDisposers.[i]
+        (
+          componentStateRef.current.Disposers[disposerIndex..], 
+          componentStateRef.current.LayoutDisposers[disposerIndex..]
+        )
+      else
+        (
+          componentStateRef.current.Disposers,
+          componentStateRef.current.LayoutDisposers
+        )
+
     componentStateRef.current <- {
       componentStateRef.current with 
         Next = Some (nextValues)
+        Disposers = updatedDisposers
+        LayoutDisposers = updatedLayoutDisposers
     }
 
     // Trigger rerender
@@ -260,7 +287,7 @@ let interpreter delayOperation props =
   if not componentStateRef.current.Started then
     componentStateRef.current <- {
       componentStateRef.current with 
-        Next = Some (getFirst delayOperation )
+        Next = Some (getFirst delayOperation)
     }
 
   let result = runNext setNext componentStateRef props
@@ -274,14 +301,24 @@ let interpreter delayOperation props =
     componentStateRef.current <- {
       componentStateRef.current with 
         Started = true
-        Hooks = result.Hooks
+        // Hooks = result.Hooks
         }
 
-  let handleEffects effects () =
-    List.iter (fun e -> e ()) effects
+  let handleEffects effects isLayout () =
+    let newDisposers = List.map (fun e -> e ()) effects
+    if isLayout then
+      componentStateRef.current <- {
+        componentStateRef.current with 
+            LayoutDisposers = Array.append componentStateRef.current.LayoutDisposers (List.toArray newDisposers)
+          }
+    else
+      componentStateRef.current <- {
+        componentStateRef.current with 
+            Disposers = Array.append componentStateRef.current.Disposers (List.toArray newDisposers)
+          }
 
-  Fable.React.HookBindings.Hooks.useEffect (handleEffects result.Effects)
-  Fable.React.HookBindings.Hooks.useLayoutEffect (handleEffects result.LayoutEffects)
+  Fable.React.HookBindings.Hooks.useEffect (handleEffects result.Effects false)
+  Fable.React.HookBindings.Hooks.useLayoutEffect (handleEffects result.LayoutEffects true)
 
   Option.defaultValue null result.Element
 
