@@ -15,28 +15,31 @@ type PropsOperationState<'props> =
 
 let Props<'returnType > =
   let mutable prevProps = None
-  Operation({
-      Run = 
-        fun props ->
-          let propsHook props =
-            let unboxedProps = unbox<'returnType> props
-            match prevProps with
-            | None -> Some(unboxedProps)
-            | Some (prevPropsValue) ->
-              if not (shallowEqualObjects props prevPropsValue) then
-                prevProps <- Some (unboxedProps)
-                Some (unboxedProps)
-              else
-                None
-          
-          OperationContinue({
-            ReturnValue = (unbox<'returnType> props)
-            Element = None
-            Effect = None
-            // LayoutEffect = None
-            // Hook = Some(propsHook)
-          })
-    }
+  Operation(
+    fun props ->
+      let propsHook props =
+        let unboxedProps = unbox<'returnType> props
+        match prevProps with
+        | None -> Some(unboxedProps)
+        | Some (prevPropsValue) ->
+          if not (shallowEqualObjects props prevPropsValue) then
+            prevProps <- Some (unboxedProps)
+            Some (unboxedProps)
+          else
+            None
+      
+      OperationContinue(
+        (
+          (fun _ -> 
+            {
+              Element = None
+              Effect = None
+              LayoutEffect = None
+              Hook = Some(propsHook)
+          }),
+          (unbox<'returnType> props)
+        )
+      )
   )
 
 type StateContainer<'state> =
@@ -46,8 +49,6 @@ type StateContainer<'state> =
 let State<'state> (initialState: 'state) =
   let mutable prevState = None
   Operation(
-    { 
-      Run =
         fun _ ->
           let state = Hooks.useState(initialState)
 
@@ -83,15 +84,17 @@ let State<'state> (initialState: 'state) =
               Some ((stateHook.current, StateSetOperation stateHook.update))
 
           OperationContinue(
-            { 
-              ReturnValue = (state.current, StateSetOperation state.update)
-              Element = None
-              Effect = None
-              LayoutEffect = None
-              Hook = Some(stateHook) 
-              }
+            (
+              (fun _ ->
+                { 
+                  Element = None
+                  Effect = None
+                  LayoutEffect = None
+                  Hook = Some(stateHook) 
+                }),
+              (state.current, StateSetOperation state.update)
+            )
           )
-    }
   )
 
 let uFunc x = x ()
