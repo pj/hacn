@@ -2,7 +2,7 @@ module Hacn.Core
 
 open Fable.React
 
-let bindSetNext<'returnType> f (setNext: SetNext) (returnValue: 'returnType) : unit= 
+let bindSetNext f setNext returnValue= 
   setNext (
     fun props ->
       let nextExecution = f returnValue
@@ -32,7 +32,7 @@ let wrapHook f hook =
     | None -> None
 
 
-let bind (underlyingOperation: Builder<'a>) (f: 'a -> Builder<'b>) : Builder<'b> =
+let bind<'a, 'b> (underlyingOperation: Builder<'a>) (f: 'a -> Builder<'b>) : Builder<'b> =
   match underlyingOperation with
   | Operation underlyingOperationData ->
     Execution {
@@ -126,7 +126,7 @@ let rec runHooks hooks props =
     let hooksResult = runHooks t props
     Option.orElse hooksResult result
 
-let rec processResults<'returnType> (disposerIndex: int) setNext (started) (results: (SetNext -> ExecutionSideEffects) list) =
+let rec processResults disposerIndex setNext started (results: (SetNext -> ExecutionSideEffects) list) =
   match results with
   | [] -> 
     {
@@ -177,7 +177,7 @@ let rec processResults<'returnType> (disposerIndex: int) setNext (started) (resu
       Hooks = hooks
     }
 
-let runNext setNext (componentStateRef : IRefValue<ExperimentState>) (props: obj) =
+let runNext setNext (componentStateRef : IRefValue<ExperimentState>) props =
   let foundHook = runHooks componentStateRef.current.Hooks props
 
   match foundHook with
@@ -273,7 +273,7 @@ let interpreter delayOperation (props: obj )=
     componentStateRef.current <- {
       componentStateRef.current with 
         Started = true
-        // Hooks = result.Hooks
+        Hooks = result.Hooks
         }
 
   let handleEffects effects isLayout () =

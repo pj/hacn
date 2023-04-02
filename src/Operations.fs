@@ -462,45 +462,46 @@ let Context context = ContextCore Hooks.useContext context
 
 let Ref (initialValue: 'returnType option) =
   Operation(
-    { 
-      Run =
-        fun _ ->
-          let currentRef = Hooks.useRef (initialValue)
+    fun _ ->
+      let currentRef = Hooks.useRef (initialValue)
 
-          OperationContinue(
-            { 
-              ReturnValue = currentRef
-              Element = None
-              Effect = None
-              LayoutEffect = None
-              Hook = 
-                Some (fun _ -> 
-                  Hooks.useRef (initialValue)
-                  None
-                )
-              }
-          )
-    }
+      OperationContinue(
+        (
+          (fun _ -> { 
+            Element = None
+            Effect = None
+            LayoutEffect = None
+            Hook = 
+              Some (fun _ -> 
+                Hooks.useRef (initialValue) |> ignore
+                None
+              )
+            }),
+          currentRef
+        )
+      )
   )
 
 // Call a function passed in through props in an effect.
 let Call callable =
   Operation(
-    { 
-      Run =
-        fun _ ->
-          let callCallable _ =
-            callable ()
+    fun _ ->
+      let callCallable _ =
+        callable ()
+        None
 
-          OperationContinue(
-            { 
-              ReturnValue = ()
-              Element = None
-              Effect = Some(callCallable, None)
-              LayoutEffect = None
-              Hook = None
-              }
-          ) }
+      OperationContinue(
+        (
+        (fun _ -> { 
+          Element = None
+          Effect = Some(callCallable)
+          LayoutEffect = None
+          Hook = None
+          })
+          , 
+          ()
+        )
+      ) 
   )
 
 let CallLayout callable =
