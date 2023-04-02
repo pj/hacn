@@ -2,7 +2,7 @@ module Hacn.Core
 
 open Fable.React
 
-let bindSetNext<'a, 'b> f (setNext: SetNext<'b>) (returnValue: 'a) : unit= 
+let bindSetNext<'returnType> f (setNext: SetNext) (returnValue: 'returnType) : unit= 
   setNext (
     fun props ->
       let nextExecution = f returnValue
@@ -16,6 +16,21 @@ let bindSetNext<'a, 'b> f (setNext: SetNext<'b>) (returnValue: 'a) : unit=
       | _ -> 
         failwith (sprintf "Can't bind execution %A" nextExecution)
     )
+let wrapHook f hook = 
+  fun props ->
+    let returnValue = hook props
+    match returnValue with
+    | Some (returnValue) -> 
+      let nextExecution = f returnValue
+
+      match nextExecution with
+      | Execution contents -> 
+        let executionResult = contents.Execute props
+        Some (executionResult)
+      | _ -> 
+        failwith (sprintf "Can't bind execution %A" nextExecution)
+    | None -> None
+
 
 let bind (underlyingOperation: Builder<'a>) (f: 'a -> Builder<'b>) : Builder<'b> =
   match underlyingOperation with
@@ -23,30 +38,20 @@ let bind (underlyingOperation: Builder<'a>) (f: 'a -> Builder<'b>) : Builder<'b>
     Execution {
       Execute = fun props -> 
         
-        // let wrapHook hook = 
-        //   fun props ->
-        //     let returnValue = hook props
-        //     match returnValue with
-        //     | Some (returnValue) -> 
-        //       let nextExecution = f returnValue
-
-        //       match nextExecution with
-        //       | Execution contents -> 
-        //         let executionResult = contents.Execute props
-        //         Some (executionResult.ThingsToCapture)
-        //       | _ -> 
-        //         failwith (sprintf "Can't bind execution %A" nextExecution)
-        //     | None -> None
-
         let result = underlyingOperationData props
         match result with 
         | OperationWait sideEffects ->
           {
-            ReturnValue = None
             OperationsToBind = (
               fun setNext ->  
                 let setResult = bindSetNext f setNext
-                sideEffects setResult
+                let operationSideEffects = sideEffects setResult
+                {
+                  Element = operationSideEffects.Element
+                  Effect = operationSideEffects.Effect
+                  LayoutEffect = operationSideEffects.LayoutEffect
+                  Hook = Option.map (wrapHook f) operationSideEffects.Hook
+                }
             ) :: []
           }
         | OperationContinue (sideEffects, returnValue) ->
@@ -56,20 +61,30 @@ let bind (underlyingOperation: Builder<'a>) (f: 'a -> Builder<'b>) : Builder<'b>
           | Execution contents -> 
             let executionResult = contents.Execute props
             {
-              ReturnValue = executionResult.ReturnValue
               OperationsToBind = (
                 fun setNext ->  
-                  let setResult = bindSetNext setNext
-                  sideEffects setResult
-              ) :: []
+                  let setResult = bindSetNext f setNext
+                  let operationSideEffects = sideEffects setResult
+                  {
+                    Element = operationSideEffects.Element
+                    Effect = operationSideEffects.Effect
+                    LayoutEffect = operationSideEffects.LayoutEffect
+                    Hook = Option.map (wrapHook f) operationSideEffects.Hook
+                  }
+              ) :: executionResult.OperationsToBind
             }
           | End ->
             {
-              ReturnValue = None
               OperationsToBind = (
                 fun setNext ->  
-                  let setResult = bindSetNext setNext
-                  sideEffects setResult
+                  let setResult = bindSetNext f setNext
+                  let operationSideEffects = sideEffects setResult
+                  {
+                    Element = operationSideEffects.Element
+                    Effect = operationSideEffects.Effect
+                    LayoutEffect = operationSideEffects.LayoutEffect
+                    Hook = Option.map (wrapHook f) operationSideEffects.Hook
+                  }
               ) :: []
             }
           | _ -> 
@@ -82,16 +97,15 @@ let combine firstOperation secondOperation =
     Execute =
       fun props ->
         {
-          ReturnValue = Some (())
           OperationsToBind = []
         }
   }
 
-type ExperimentState<'returnType> = {
+type ExperimentState = {
   LastElement: ReactElement option
-  Next: (obj -> NextResult<'returnType>) option
+  Next: (obj -> ExecutionResult) option
   Started: bool
-  // Hooks: (obj -> ((ExecutionStuff list) option)) list
+  Hooks: (obj -> ExecutionResult option) list
   PrevProps: obj option
   Disposers: array<Disposer option>
   LayoutDisposers: array<Disposer option>
@@ -101,25 +115,25 @@ type Result = {
   Element: ReactElement option
   Effects: (unit -> Disposer option) list
   LayoutEffects: (unit -> Disposer option) list
-  // Hooks: GetNext list
+  Hooks: (obj -> ExecutionResult option) list
 }
 
-// let rec runHooks hooks props =
-//   match hooks with 
-//   | [] -> None
-//   | hook :: t -> 
-//     let result = hook props
-//     let hooksResult = runHooks t props
-//     Option.orElse hooksResult result
+let rec runHooks hooks props =
+  match hooks with 
+  | [] -> None
+  | hook :: t -> 
+    let result = hook props
+    let hooksResult = runHooks t props
+    Option.orElse hooksResult result
 
-let rec processResults<'returnType> (disposerIndex: int) (setNext: int -> (obj -> NextResult<'returnType>) -> unit) (started) (results: (SetNext<'returnType> -> OperationSideEffects<'returnType>) list) =
+let rec processResults<'returnType> (disposerIndex: int) setNext (started) (results: (SetNext -> ExecutionSideEffects) list) =
   match results with
   | [] -> 
     {
       Element = None
       Effects = []
       LayoutEffects = []
-      // Hooks = []
+      Hooks = []
     }
   | head :: tail ->
     let processedResults = processResults (disposerIndex + 1) setNext started tail
@@ -148,29 +162,28 @@ let rec processResults<'returnType> (disposerIndex: int) (setNext: int -> (obj -
         effect :: processedResults.LayoutEffects
       | None -> processedResults.LayoutEffects
     
-    // let hooks = 
-    //   if not started then
-    //     ConsOpt head.Hook processedResults.Hooks
-    //   else 
-    //     []
+    let hooks = 
+      if not started then
+        match sideEffects.Hook with
+        | None -> processedResults.Hooks
+        | Some (hook) -> hook :: processedResults.Hooks
+      else 
+        []
 
     {
       Element = element
       Effects = effects
-      // Disposers = ref (Some({Disposer = ref None; Next = processedResults.Disposers}))
       LayoutEffects = layoutEffects
-      // Disposers = disposers
-      // Hooks = hooks
-
+      Hooks = hooks
     }
 
-let runNext<'returnType> (setNext: int -> (obj -> NextResult<'returnType>) -> unit) (componentStateRef : IRefValue<ExperimentState<'returnType>>) (props: obj) =
-  // let foundHook = runHooks componentStateRef.current.Hooks props
+let runNext setNext (componentStateRef : IRefValue<ExperimentState>) (props: obj) =
+  let foundHook = runHooks componentStateRef.current.Hooks props
 
-  // match foundHook with
-  // | Some (result) ->
-  //   processResults setNext componentStateRef.current.Started result
-  // | None -> 
+  match foundHook with
+  | Some (result) ->
+    processResults (Array.length componentStateRef.current.Disposers+1) setNext componentStateRef.current.Started result.OperationsToBind
+  | None -> 
     match componentStateRef.current.Next with
     | Some(nextFunc) -> 
       let results = nextFunc props
@@ -179,10 +192,8 @@ let runNext<'returnType> (setNext: int -> (obj -> NextResult<'returnType>) -> un
       {
         Element = None
         Effects = []
-        // Disposers = ref None
         LayoutEffects = []
-        // Disposers = []
-        // Hooks = []
+        Hooks = []
       }
 
 let getFirst delayOperation =
@@ -207,7 +218,7 @@ let interpreter delayOperation (props: obj )=
         LastElement = None
         Next = None
         Started = false
-        // Hooks = []
+        Hooks = []
         PrevProps = None
         Disposers = [||]
         LayoutDisposers = [||]

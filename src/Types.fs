@@ -9,26 +9,28 @@ and OperationSideEffects<'returnType> = {
   Element: ReactElement option
   Effect: (unit -> Disposer option) option
   LayoutEffect: (unit -> Disposer option) option
-  Hook: (obj -> 'returnType) option
+  Hook: (obj -> 'returnType option) option
 }
-and SideEffectsFunction<'returnType> = SetResult<'returnType> -> OperationSideEffects<'returnType>
+and ExecutionSideEffects = {
+  Element: ReactElement option
+  Effect: (unit -> Disposer option) option
+  LayoutEffect: (unit -> Disposer option) option
+  Hook: (obj -> ExecutionResult option) option
+}
+and OperationSideEffectsFunction<'returnType> = SetResult<'returnType> -> OperationSideEffects<'returnType>
 and OperationResult<'returnType> =
-  | OperationWait of SideEffectsFunction<'returnType>
+  | OperationWait of OperationSideEffectsFunction<'returnType>
   | OperationContinue of (SetResult<'returnType> -> OperationSideEffects<'returnType>) * 'returnType
-and NextResult<'returnType> = {
-  OperationsToBind: (SetNext<'returnType> -> OperationSideEffects<'returnType>) list
+and SetNext = (obj -> ExecutionResult) -> unit
+and ExecutionResult = {
+  OperationsToBind: (SetNext -> ExecutionSideEffects) list
 }
-and SetNext<'returnType> = (obj -> NextResult<'returnType>) -> unit
-and ExecutionResult<'returnType> = {
-  ReturnValue: 'returnType option
-  OperationsToBind: (SetNext<'returnType> -> OperationSideEffects<'returnType>) list
-}
-and ExecutionContents<'returnType> = {
-  Execute: obj -> ExecutionResult<'returnType>
+and ExecutionContents = {
+  Execute: obj -> ExecutionResult
 }
 and Builder<'returnType> =
   | Delay of (unit -> Builder<'returnType>)
   | Operation of (obj -> OperationResult<'returnType>)
-  | Execution of ExecutionContents<'returnType>
+  | Execution of ExecutionContents
   | Return of 'returnType
   | End
