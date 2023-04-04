@@ -1,10 +1,13 @@
 {
   "private": true,
+  "type": "module",
   "scripts": {
     "test:e2e:server": "webpack-dev-server --config ./e2etests/webpack.config.js",
     "test:e2e:cypress": "cypress open -C e2etests/cypress.json",
     "pretest": "fable-splitter tests -o dist/tests --commonjs -c tests/splitter.config.js",
+    "unit_pretest": "dotnet fable unit_tests -o dist/unit_tests",
     "test": "mocha --require jsdom-global/register dist/tests/*.test.js",
+    "unit": "npm run unit_pretest && mocha dist/unit_tests",
     "test:props": "mocha --require jsdom-global/register dist/tests/*.test.js -g \"Props tests\"",
     "pack": "cd src && dotnet pack -c Release",
     "publish": "npm run pack && dotnet nuget push src/bin/Release/Hacn.0.0.6.nupkg --api-key $NUGET_KEY --source https://api.nuget.org/v3/index.json"

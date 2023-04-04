@@ -13,6 +13,12 @@
       "commands": [
         "paket"
       ]
+    },
+    "fable": {
+      "version": "4.0.3",
+      "commands": [
+        "fable"
+      ]
     }
   }
 }

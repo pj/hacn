@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Test.test.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../src/Hacn.fsproj">
+      <Name>Hacn.fsproj</Name>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="..\.paket\Paket.Restore.targets" />
+</Project>

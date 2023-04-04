@@ -1,0 +1,5 @@
+group UnitTest
+  Fable.Browser.Dom
+  Fable.Core
+  Fable.React
+  Fable.Mocha
