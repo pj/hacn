@@ -1,4 +1,4 @@
-group Examples
+group Core
   Fable.Browser.Dom
   Fable.Core
   Fable.React

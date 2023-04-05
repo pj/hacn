@@ -177,25 +177,6 @@ let rec processResults disposerIndex setNext started (results: (SetNext -> Execu
       Hooks = hooks
     }
 
-let runNext setNext (componentStateRef : IRefValue<ExperimentState>) props =
-  let foundHook = runHooks componentStateRef.current.Hooks props
-
-  match foundHook with
-  | Some (result) ->
-    processResults (Array.length componentStateRef.current.Disposers+1) setNext componentStateRef.current.Started result.OperationsToBind
-  | None -> 
-    match componentStateRef.current.Next with
-    | Some(nextFunc) -> 
-      let results = nextFunc props
-      processResults (Array.length componentStateRef.current.Disposers+1) setNext componentStateRef.current.Started results.OperationsToBind
-    | None -> 
-      {
-        Element = None
-        Effects = []
-        LayoutEffects = []
-        Hooks = []
-      }
-
 let getFirst delayOperation =
   match delayOperation with
   | Delay (f) ->
@@ -210,6 +191,87 @@ let getFirst delayOperation =
       execNext
     | _ -> failwith (sprintf "Delayed operation must be execution type, got %A" firstOperation)
   | _ -> failwith (sprintf "First operation from builder must be of type Delay: %A" delayOperation)
+
+
+let runNext setNext (componentStateRef : IRefValue<ExperimentState>) delayOperation props =
+  if not componentStateRef.current.Started then
+    componentStateRef.current <- {
+      componentStateRef.current with 
+        Next = Some (getFirst delayOperation)
+    }
+
+  let foundHook = runHooks componentStateRef.current.Hooks props
+
+  let result = 
+    match foundHook with
+    | Some (result) ->
+      processResults (Array.length componentStateRef.current.Disposers+1) setNext componentStateRef.current.Started result.OperationsToBind
+    | None -> 
+      match componentStateRef.current.Next with
+      | Some(nextFunc) -> 
+        let results = nextFunc props
+        processResults (Array.length componentStateRef.current.Disposers+1) setNext componentStateRef.current.Started results.OperationsToBind
+      | None -> 
+        {
+          Element = None
+          Effects = []
+          LayoutEffects = []
+          Hooks = []
+        }
+
+  componentStateRef.current <- {
+    componentStateRef.current with 
+      Next = None
+  }
+
+  if not componentStateRef.current.Started then
+    componentStateRef.current <- {
+      componentStateRef.current with 
+        Started = true
+        Hooks = result.Hooks
+        }
+  
+  result
+
+
+let setNext (componentStateRef: IRefValue<ExperimentState>) triggerUpdate disposerIndex nextValues =
+  let disposerLength = Array.length componentStateRef.current.Disposers
+  let (updatedDisposers, updatedLayoutDisposers) =
+    if disposerIndex < disposerLength then
+      for i in disposerIndex .. (Array.length componentStateRef.current.Disposers) do
+        Option.iter (fun d -> d ()) componentStateRef.current.Disposers.[i]
+        Option.iter (fun d -> d ()) componentStateRef.current.LayoutDisposers.[i]
+      (
+        componentStateRef.current.Disposers[disposerIndex..], 
+        componentStateRef.current.LayoutDisposers[disposerIndex..]
+      )
+    else
+      (
+        componentStateRef.current.Disposers,
+        componentStateRef.current.LayoutDisposers
+      )
+
+  componentStateRef.current <- {
+    componentStateRef.current with 
+      Next = Some (nextValues)
+      Disposers = updatedDisposers
+      LayoutDisposers = updatedLayoutDisposers
+  }
+
+  triggerUpdate ()
+
+let handleEffects (componentStateRef: IRefValue<ExperimentState>) effects isLayout () =
+  let newDisposers = List.map (fun e -> e ()) effects
+  if isLayout then
+    componentStateRef.current <- {
+      componentStateRef.current with 
+          LayoutDisposers = Array.append componentStateRef.current.LayoutDisposers (List.toArray newDisposers)
+        }
+  else
+    componentStateRef.current <- {
+      componentStateRef.current with 
+          Disposers = Array.append componentStateRef.current.Disposers (List.toArray newDisposers)
+        }
 
 let interpreter delayOperation (props: obj )= 
   let componentStateRef =
@@ -227,70 +289,15 @@ let interpreter delayOperation (props: obj )=
 
   // Force an update when an effect completes
   let state = Fable.React.HookBindings.Hooks.useState ("asdf")
-
-  let setNext disposerIndex nextValues =
-    let disposerLength = Array.length componentStateRef.current.Disposers
-    let (updatedDisposers, updatedLayoutDisposers) =
-      if disposerIndex < disposerLength then
-        for i in disposerIndex .. (Array.length componentStateRef.current.Disposers) do
-          Option.iter (fun d -> d ()) componentStateRef.current.Disposers.[i]
-          Option.iter (fun d -> d ()) componentStateRef.current.LayoutDisposers.[i]
-        (
-          componentStateRef.current.Disposers[disposerIndex..], 
-          componentStateRef.current.LayoutDisposers[disposerIndex..]
-        )
-      else
-        (
-          componentStateRef.current.Disposers,
-          componentStateRef.current.LayoutDisposers
-        )
-
-    componentStateRef.current <- {
-      componentStateRef.current with 
-        Next = Some (nextValues)
-        Disposers = updatedDisposers
-        LayoutDisposers = updatedLayoutDisposers
-    }
-
-    // Trigger rerender
+  // Trigger rerender
+  let triggerRerender () =
     let asdf = Fable.Core.JS.Math.random ()
     state.update (sprintf "blah%f" asdf)
   
-  if not componentStateRef.current.Started then
-    componentStateRef.current <- {
-      componentStateRef.current with 
-        Next = Some (getFirst delayOperation)
-    }
+  let result = runNext (setNext componentStateRef triggerRerender) componentStateRef delayOperation props
 
-  let result = runNext setNext componentStateRef props
-
-  componentStateRef.current <- {
-    componentStateRef.current with 
-      Next = None
-  }
-
-  if not componentStateRef.current.Started then
-    componentStateRef.current <- {
-      componentStateRef.current with 
-        Started = true
-        Hooks = result.Hooks
-        }
-
-  let handleEffects effects isLayout () =
-    let newDisposers = List.map (fun e -> e ()) effects
-    if isLayout then
-      componentStateRef.current <- {
-        componentStateRef.current with 
-            LayoutDisposers = Array.append componentStateRef.current.LayoutDisposers (List.toArray newDisposers)
-          }
-    else
-      componentStateRef.current <- {
-        componentStateRef.current with 
-            Disposers = Array.append componentStateRef.current.Disposers (List.toArray newDisposers)
-          }
-
-  Fable.React.HookBindings.Hooks.useEffect (handleEffects result.Effects false)
-  Fable.React.HookBindings.Hooks.useLayoutEffect (handleEffects result.LayoutEffects true)
+  Fable.React.HookBindings.Hooks.useEffect (handleEffects componentStateRef result.Effects false)
+  Fable.React.HookBindings.Hooks.useLayoutEffect (handleEffects componentStateRef result.LayoutEffects true)
 
   Option.defaultValue null result.Element
 

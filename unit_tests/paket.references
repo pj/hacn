@@ -1,4 +1,4 @@
-group UnitTest
+group Core
   Fable.Browser.Dom
   Fable.Core
   Fable.React

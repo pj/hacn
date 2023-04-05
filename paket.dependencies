@@ -21,37 +21,8 @@ group Build
 group Core
     source https://api.nuget.org/v3/index.json
     nuget Fable.Browser.Dom
-    nuget Fable.Core
-    nuget Fable.React
-    nuget Feliz
-
-group Test
-    source https://api.nuget.org/v3/index.json
-    nuget Fable.Browser.Dom
-    nuget Fable.Core
-    nuget Fable.Jester
-    nuget Fable.React
     nuget Fable.ReactTestingLibrary
+    nuget Fable.Core
+    nuget Fable.React
+    nuget Feliz
     nuget Fable.Mocha
-    nuget Feliz
-
-group UnitTest
-    source https://api.nuget.org/v3/index.json
-    nuget Fable.Browser.Dom
-    nuget Fable.Core
-    nuget Fable.React
-    nuget Fable.Mocha
-
-group Examples
-    source https://api.nuget.org/v3/index.json
-    nuget Fable.Browser.Dom
-    nuget Fable.Core
-    nuget Fable.React
-    nuget Feliz
-
-group Rewrite
-    source https://api.nuget.org/v3/index.json
-    nuget Fable.Browser.Dom
-    nuget Fable.Core
-    nuget Fable.React
-    nuget Feliz

@@ -1,7 +1,6 @@
-group Test
+group Core
   Fable.Browser.Dom
   Fable.Core
-  Fable.Jester
   Fable.React
   Fable.ReactTestingLibrary
   Fable.Mocha
