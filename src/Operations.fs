@@ -1,8 +1,7 @@
 module Hacn.Operations
 
-open Fable.React
-open Feliz
 open FSharp.Core
+open Fable.React
 open Fable.Core.Util
 open Fable.Core
 

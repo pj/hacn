@@ -1,6 +1,5 @@
 module Hacn.Render
 
-open Feliz
 open FSharp.Core
 
 // let Render<'returnType> (builder: ('returnType -> unit) -> ReactElement) =

@@ -33,7 +33,7 @@ let props () =
 
   let triggerRerender () = ()
 
-  let element = testInterpreter componentStateRef triggerRerender (Delay (fun () -> End)) {Thing = "asdf"}
+  let element = testInterpreter componentStateRef triggerRerender (Delay (fun () -> Execution {Execute = fun _ -> {OperationsToBind = []}})) {Thing = "asdf"}
   Expect.equal 1 1 "Text content equal" 
 
 let tests =

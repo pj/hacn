@@ -309,7 +309,8 @@ type ReactBuilder () =
 
   member _.Run(firstOperation) =
     // Fable.React.FunctionComponent.Of (fun props -> interpreter firstOperation props)
-    Feliz.React.functionComponent (fun props -> interpreter firstOperation props)
+    // Feliz.React.functionComponent (fun props -> interpreter firstOperation props)
+    Fable.React.Helpers.ofFunction (fun props -> interpreter firstOperation props)
 
 let react = ReactBuilder()
 
