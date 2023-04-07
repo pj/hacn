@@ -1,0 +1,56 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        // {
+        //     "name": "Run core tests",
+        //     "type": "coreclr",
+        //     "request": "launch",
+        //     "preLaunchTask": "npm: build:core:tests",
+        //     "program": "${workspaceFolder}/tests/bin/Debug/netcoreapp3.1/Test.dll",
+        //     "args": [],
+        //     "cwd": "${workspaceFolder}",
+        //     "stopAtEntry": false,
+        //     "console": "internalConsole"
+        // },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Unit Tests",
+            "program": "${workspaceFolder}/node_modules/mocha/bin/_mocha",
+            "sourceMaps": true,
+            "preLaunchTask": "npm: build_unit",
+            "args": [
+                // "--require",
+                // "esm",
+                // "--require",
+                // "${workspaceFolder}/your-test-folder/your-setup.js",
+                // "--reporter",
+                // "dot",
+                // "--slow",
+                // "5000",
+                // "--colors",
+                // "--require",
+                // "fs:node_modules/fable-compiler/fable-compiler.js",
+                // "mjs:node_modules/mocha-fable/src/fable-mocha-compiler.js",
+                // "js:node_modules/mocha-fable/src/fable-mocha-wrapper.js",
+                "${workspaceFolder}/dist/unit_tests",
+            ],
+            "internalConsoleOptions": "openOnSessionStart",
+            "skipFiles": [
+                "<node_internals>/**"
+            ]
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Launch Program",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "program": "${workspaceFolder}/src/yourNodeIndex.js"
+        }
+    ]
+}

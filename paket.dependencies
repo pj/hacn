@@ -24,5 +24,4 @@ group Core
     nuget Fable.ReactTestingLibrary
     nuget Fable.Core
     nuget Fable.React
-    nuget Feliz
     nuget Fable.Mocha

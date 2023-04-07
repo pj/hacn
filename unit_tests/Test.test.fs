@@ -28,6 +28,17 @@ type TestBuilder () =
 
 let testReact = new TestBuilder ()
 
+let TestRender = 
+  Operation(
+    fun _ -> 
+      OperationWait(fun _ -> {
+        Element = Some(div [] [ofString "hello"])
+        Effect = None
+        LayoutEffect = None
+        Hook = None
+      })
+  )
+
 
 let props () = 
   let componentStateRef = TestRef (
@@ -45,7 +56,7 @@ let props () =
   let triggerRerender () = ()
 
   let testBuild = testReact {
-    End
+    do! TestRender
   }
 
   let element = 

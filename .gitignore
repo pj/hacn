@@ -294,7 +294,6 @@ __pycache__/
 .ionide
 
 dist
-.vscode
 src/temp
 
 # Direnv
