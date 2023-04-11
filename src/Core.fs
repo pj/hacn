@@ -102,13 +102,20 @@ let combine firstOperation secondOperation =
   }
 
 type ExperimentState = {
-  LastElement: ReactElement option
+  LastElement: ReactElement
   Next: (obj -> ExecutionResult) option
   Started: bool
   Hooks: (obj -> ExecutionResult option) list
   PrevProps: obj option
   Disposers: array<Disposer option>
   LayoutDisposers: array<Disposer option>
+}
+
+type RunResult = {
+  Element: ReactElement
+  Effects: (unit -> Disposer option) list
+  LayoutEffects: (unit -> Disposer option) list
+  Hooks: (obj -> ExecutionResult option) list
 }
 
 type Result = {
@@ -143,8 +150,8 @@ let rec processResults disposerIndex setNext started (results: (SetNext -> Execu
     let sideEffects = head boundSetNext
 
     let element = 
-      if (Option.isSome sideEffects.Element) then
-        sideEffects.Element
+      if (Option.isSome processedResults.Element) then
+        processedResults.Element
       else 
         match sideEffects.Element with
         | Some (element) -> Some element
@@ -193,7 +200,7 @@ let getFirst delayOperation =
   | _ -> failwith (sprintf "First operation from builder must be of type Delay: %A" delayOperation)
 
 
-let runNext setNext (componentStateRef : IRefValue<ExperimentState>) delayOperation props =
+let runNext setNext (componentStateRef : IRefValue<ExperimentState>) delayOperation props : RunResult =
   if not componentStateRef.current.Started then
     componentStateRef.current <- {
       componentStateRef.current with 
@@ -219,9 +226,11 @@ let runNext setNext (componentStateRef : IRefValue<ExperimentState>) delayOperat
           Hooks = []
         }
 
+  let resultElement = Option.defaultValue componentStateRef.current.LastElement result.Element 
   componentStateRef.current <- {
     componentStateRef.current with 
       Next = None
+      LastElement = resultElement
   }
 
   if not componentStateRef.current.Started then
@@ -230,9 +239,13 @@ let runNext setNext (componentStateRef : IRefValue<ExperimentState>) delayOperat
         Started = true
         Hooks = result.Hooks
         }
-  
-  result
 
+  {
+      Element = resultElement
+      Effects = result.Effects
+      LayoutEffects = result.LayoutEffects
+      Hooks = result.Hooks
+  }
 
 let setNext (componentStateRef: IRefValue<ExperimentState>) triggerUpdate disposerIndex nextValues =
   let disposerLength = Array.length componentStateRef.current.Disposers
@@ -277,7 +290,7 @@ let interpreter delayOperation (props: obj )=
   let componentStateRef =
     Fable.React.HookBindings.Hooks.useRef (
       { 
-        LastElement = None
+        LastElement = null
         Next = None
         Started = false
         Hooks = []
@@ -299,7 +312,7 @@ let interpreter delayOperation (props: obj )=
   Fable.React.HookBindings.Hooks.useEffect (handleEffects componentStateRef result.Effects false)
   Fable.React.HookBindings.Hooks.useLayoutEffect (handleEffects componentStateRef result.LayoutEffects true)
 
-  Option.defaultValue null result.Element
+  result.Element
 
 type ReactBuilder () =
   member _.Bind(operation, f) = bind operation f

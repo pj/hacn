@@ -1,6 +1,7 @@
 module UnitTest
 open Hacn.Core
 open Hacn.Types
+open Hacn.Operations
 open Fable.Mocha
 open Fable.React
 
@@ -8,14 +9,29 @@ type TestRef<'refState> (initialValue: 'refState) =
   interface IRefValue<'refState> with
     member val current = initialValue with get, set
 
+
+let createTestRef () =
+  TestRef (
+      { 
+        LastElement = null
+        Next = None
+        Started = false
+        Hooks = []
+        PrevProps = None
+        Disposers = [||]
+        LayoutDisposers = [||]
+      }
+  )
+
+
 type TestProps = {
-  Thing: string
+  Value: string
 }
 
-let testInterpreter componentStateRef triggerRerender delayOperation (props: obj) = 
-  let result = runNext (setNext componentStateRef triggerRerender) componentStateRef delayOperation props
+let testInterpreter componentStateRef triggerRerender firstOperation (props: obj) = 
+  let result = runNext (setNext componentStateRef triggerRerender) componentStateRef firstOperation props
 
-  Option.defaultValue null result.Element
+  result.Element
 
 type TestBuilder () =
   member _.Bind(operation, f) = bind operation f
@@ -28,35 +44,39 @@ type TestBuilder () =
 
 let testReact = new TestBuilder ()
 
-let TestRender = 
+let TestRender output = 
   Operation(
     fun _ -> 
       OperationWait(fun _ -> {
-        Element = Some(div [] [ofString "hello"])
+        Element = Some(ofString output)
         Effect = None
         LayoutEffect = None
         Hook = None
       })
   )
 
-
-let props () = 
-  let componentStateRef = TestRef (
-      { 
-        LastElement = None
-        Next = None
-        Started = false
-        Hooks = []
-        PrevProps = None
-        Disposers = [||]
-        LayoutDisposers = [||]
-      }
+let TestContinueRender output = 
+  Operation(
+    fun _ -> 
+      OperationContinue((
+          fun _ -> {
+          Element = Some(ofString output)
+          Effect = None
+          LayoutEffect = None
+          Hook = None
+        },
+        ())
+      )
   )
+
+let testLastElementRendered () = 
+  let componentStateRef = createTestRef ()
 
   let triggerRerender () = ()
 
   let testBuild = testReact {
-    do! TestRender
+    do! TestContinueRender "Not me!"
+    do! TestRender "Hello World!"
   }
 
   let element = 
@@ -64,14 +84,71 @@ let props () =
       componentStateRef 
       triggerRerender 
       testBuild
-      {Thing = "asdf"}
+      {Value = "asdf"}
 
-  Expect.equal 1 1 "Text content equal" 
+  Expect.equal element (ofString "Hello World!") "Text content equal" 
+
+let testRerenderSameElement () = 
+  let componentStateRef = createTestRef ()
+
+  let triggerRerender () = ()
+
+  let testBuild = testReact {
+    do! TestRender "Hello World!"
+  }
+
+  let element = 
+    testInterpreter 
+      componentStateRef 
+      triggerRerender 
+      testBuild
+      {Value = "asdf"}
+
+  Expect.equal element (ofString "Hello World!") "Text content equal" 
+
+  let element2 = 
+    testInterpreter 
+      componentStateRef 
+      triggerRerender 
+      testBuild
+      {Value = "asdf"}
+  Expect.equal element2 (ofString "Hello World!") "Text content equal" 
+
+
+let testProps () = 
+  let componentStateRef = createTestRef ()
+
+  let triggerRerender () = ()
+
+  let testBuild = testReact {
+    let! props = Props
+    do! TestRender props.Value
+  }
+
+  let element = 
+    testInterpreter 
+      componentStateRef 
+      triggerRerender 
+      testBuild
+      {Value = "Hello World!"}
+
+  Expect.equal element (ofString "Hello World!") "Text content equal" 
+
+  let element2 = 
+    testInterpreter 
+      componentStateRef 
+      triggerRerender 
+      testBuild
+      {Value = "Goodbye World!"}
+
+  Expect.equal element2 (ofString "Goodbye World!") "Text content equal" 
 
 let tests =
   testSequenced (
     testList "Hacn Tests" [
-      testCase "props" <| props
+      testCase "testLastElementRendered" <| testLastElementRendered
+      testCase "testRerenderSameElement" <| testRerenderSameElement
+      testCase "testProps" <| testProps
     ]
   )
 
