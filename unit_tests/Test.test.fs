@@ -143,12 +143,75 @@ let testProps () =
 
   Expect.equal element2 (ofString "Goodbye World!") "Text content equal" 
 
+let testIfElse () = 
+  let componentStateRef = createTestRef ()
+
+  let triggerRerender () = ()
+
+  let testBuild = testReact {
+    let! props = Props
+    if props.Value = "Hello" then
+      do! TestRender "Hello World!"
+    else
+      do! TestRender "Please Say Hello"
+  }
+
+  let element = 
+    testInterpreter 
+      componentStateRef 
+      triggerRerender 
+      testBuild
+      {Value = "Hello"}
+
+  Expect.equal element (ofString "Hello World!") "Text content equal" 
+
+  let element2 = 
+    testInterpreter 
+      componentStateRef 
+      triggerRerender 
+      testBuild
+      {Value = "Goodbye"}
+
+  Expect.equal element2 (ofString "Please Say Hello") "Text content equal" 
+
+let testIfCombine () = 
+  let componentStateRef = createTestRef ()
+
+  let triggerRerender () = ()
+
+  let testBuild = testReact {
+    let! props = Props
+    if props.Value = "Hello" then
+      do! TestRender "Hello World!"
+    do! TestRender "Please Say Hello"
+  }
+
+  let element = 
+    testInterpreter 
+      componentStateRef 
+      triggerRerender 
+      testBuild
+      {Value = "Hello"}
+
+  Expect.equal element (ofString "Hello World!") "Text content equal" 
+
+  let element2 = 
+    testInterpreter 
+      componentStateRef 
+      triggerRerender 
+      testBuild
+      {Value = "Goodbye"}
+
+  Expect.equal element2 (ofString "Please Say Hello") "Text content equal" 
+
 let tests =
   testSequenced (
     testList "Hacn Tests" [
       testCase "testLastElementRendered" <| testLastElementRendered
       testCase "testRerenderSameElement" <| testRerenderSameElement
       testCase "testProps" <| testProps
+      testCase "testIfElse" <| testIfElse
+      testCase "testIfCombine" <| testIfCombine
     ]
   )
 

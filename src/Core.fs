@@ -93,13 +93,46 @@ let bind<'a, 'b> (underlyingOperation: Builder<'a>) (f: 'a -> Builder<'b>) : Bui
   | _ -> failwith (sprintf "Can't bind operation %A" underlyingOperation)
 
 let combine firstOperation secondOperation = 
-  Execution {
-    Execute =
-      fun props ->
+  match firstOperation with
+  | Execution executionContents ->
+    Execution {
+      Execute = fun props -> 
+        let combineSetNext secondOperation setNext returnValue= 
+          setNext (
+            fun props ->
+              let nextExecution = secondOperation ()
+
+              match nextExecution with
+              | Execution contents -> 
+                let executionResult = contents.Execute props
+                {
+                  OperationsToBind = executionResult.OperationsToBind
+                }
+              | _ -> 
+                failwith (sprintf "Can't bind execution %A" nextExecution)
+            )
+
+        let firstExecution = executionContents.Execute props
         {
-          OperationsToBind = []
+          OperationsToBind = (
+            fun setNext ->  
+              let setResult = combineSetNext secondOperation setNext
+              let operationSideEffects = List.map firstExecution.OperationsToBind setResult
+              {
+                Element = operationSideEffects.Element
+                Effect = operationSideEffects.Effect
+                LayoutEffect = operationSideEffects.LayoutEffect
+                Hook = Option.map (wrapHook f) operationSideEffects.Hook
+              }
+          ) :: []
         }
-  }
+    }
+        
+  | _ -> failwith (sprintf "Can't combine operation %A" firstOperation)
+
+let tryWith delayOperation f = 
+  End
+
 
 type ExperimentState = {
   LastElement: ReactElement
@@ -318,7 +351,8 @@ type ReactBuilder () =
   member _.Bind(operation, f) = bind operation f
   member _.Zero() = End
   member _.Delay(f) = Delay f
-  member _.Combine (f1, f2) = combine f1 f2
+  // member _.Combine (f1, f2) = combine f1 f2
+  member _.TryWith (operation, f) = tryWith operation f
 
   member _.Run(firstOperation) =
     // Fable.React.FunctionComponent.Of (fun props -> interpreter firstOperation props)
@@ -333,6 +367,7 @@ type HacnBuilder () =
   member _.Delay(f) = Delay f
   member _.Combine (f1, f2) = combine f1 f2
   member _.Return (value) = Return (value)
+  member _.TryWith (operation, f) = tryWith operation f
 
   // member _.Run(firstOperation) = Fable.React.FunctionComponent.Of (fun props -> interpreter firstOperation props)
 
