@@ -4,6 +4,7 @@ open Hacn.Types
 open Hacn.Operations
 open Fable.Mocha
 open Fable.React
+open Fable.Core.JS
 
 type TestRef<'refState> (initialValue: 'refState) =
   interface IRefValue<'refState> with
@@ -174,7 +175,7 @@ let testIfElse () =
 
   Expect.equal element2 (ofString "Please Say Hello") "Text content equal" 
 
-let testIfCombine () = 
+let testIfCombineContinue () = 
   let componentStateRef = createTestRef ()
 
   let triggerRerender () = ()
@@ -182,7 +183,7 @@ let testIfCombine () =
   let testBuild = testReact {
     let! props = Props
     if props.Value = "Hello" then
-      do! TestRender "Hello World!"
+      do! TestContinueRender "Hello World!"
     do! TestRender "Please Say Hello"
   }
 
@@ -193,8 +194,43 @@ let testIfCombine () =
       testBuild
       {Value = "Hello"}
 
+  Expect.equal element (ofString "Please Say Hello") "Text content equal" 
+
+  let element2 = 
+    testInterpreter 
+      componentStateRef 
+      triggerRerender 
+      testBuild
+      {Value = "Goodbye"}
+
+  Expect.equal element2 (ofString "Please Say Hello") "Text content equal" 
+
+let testIfCombineWait () = 
+  let componentStateRef = createTestRef ()
+
+  let triggerRerender () = ()
+
+  let testBuild = testReact {
+    let! props = Props
+    console.log "before equals"
+    if props.Value = "Hello" then
+      console.log "in equals"
+      do! TestRender "Hello World!"
+    console.log "after equals"
+    do! TestRender "Please Say Hello"
+  }
+
+  console.log "--------------- FirstRender"
+  let element = 
+    testInterpreter 
+      componentStateRef 
+      triggerRerender 
+      testBuild
+      {Value = "Hello"}
+
   Expect.equal element (ofString "Hello World!") "Text content equal" 
 
+  console.log "--------------- SecondRender"
   let element2 = 
     testInterpreter 
       componentStateRef 
@@ -211,7 +247,8 @@ let tests =
       testCase "testRerenderSameElement" <| testRerenderSameElement
       testCase "testProps" <| testProps
       testCase "testIfElse" <| testIfElse
-      testCase "testIfCombine" <| testIfCombine
+      testCase "testIfCombineContinue" <| testIfCombineContinue
+      testCase "testIfCombineWait" <| testIfCombineWait
     ]
   )
 

@@ -24,13 +24,14 @@ and OperationResult<'returnType> =
 and SetNext = (obj -> ExecutionResult) -> unit
 and ExecutionResult = {
   OperationsToBind: (SetNext -> ExecutionSideEffects) list
+  Ended: bool
 }
-and ExecutionContents = {
-  Execute: obj -> ExecutionResult
-}
+// and ExecutionContents = {
+//   Execute: obj -> ExecutionResult
+// }
 and Builder<'returnType> =
   | Delay of (unit -> Builder<'returnType>)
   | Operation of (obj -> OperationResult<'returnType>)
-  | Execution of ExecutionContents
+  | Execution of (obj -> ExecutionResult)
   | Return of 'returnType
   | End

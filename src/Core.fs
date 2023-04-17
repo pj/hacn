@@ -8,11 +8,8 @@ let bindSetNext f setNext returnValue=
       let nextExecution = f returnValue
 
       match nextExecution with
-      | Execution contents -> 
-        let executionResult = contents.Execute props
-        {
-          OperationsToBind = executionResult.OperationsToBind
-        }
+      | Execution execute -> 
+        execute props
       | _ -> 
         failwith (sprintf "Can't bind execution %A" nextExecution)
     )
@@ -24,9 +21,9 @@ let wrapHook f hook =
       let nextExecution = f returnValue
 
       match nextExecution with
-      | Execution contents -> 
-        let executionResult = contents.Execute props
-        Some (executionResult)
+      | Execution execute -> 
+        Some (execute props)
+      | End -> None
       | _ -> 
         failwith (sprintf "Can't bind execution %A" nextExecution)
     | None -> None
@@ -35,13 +32,13 @@ let wrapHook f hook =
 let bind<'a, 'b> (underlyingOperation: Builder<'a>) (f: 'a -> Builder<'b>) : Builder<'b> =
   match underlyingOperation with
   | Operation underlyingOperationData ->
-    Execution {
-      Execute = fun props -> 
-        
+    Execution (
+      fun props -> 
         let result = underlyingOperationData props
         match result with 
         | OperationWait sideEffects ->
           {
+            Ended = false
             OperationsToBind = (
               fun setNext ->  
                 let setResult = bindSetNext f setNext
@@ -59,8 +56,9 @@ let bind<'a, 'b> (underlyingOperation: Builder<'a>) (f: 'a -> Builder<'b>) : Bui
 
           match nextExecution with
           | Execution contents -> 
-            let executionResult = contents.Execute props
+            let executionResult = contents props
             {
+              Ended = executionResult.Ended
               OperationsToBind = (
                 fun setNext ->  
                   let setResult = bindSetNext f setNext
@@ -75,6 +73,7 @@ let bind<'a, 'b> (underlyingOperation: Builder<'a>) (f: 'a -> Builder<'b>) : Bui
             }
           | End ->
             {
+              Ended = true
               OperationsToBind = (
                 fun setNext ->  
                   let setResult = bindSetNext f setNext
@@ -89,46 +88,94 @@ let bind<'a, 'b> (underlyingOperation: Builder<'a>) (f: 'a -> Builder<'b>) : Bui
             }
           | _ -> 
             failwith (sprintf "Can't bind execution %A" nextExecution)
-    }
+    )
   | _ -> failwith (sprintf "Can't bind operation %A" underlyingOperation)
 
-let combine firstOperation secondOperation = 
-  match firstOperation with
-  | Execution executionContents ->
-    Execution {
-      Execute = fun props -> 
-        let combineSetNext secondOperation setNext returnValue= 
-          setNext (
-            fun props ->
-              let nextExecution = secondOperation ()
-
-              match nextExecution with
-              | Execution contents -> 
-                let executionResult = contents.Execute props
-                {
-                  OperationsToBind = executionResult.OperationsToBind
-                }
-              | _ -> 
-                failwith (sprintf "Can't bind execution %A" nextExecution)
-            )
-
-        let firstExecution = executionContents.Execute props
+let rec firstSetNext secondOperationFunc baseSetNext firstNext = 
+  baseSetNext (
+    fun props ->
+      let firstNextExecutionResult = firstNext props
+      if firstNextExecutionResult.Ended then
+        let secondExecution = secondOperationFunc ()
+        match secondExecution with
+        | Execution secondExecutionContents ->
+          let secondExecutionResult = secondExecutionContents props
+          {
+            Ended = secondExecutionResult.Ended
+            OperationsToBind = List.append 
+              (List.map (bindFirstCombine secondOperationFunc) firstNextExecutionResult.OperationsToBind)
+                (List.map bindSecondCombine secondExecutionResult.OperationsToBind)
+          }
+        | _ -> failwith (sprintf "Second operation not Execution, type: %A" secondExecution)
+      else
         {
-          OperationsToBind = (
-            fun setNext ->  
-              let setResult = combineSetNext secondOperation setNext
-              let operationSideEffects = List.map firstExecution.OperationsToBind setResult
+          Ended = firstNextExecutionResult.Ended
+          OperationsToBind = List.map (bindFirstCombine secondOperationFunc) firstNextExecutionResult.OperationsToBind
+      }
+    )
+and secondSetNext baseSetNext secondNext = 
+  baseSetNext (
+    fun props ->
+      let secondNextExecutionResult = secondNext props
+      {
+        Ended = secondNextExecutionResult.Ended
+        OperationsToBind = List.map bindSecondCombine secondNextExecutionResult.OperationsToBind
+      }
+    )
+and bindFirstCombine secondOperationFunc bindOperation =
+  fun setNext ->
+    let executionSetNext = firstSetNext secondOperationFunc setNext
+    bindOperation executionSetNext
+and bindSecondCombine bindOperation =
+  fun setNext ->
+    let executionSetNext = secondSetNext setNext
+    bindOperation executionSetNext
+
+
+let combine firstExecution secondOperationDelay = 
+  match secondOperationDelay with
+  | Delay (secondOperationFunc) ->
+    match firstExecution with
+    | Execution executionContents ->
+      Execution (
+        fun props -> 
+          let firstExecutionResult = executionContents props
+
+          if firstExecutionResult.Ended then
+            let secondOperation = secondOperationFunc ()
+
+            match secondOperation with
+            | Execution secondExecutionContents ->
+              let secondExecutionResult = secondExecutionContents props
               {
-                Element = operationSideEffects.Element
-                Effect = operationSideEffects.Effect
-                LayoutEffect = operationSideEffects.LayoutEffect
-                Hook = Option.map (wrapHook f) operationSideEffects.Hook
+                Ended = secondExecutionResult.Ended
+                OperationsToBind = List.append 
+                  (List.map (bindFirstCombine secondOperationFunc) firstExecutionResult.OperationsToBind) 
+                  (List.map bindSecondCombine secondExecutionResult.OperationsToBind)
               }
-          ) :: []
-        }
-    }
-        
-  | _ -> failwith (sprintf "Can't combine operation %A" firstOperation)
+            | _ -> failwith (sprintf "Second operation not Execution, type: %A" firstExecution)
+          else
+            {
+              Ended = firstExecutionResult.Ended
+              OperationsToBind = List.map (bindFirstCombine secondOperationFunc) firstExecutionResult.OperationsToBind
+            }
+      )
+    | End -> 
+      Execution (
+        fun props -> 
+          let secondOperation = secondOperationFunc ()
+
+          match secondOperation with
+          | Execution secondExecutionContents ->
+            let secondExecutionResult = secondExecutionContents props
+            {
+              Ended = secondExecutionResult.Ended
+              OperationsToBind = (List.map bindSecondCombine secondExecutionResult.OperationsToBind)
+            }
+          | _ -> failwith (sprintf "Second operation not Execution, type: %A" firstExecution)
+      )
+    | _ -> failwith (sprintf "First Operation not Execution %A" firstExecution)
+  | _ -> failwith (sprintf "Second Operation not Delay %A" secondOperationDelay)
 
 let tryWith delayOperation f = 
   End
@@ -224,10 +271,12 @@ let getFirst delayOperation =
     match firstOperation with
     | Execution executionContents ->
       let execNext props = 
-        let executionResult = executionContents.Execute props
-        {
-          OperationsToBind = executionResult.OperationsToBind
-        }
+        executionContents props
+        // let executionResult = executionContents props
+        // {
+        //   Ended = executionResult.Ended
+        //   OperationsToBind = executionResult.OperationsToBind
+        // }
       execNext
     | _ -> failwith (sprintf "Delayed operation must be execution type, got %A" firstOperation)
   | _ -> failwith (sprintf "First operation from builder must be of type Delay: %A" delayOperation)
