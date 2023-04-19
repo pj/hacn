@@ -96,267 +96,152 @@ let Props<'returnType > =
 //           )
 //   )
 
-// let uFunc x = x ()
+let createCombinedEffect eff1Opt eff2Opt =
+  match eff1Opt, eff2Opt with
+  | Some (eff1), Some (eff2) -> 
+    Some (
+      fun () -> 
+        let disposer1 = eff1 ()
+        let disposer2 = eff2 ()
 
-// let createCombinedDispose disposeOpt1 disposeOpt2 =
-//   let combinedDisposer () =
-//     Option.iter uFunc disposeOpt1
-//     Option.iter uFunc disposeOpt2
+        Some(
+          fun () ->
+            Option.iter (fun x -> x ()) disposer1
+            Option.iter (fun x -> x ()) disposer2
+        )
+    )
+  | Some (_), None ->
+    eff1Opt
+  | None, Some (_) -> 
+    eff2Opt
+  | None, None -> 
+    None
 
-//   match disposeOpt1, disposeOpt2 with
-//   | None, None -> None
-//   | _ -> Some(combinedDisposer)
+let getElement elementOpt1 elementOpt2 =
+  match elementOpt1, elementOpt2 with
+  | Some (element1), _ ->
+    Some (element1)
+  | None, Some (element2) -> 
+    Some (element2)
+  | None, None -> None
 
-// let createCombinedEffect waitRef eff1Opt eff2Opt =
-//   match eff1Opt, eff2Opt with
-//   | Some (eff1, dispose1), Some (eff2, dispose2) -> 
-//     let combinedEffect setResult = 
-//       eff1 (
-//           fun value1 -> 
-//             match waitRef.contents with 
-//             | (_, Some(value2)) ->
-//               setResult (value1, value2)
-//             | _ -> 
-//               waitRef := (Some(value1), None)
-//         )
-//       eff2 (
-//           fun value2 -> 
-//             match waitRef.contents with 
-//             | (Some(value1), _) ->
-//               setResult (value1, value2)
-//             | _ -> 
-//               waitRef := (None, Some(value2))
-//         )
-//     Some (combinedEffect, createCombinedDispose dispose1 dispose2)
-//   | Some (eff1, dispose1), None ->
-//     let combinedEffect setResult = 
-//       eff1 (
-//           fun value1 -> 
-//             match waitRef.contents with 
-//             | (_, Some(value2)) ->
-//               setResult (value1, value2)
-//             | _ -> 
-//               waitRef := (Some(value1), None)
-//         )
-//     Some (combinedEffect, dispose1)
-//   | None, Some (eff2, dispose2) -> 
-//     let combinedEffect setResult = 
-//       eff2 (
-//           fun value2 -> 
-//             match waitRef.contents with 
-//             | (Some(value1), _) ->
-//               setResult (value1, value2)
-//             | _ -> 
-//               waitRef := (None, Some(value2))
-//         )
-//     Some (combinedEffect, dispose2)
-//   | None, None -> 
-//     None
+let getOperationResult op props =
+  match op with
+  | Operation (opContents) -> opContents props
+  | _ -> failwith "Can only work with Perform operations"
 
-// let getElementAny elementOpt1 elementOpt2 =
-//   match elementOpt1, elementOpt2 with
-//   | Some (element1), Some (_) -> 
-//     Some (
-//       fun setResult -> element1 (fun returnValue -> setResult (Some(returnValue), None))
-//     )
-//   | Some (element1), None ->
-//     Some (
-//       fun setResult -> element1 (fun returnValue -> setResult (Some(returnValue), None))
-//     )
-//   | None, Some (element2) -> 
-//     Some (fun setResult -> element2 (fun returnValue -> setResult (None, Some(returnValue))))
-//   | None, None -> None
+let combinedSetResult wait1Ref wait2Ref (refToSet: Ref<'c option>) setResult (returnValue: 'c) = 
+  refToSet.Value <- Some(returnValue)
 
-// let getElement waitRef elementOpt1 elementOpt2 =
-//   match elementOpt1, elementOpt2 with
-//   | Some (element1), _ ->
-//     Some (
-//       fun setResult -> element1 (
-//           fun value1 -> 
-//             match waitRef.contents with 
-//             | (_, Some(value2)) ->
-//               setResult (value1, value2)
-//             | _ -> 
-//               waitRef := (Some(value1), None)
-//       )
-//     )
-//   | None, Some (element2) -> 
-//     Some (
-//       fun setResult -> element2 (
-//           fun value2 -> 
-//             match waitRef.contents with 
-//             | (Some(value1), _) ->
-//               setResult (value1, value2)
-//             | _ -> 
-//               waitRef := (None, Some(value2))
-//       )
-//     )
-//   | None, None -> None
+  match (wait1Ref.contents, wait2Ref.contents) with
+  | (Some (value1), Some(value2)) ->
+    setResult (value1, value2)
+  | _ -> ()
 
-// let getOperationResult op props =
-//   match op with
-//   | Operation (opContents) -> opContents.Run props
-//   | _ -> failwith "Can only work with Perform operations"
+let combinedSideEffects (op1Func: OperationSideEffectsFunction<'a>) (op2Func: OperationSideEffectsFunction<'b>) wait1Ref wait2Ref setResult : OperationSideEffects<'a * 'b>=
+  let op1SideEffects = op1Func (combinedSetResult wait1Ref wait2Ref wait1Ref setResult)
+  let op2SideEffects = op2Func (combinedSetResult wait1Ref wait2Ref wait2Ref setResult)
 
-// let Wait2<'a, 'b> (op1: Builder<'a>) (op2: Builder<'b>) : Builder<'a * 'b> =
-//   let waitRef = ref (None, None)
-//   Operation (
-//     { 
-//       Run =
-//         fun props ->
-//           let opResult1 = getOperationResult op1  props
-//           let opResult2 = getOperationResult op2  props
+  if Option.isSome op1SideEffects.Hook then
+    failwith "Hooks can't be used with Wait"
+  if Option.isSome op2SideEffects.Hook then
+    failwith "Hooks can't be used with Wait"
+  { 
+    Element = (getElement op1SideEffects.Element op2SideEffects.Element)
+    Effect = (createCombinedEffect op1SideEffects.Effect op2SideEffects.Effect)
+    LayoutEffect = (createCombinedEffect op1SideEffects.LayoutEffect op2SideEffects.LayoutEffect)
+    Hook = None 
+  }
 
-//           match opResult1, opResult2 with
-//           | OperationWait ({ Element = element1; Effect = effect1; LayoutEffect = layoutEffect1; Hook = hook1 }),
-//             OperationWait ({ Element = element2; Effect = effect2; LayoutEffect = layoutEffect2; Hook = hook2 }) ->
-//               if Option.isSome hook1 then
-//                 failwith "Hooks can't be used with Wait"
-//               if Option.isSome hook2 then
-//                 failwith "Hooks can't be used with Wait"
-//               OperationWait (
-//                 { Element = (getElement waitRef element1 element2)
-//                   Effect = (createCombinedEffect waitRef effect1 effect2)
-//                   LayoutEffect = (createCombinedEffect waitRef layoutEffect1 layoutEffect2)
-//                   Hook = None }
-//               )
+let Wait2<'a, 'b> (op1: Builder<'a>) (op2: Builder<'b>) : Builder<'a * 'b> =
+  let wait1Ref = ref None
+  let wait2Ref = ref None
+  Operation (
+    fun props ->
+      let operationResult1 = getOperationResult op1 props
+      let operationResult2 = getOperationResult op2 props
 
-//           | OperationWait ({ Element = element1; Effect = effect1; LayoutEffect = layoutEffect1; Hook = hook1 }),
-//             OperationContinue ({ ReturnValue = returnValue; Element = element2; Effect = effect2; LayoutEffect = layoutEffect2; Hook = hook2 }) ->
-//               if Option.isSome hook1 then
-//                 failwith "Hooks can't be used with Wait"
-//               if Option.isSome hook2 then
-//                 failwith "Hooks can't be used with Wait"
-//               let first, _ = !waitRef
-//               waitRef := (first, Some returnValue)
-//               OperationWait (
-//                 { Element = (getElement waitRef element1 element2)
-//                   Effect = (createCombinedEffect waitRef effect1 effect2)
-//                   LayoutEffect = (createCombinedEffect waitRef layoutEffect1 layoutEffect2)
-//                   Hook = None
-//                   }
-//               )
+      match operationResult1, operationResult2 with
+      | OperationWait (op1Func),
+        OperationWait (op2Func) ->
+          OperationWait ((combinedSideEffects op1Func op2Func wait1Ref wait2Ref))
+      | OperationContinue (op1Func, returnValue),
+        OperationWait (op2Func) ->
+          wait1Ref.Value <- Some(returnValue)
+          let sideEffects = combinedSideEffects op1Func op2Func wait1Ref wait2Ref
+          match (wait1Ref.contents, wait2Ref.contents) with
+          | (Some (value1), Some(value2)) ->
+            OperationContinue (sideEffects, (value1, value2))
+          | _ -> 
+            OperationWait (sideEffects)
+      | OperationWait (op1Func),
+        OperationContinue (op2Func, returnValue) ->
+          wait2Ref.Value <- Some(returnValue)
+          let sideEffects = combinedSideEffects op1Func op2Func wait1Ref wait2Ref
+          match (wait1Ref.contents, wait2Ref.contents) with
+          | (Some (value1), Some(value2)) ->
+            OperationContinue (sideEffects, (value1, value2))
+          | _ -> 
+            OperationWait (sideEffects)
 
-//           | OperationContinue ({ ReturnValue = returnValue; Element = element1; Effect = effect1; LayoutEffect = layoutEffect1; Hook = hook1 }),
-//             OperationWait ({ Element = element2; Effect = effect2; LayoutEffect = layoutEffect2; Hook = hook2 }) ->
-//               if Option.isSome hook1 then
-//                 failwith "Hooks can't be used with Wait"
-//               if Option.isSome hook2 then
-//                 failwith "Hooks can't be used with Wait"
-//               let _, second = !waitRef
-//               waitRef := (Some returnValue, second)
-//               OperationWait (
-//                 { Element = (getElement waitRef element1 element2)
-//                   Effect = (createCombinedEffect waitRef effect1 effect2)
-//                   LayoutEffect = (createCombinedEffect waitRef layoutEffect1 layoutEffect2)
-//                   Hook = None
-//                   }
-//               )
+      | OperationContinue (op1Func, returnValue1),
+        OperationContinue (op2Func, returnValue2) ->
+          wait1Ref.Value <- Some(returnValue1)
+          wait2Ref.Value <- Some(returnValue2)
+          let sideEffects = combinedSideEffects op1Func op2Func wait1Ref wait2Ref
+          OperationContinue (sideEffects, (returnValue1, returnValue2))
+  )
 
-//           | OperationContinue ({ ReturnValue = returnValue1; Element = element1; Effect = effect1; LayoutEffect = layoutEffect1; Hook = hook1 }),
-//             OperationContinue ({ ReturnValue = returnValue2; Element = element2; Effect = effect2; LayoutEffect = layoutEffect2; Hook = hook2 }) ->
-//               if Option.isSome hook1 then
-//                 failwith "Hooks can't be used with Wait"
-//               if Option.isSome hook2 then
-//                 failwith "Hooks can't be used with Wait"
-//               OperationContinue (
-//                 { ReturnValue = (returnValue1, returnValue2)
-//                   Element = (getElement waitRef element1 element2)
-//                   Effect = (createCombinedEffect waitRef effect1 effect2)
-//                   LayoutEffect = (createCombinedEffect waitRef layoutEffect1 layoutEffect2)
-//                   Hook = None
-//                   }
-//               ) }
-//   )
+let combinedAnySetResult (wait1Ref: 'a option ref) (wait2Ref: 'b option ref) (refToSet: 'c option ref) (setResult: SetResult<'a option * 'b option>) (returnValue: 'c) = 
+  refToSet.Value <- Some(returnValue)
 
-// let WaitAny2 (op1: Builder<'a>) (op2: Builder<'b>) : Builder<option<'a> * option<'b>> =
-//   Operation (
-//     { 
-//       Run =
-//         fun props ->
-//           let combinedEffect eff1Opt eff2Opt =
-//             match eff1Opt, eff2Opt with
-//             | Some (eff1, dispose1), Some (eff2, dispose2) -> 
-//               let combinedEffect setResult = 
-//                 eff1 (fun value1 -> setResult (Some value1, None))
-//                 eff2 (fun value2 -> setResult (None, Some value2))
-//               Some (combinedEffect, createCombinedDispose dispose1 dispose2)
-//             | Some (eff1, dispose1), None ->
-//               let combinedEffect setResult = 
-//                 eff1 (fun value1 -> setResult (Some value1, None))
-//               Some (combinedEffect, dispose1)
-//             | None, Some (eff2, dispose2) -> 
-//               let combinedEffect setResult = 
-//                 eff2 (fun value2 -> setResult (None, Some value2))
-//               Some (combinedEffect, dispose2)
-//             | None, None -> 
-//               None
-//           let opResult1 =
-//             match op1 with
-//             | Operation (pd1) -> pd1.Run props
-//             | _ -> failwith "Can only work with Operation types"
+  setResult (wait1Ref.Value, wait2Ref.Value)
 
-//           let opResult2 =
-//             match op2 with
-//             | Operation (pd2) -> pd2.Run props
-//             | _ -> failwith "Can only work with Operation types"
+let combinedAnySideEffects (op1Func: OperationSideEffectsFunction<'a>) (op2Func: OperationSideEffectsFunction<'b>) wait1Ref wait2Ref setResult : OperationSideEffects<'a option * 'b option>=
+  let op1SideEffects = op1Func (combinedAnySetResult wait1Ref wait2Ref wait1Ref setResult)
+  let op2SideEffects = op2Func (combinedAnySetResult wait1Ref wait2Ref wait2Ref setResult)
 
-//           match opResult1, opResult2 with
-//           | OperationWait ({ Element = element1; Effect = effect1; LayoutEffect = layoutEffect1 }),
-//             OperationWait ({ Element = element2; Effect = effect2; LayoutEffect = layoutEffect2 }) ->
-//               OperationWait (
-//                 { Element = (getElementAny element1 element2)
-//                   Effect = (combinedEffect effect1 effect2)
-//                   LayoutEffect = (combinedEffect layoutEffect1 layoutEffect2)
-//                   Hook = None
-//                   }
-//               )
+  if Option.isSome op1SideEffects.Hook then
+    failwith "Hooks can't be used with Wait"
+  if Option.isSome op2SideEffects.Hook then
+    failwith "Hooks can't be used with Wait"
+  { 
+    Element = (getElement op1SideEffects.Element op2SideEffects.Element)
+    Effect = (createCombinedEffect op1SideEffects.Effect op2SideEffects.Effect)
+    LayoutEffect = (createCombinedEffect op1SideEffects.LayoutEffect op2SideEffects.LayoutEffect)
+    Hook = None 
+  }
 
-//           | OperationWait ({ Element = element1 }),
-//             OperationContinue ({ ReturnValue = returnValue; Element = element2 }) ->
-//               OperationContinue(
-//                 { ReturnValue = (None, Some (returnValue))
-//                   Element = (getElementAny element1 element2)
-//                   Effect = None
-//                   LayoutEffect = None
-//                   Hook = None
-//                 }
-//               )
+let WaitAny2<'a, 'b> (op1: Builder<'a>) (op2: Builder<'b>) : Builder<'a option * 'b option> =
+  let wait1Ref: 'a option ref = ref None
+  let wait2Ref: 'b option ref = ref None
+  Operation (
+    fun props ->
+      let operationResult1 = getOperationResult op1 props
+      let operationResult2 = getOperationResult op2 props
 
-//           | OperationContinue ({ ReturnValue = returnValue; Element = element1 }),
-//             OperationWait ({ Element = element2}) ->
-//               OperationContinue(
-//                 { 
-//                   ReturnValue = (Some(returnValue), None)
-//                   Element = (getElementAny element1 element2)
-//                   Effect = None
-//                   LayoutEffect = None
-//                   Hook = None
-//                 }
-//               )
+      match operationResult1, operationResult2 with
+      | OperationWait (op1Func),
+        OperationWait (op2Func) ->
+          OperationWait ((combinedAnySideEffects op1Func op2Func wait1Ref wait2Ref))
+      | OperationContinue (op1Func, returnValue),
+        OperationWait (op2Func) ->
+          wait1Ref.Value <- Some(returnValue)
+          let sideEffects = combinedAnySideEffects op1Func op2Func wait1Ref wait2Ref
+          OperationContinue (sideEffects, (wait1Ref.Value, wait2Ref.Value))
+      | OperationWait (op1Func),
+        OperationContinue (op2Func, returnValue) ->
+          wait2Ref.Value <- Some(returnValue)
+          let sideEffects = combinedAnySideEffects op1Func op2Func wait1Ref wait2Ref
+          OperationContinue (sideEffects, (wait1Ref.Value, wait2Ref.Value))
+      | OperationContinue (op1Func, returnValue1),
+        OperationContinue (op2Func, returnValue2) ->
+          wait1Ref.Value <- Some(returnValue1)
+          wait2Ref.Value <- Some(returnValue2)
+          let sideEffects = combinedAnySideEffects op1Func op2Func wait1Ref wait2Ref
+          OperationContinue (sideEffects, (Some(returnValue1), Some(returnValue2)))
 
-//           | OperationContinue ({ ReturnValue = returnValue1; Element = element1 }),
-//             OperationContinue ({ ReturnValue = returnValue2; Element = element2 }) ->
-//               OperationContinue(
-//                 { 
-//                   ReturnValue = (Some(returnValue1), Some(returnValue2))
-//                   Element = (getElementAny element1 element2)
-//                   Effect = None
-//                   LayoutEffect = None
-//                   Hook = None
-//                 }
-                  
-//               ) 
-//               }
-//   )
-
-// let WaitAny3 = End
-
-// // Return a series of suspended effect results as a stream
-// // let Next = End
-
-// // Return a series of suspended effect results as a stream (in any order)
-// let NextAny = End
+  )
 
 // // time operations
 // let Timeout time =

@@ -20,7 +20,7 @@ and ExecutionSideEffects = {
 and OperationSideEffectsFunction<'returnType> = SetResult<'returnType> -> OperationSideEffects<'returnType>
 and OperationResult<'returnType> =
   | OperationWait of OperationSideEffectsFunction<'returnType>
-  | OperationContinue of (SetResult<'returnType> -> OperationSideEffects<'returnType>) * 'returnType
+  | OperationContinue of (OperationSideEffectsFunction<'returnType>) * 'returnType
 and SetNext = (obj -> ExecutionResult) -> unit
 and ExecutionResult = {
   OperationsToBind: (SetNext -> ExecutionSideEffects) list
