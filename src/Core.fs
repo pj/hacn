@@ -131,7 +131,6 @@ and bindSecondCombine bindOperation =
     let executionSetNext = secondSetNext setNext
     bindOperation executionSetNext
 
-
 let combine firstExecution secondOperationDelay = 
   match secondOperationDelay with
   | Delay (secondOperationFunc) ->
@@ -178,7 +177,58 @@ let combine firstExecution secondOperationDelay =
   | _ -> failwith (sprintf "Second Operation not Delay %A" secondOperationDelay)
 
 let tryWith delayOperation f = 
-  End
+  match delayOperation with
+  | Delay (delayOperationFunc) ->
+    Execution (
+      fun props -> 
+        let wrapEffect setNext effect () =
+          try 
+            effect ()
+          with 
+            | error ->
+              setNext(
+                fun props ->
+                  let errorBuilder = f error
+                  match errorBuilder with
+                  | Execution errorFunc ->
+                    errorFunc props
+                  | _ -> failwith (sprintf "Error not Execution, type: %A" errorBuilder)
+              )
+              None
+
+        let wrapSideEffects operation =
+          fun setNext ->
+            let sideEffects = operation setNext
+            if sideEffects.Hook.IsSome then
+              failwith "Hooks can't be used with Try With"
+            {
+              // TODO: wrap element if we haven't ended, can't test this until we do proper react testing.
+              Element = sideEffects.Element
+              Effect = (Option.map (wrapEffect setNext) sideEffects.Effect)
+              LayoutEffect = (Option.map (wrapEffect setNext) sideEffects.LayoutEffect)
+              Hook = None
+            }
+
+        let executionBuilder = delayOperationFunc ()
+        match executionBuilder with
+        | Execution executionFunc ->
+          try 
+            let executionResult = executionFunc props
+            {
+              Ended = executionResult.Ended
+              OperationsToBind = (List.map wrapSideEffects executionResult.OperationsToBind)
+            }
+          with 
+            | error -> 
+              let errorBuilder = f error
+              match errorBuilder with
+              | Execution errorFunc ->
+                errorFunc props
+              | _ -> failwith (sprintf "Error not Execution, type: %A" errorBuilder)
+
+        | _ -> failwith (sprintf "Operation not Execution, type: %A" executionBuilder)
+    )
+  | _ -> failwith (sprintf "Delay Operation not Delay %A" delayOperation)
 
 
 type ExperimentState = {
@@ -272,11 +322,6 @@ let getFirst delayOperation =
     | Execution executionContents ->
       let execNext props = 
         executionContents props
-        // let executionResult = executionContents props
-        // {
-        //   Ended = executionResult.Ended
-        //   OperationsToBind = executionResult.OperationsToBind
-        // }
       execNext
     | _ -> failwith (sprintf "Delayed operation must be execution type, got %A" firstOperation)
   | _ -> failwith (sprintf "First operation from builder must be of type Delay: %A" delayOperation)
