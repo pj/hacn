@@ -13,7 +13,7 @@ type TestRef<'refState> (initialValue: 'refState) =
 
 let createTestRef () =
   TestRef (
-      { 
+      {
         LastElement = null
         Next = None
         Started = false
@@ -29,7 +29,7 @@ type TestProps = {
   Value: string
 }
 
-let testInterpreter componentStateRef triggerRerender firstOperation (props: obj) = 
+let testInterpreter componentStateRef triggerRerender firstOperation (props: obj) =
   let result = runNext (setNext componentStateRef triggerRerender) componentStateRef firstOperation props
 
   result.Element
@@ -46,9 +46,9 @@ type TestBuilder () =
 
 let testReact = new TestBuilder ()
 
-let TestRender output = 
+let TestRender output =
   Operation(
-    fun _ -> 
+    fun _ ->
       OperationWait(fun _ -> {
         Element = Some(ofString output)
         Effect = None
@@ -57,9 +57,9 @@ let TestRender output =
       })
   )
 
-let TestContinueRender output = 
+let TestContinueRender output =
   Operation(
-    fun _ -> 
+    fun _ ->
       OperationContinue((
           fun _ -> {
           Element = Some(ofString output)
@@ -73,18 +73,18 @@ let TestContinueRender output =
 
 exception TestException of string
 
-let TestExceptionOperation msg = 
+let TestExceptionOperation msg =
   Operation(
-    fun _ -> 
+    fun _ ->
       raise (TestException msg)
   )
 
-let TestEffectExceptionOperation msg = 
+let TestEffectExceptionOperation msg =
   Operation(
-    fun _ -> 
+    fun _ ->
       OperationWait(fun _ -> {
         Element = None
-        Effect = 
+        Effect =
           Some (fun () ->
             raise (TestException msg)
           )
@@ -93,205 +93,106 @@ let TestEffectExceptionOperation msg =
       })
   )
 
-let testLastElementRendered () = 
+let performTest builder testValues =
   let componentStateRef = createTestRef ()
 
   let triggerRerender () = ()
 
-  let testBuild = testReact {
-    do! TestContinueRender "Not me!"
-    do! TestRender "Hello World!"
-  }
+  List.iter (
+    fun (props, expected) ->
+      let element =
+        testInterpreter
+          componentStateRef
+          triggerRerender
+          builder
+          props
 
-  let element = 
-    testInterpreter 
-      componentStateRef 
-      triggerRerender 
-      testBuild
-      {Value = "asdf"}
+      Expect.equal element (ofString expected) "Text content equal"
+    )
+    testValues
 
-  Expect.equal element (ofString "Hello World!") "Text content equal" 
+let testLastElementRendered () =
+  performTest
+    (
+      testReact {
+        do! TestContinueRender "Not me!"
+        do! TestRender "Hello World!"
+      }
+    )
+    [({Value = "asdf"}, "Hello World!")]
 
-let testRerenderSameElement () = 
-  let componentStateRef = createTestRef ()
+let testRerenderSameElement () =
+  performTest
+    (
+      testReact {
+        do! TestRender "Hello World!"
+      }
+    )
+    [({Value = "asdf"}, "Hello World!"); ({Value = "asdf"}, "Hello World!")]
 
-  let triggerRerender () = ()
+let testProps () =
+  performTest
+    (
+    testReact {
+        let! props = Props
+        do! TestRender props.Value
+      }
+    )
+    [({Value = "Hello World!"}, "Hello World!"); ({Value = "Goodbye World!"}, "Goodbye World!")]
 
-  let testBuild = testReact {
-    do! TestRender "Hello World!"
-  }
+let testIfElse () =
+  performTest
+    (
+    testReact {
+        let! props = Props
+        if props.Value = "Hello" then
+          do! TestRender "Hello World!"
+        else
+          do! TestRender "Please Say Hello"
+      }
+    )
+    [({Value = "Hello"}, "Hello World!"); ({Value = "Goodbye"}, "Please Say Hello")]
 
-  let element = 
-    testInterpreter 
-      componentStateRef 
-      triggerRerender 
-      testBuild
-      {Value = "asdf"}
+let testIfCombineContinue () =
+  performTest
+    (
+      testReact {
+        let! props = Props
+        if props.Value = "Hello" then
+          do! TestContinueRender "Hello World!"
+        do! TestRender "Don't Say That"
+      }
+    )
+    [({Value = "Hello"}, "Don't Say That"); ({Value = "Goodbye"}, "Don't Say That")]
 
-  Expect.equal element (ofString "Hello World!") "Text content equal" 
+let testIfCombineWait () =
+  performTest
+    (
+      testReact {
+        let! props = Props
+        if props.Value = "Hello" then
+          do! TestRender "Hello World!"
+        do! TestRender "Please Say Hello"
+      }
+    )
+    [({Value = "Hello"}, "Hello World!"); ({Value = "Goodbye"}, "Please Say Hello")]
 
-  let element2 = 
-    testInterpreter 
-      componentStateRef 
-      triggerRerender 
-      testBuild
-      {Value = "asdf"}
-  Expect.equal element2 (ofString "Hello World!") "Text content equal" 
-
-
-let testProps () = 
-  let componentStateRef = createTestRef ()
-
-  let triggerRerender () = ()
-
-  let testBuild = testReact {
-    let! props = Props
-    do! TestRender props.Value
-  }
-
-  let element = 
-    testInterpreter 
-      componentStateRef 
-      triggerRerender 
-      testBuild
-      {Value = "Hello World!"}
-
-  Expect.equal element (ofString "Hello World!") "Text content equal" 
-
-  let element2 = 
-    testInterpreter 
-      componentStateRef 
-      triggerRerender 
-      testBuild
-      {Value = "Goodbye World!"}
-
-  Expect.equal element2 (ofString "Goodbye World!") "Text content equal" 
-
-let testIfElse () = 
-  let componentStateRef = createTestRef ()
-
-  let triggerRerender () = ()
-
-  let testBuild = testReact {
-    let! props = Props
-    if props.Value = "Hello" then
-      do! TestRender "Hello World!"
-    else
-      do! TestRender "Please Say Hello"
-  }
-
-  let element = 
-    testInterpreter 
-      componentStateRef 
-      triggerRerender 
-      testBuild
-      {Value = "Hello"}
-
-  Expect.equal element (ofString "Hello World!") "Text content equal" 
-
-  let element2 = 
-    testInterpreter 
-      componentStateRef 
-      triggerRerender 
-      testBuild
-      {Value = "Goodbye"}
-
-  Expect.equal element2 (ofString "Please Say Hello") "Text content equal" 
-
-let testIfCombineContinue () = 
-  let componentStateRef = createTestRef ()
-
-  let triggerRerender () = ()
-
-  let testBuild = testReact {
-    let! props = Props
-    if props.Value = "Hello" then
-      do! TestContinueRender "Hello World!"
-    do! TestRender "Please Say Hello"
-  }
-
-  let element = 
-    testInterpreter 
-      componentStateRef 
-      triggerRerender 
-      testBuild
-      {Value = "Hello"}
-
-  Expect.equal element (ofString "Please Say Hello") "Text content equal" 
-
-  let element2 = 
-    testInterpreter 
-      componentStateRef 
-      triggerRerender 
-      testBuild
-      {Value = "Goodbye"}
-
-  Expect.equal element2 (ofString "Please Say Hello") "Text content equal" 
-
-let testIfCombineWait () = 
-  let componentStateRef = createTestRef ()
-
-  let triggerRerender () = ()
-
-  let testBuild = testReact {
-    let! props = Props
-    if props.Value = "Hello" then
-      do! TestRender "Hello World!"
-    do! TestRender "Please Say Hello"
-  }
-
-  let element = 
-    testInterpreter 
-      componentStateRef 
-      triggerRerender 
-      testBuild
-      {Value = "Hello"}
-
-  Expect.equal element (ofString "Hello World!") "Text content equal" 
-
-  let element2 = 
-    testInterpreter 
-      componentStateRef 
-      triggerRerender 
-      testBuild
-      {Value = "Goodbye"}
-
-  Expect.equal element2 (ofString "Please Say Hello") "Text content equal" 
-
-let testTryWith () = 
-  let componentStateRef = createTestRef ()
-
-  let triggerRerender () = ()
-
-  let testBuild = testReact {
-    let! props = Props
-    try 
-      if props.Value = "Goodbye" then
-        do! TestExceptionOperation "error!"
-      else
-        do! TestRender("Hello World!")
-    with
-      | TestException (msg) -> 
-        do! TestRender (sprintf "error message: %A" msg)
-  }
-
-  let element = 
-    testInterpreter 
-      componentStateRef 
-      triggerRerender 
-      testBuild
-      {Value = "Hello"}
-
-  Expect.equal element (ofString "Hello World!") "Text content equal" 
-
-  let element2 = 
-    testInterpreter 
-      componentStateRef 
-      triggerRerender 
-      testBuild
-      {Value = "Goodbye"}
-
-  Expect.equal element2 (ofString "error message: error!") "Text content equal" 
+let testTryWith () =
+  performTest
+    (
+      testReact {
+        let! props = Props
+        try
+          if props.Value = "Goodbye" then
+            do! TestExceptionOperation "error!"
+          else
+            do! TestRender("Hello World!")
+        with
+          | TestException (msg) ->
+            do! TestRender (sprintf "error message: %A" msg)
+      }
+    )
+    [({Value = "Hello"}, "Hello World!"); ({Value = "Goodbye"}, "error message: error!")]
 
 let tests =
   testSequenced (
